@@ -15,6 +15,11 @@ PlasmaComponents3.Frame {
 
     padding: Kirigami.Units.smallSpacing
 
+    background: Rectangle {
+        color: "transparent"
+        border.width: 0
+    }
+
     ColumnLayout {
         width: parent.width
         spacing: Kirigami.Units.smallSpacing
