@@ -32,7 +32,7 @@ Item {
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: chart.maxValue > 0 ? parent.height * Math.max(0.04, modelData / chart.maxValue) : 0
-                    radius: 2
+                    radius: Math.max(1, width / 2)
                     color: chart.accentColor
                     opacity: 0.85
                 }

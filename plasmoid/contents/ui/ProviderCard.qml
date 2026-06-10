@@ -22,10 +22,18 @@ PlasmaComponents3.Frame {
         RowLayout {
             Layout.fillWidth: true
 
-            Rectangle {
-                Layout.preferredWidth: Kirigami.Units.smallSpacing
-                Layout.preferredHeight: Kirigami.Units.gridUnit
-                radius: width / 2
+            Kirigami.Icon {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                source: {
+                    const id = String(card.entry ? card.entry.provider : "").toLowerCase().replace(/[-_]/g, "");
+                    const known = ["abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram", "deepseek", "doubao", "elevenlabs", "factory", "gemini", "grok", "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo", "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "stepfun", "synthetic", "t3chat", "venice", "vertexai", "warp", "windsurf", "zai"];
+                    if (known.includes(id)) {
+                        return Qt.resolvedUrl("../images/ProviderIcon-" + id + ".svg");
+                    }
+                    return Qt.resolvedUrl("../images/ProviderIcon-codex.svg");
+                }
+                isMask: true
                 color: card.accentColor
             }
 
@@ -121,6 +129,16 @@ PlasmaComponents3.Frame {
             maximumLineCount: 3
             elide: Text.ElideRight
         }
+
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            text: card.footerInfo()
+            color: Kirigami.Theme.disabledTextColor
+            font: Kirigami.Theme.smallFont
+            elide: Text.ElideRight
+            visible: text.length > 0
+            horizontalAlignment: Text.AlignRight
+        }
     }
 
     function subtitle() {
@@ -131,14 +149,25 @@ PlasmaComponents3.Frame {
         if (entry.account) {
             parts.push(entry.account);
         }
+        if (entry.organization) {
+            parts.push(entry.organization);
+        }
         if (entry.plan) {
             parts.push(entry.plan.indexOf("Plan:") === 0 ? entry.plan : i18n("Plan: %1", entry.plan));
         }
+        return parts.join(" · ");
+    }
+
+    function footerInfo() {
+        if (!entry) {
+            return "";
+        }
+        const parts = [];
         if (entry.source) {
-            parts.push(entry.source);
+            parts.push(i18n("Source: %1", entry.source));
         }
         if (entry.version) {
-            parts.push(entry.version);
+            parts.push(i18n("Version: %1", entry.version));
         }
         return parts.join(" · ");
     }
