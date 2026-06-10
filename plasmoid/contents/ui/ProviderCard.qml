@@ -62,6 +62,7 @@ PlasmaComponents3.Frame {
                 Layout.fillWidth: true
                 title: modelData.title
                 percentLeft: modelData.percentLeft
+                resetsAt: modelData.resetsAt || ""
                 accentColor: card.accentColor
             }
         }
@@ -129,6 +130,9 @@ PlasmaComponents3.Frame {
         const parts = [];
         if (entry.account) {
             parts.push(entry.account);
+        }
+        if (entry.plan) {
+            parts.push(entry.plan.indexOf("Plan:") === 0 ? entry.plan : i18n("Plan: %1", entry.plan));
         }
         if (entry.source) {
             parts.push(entry.source);

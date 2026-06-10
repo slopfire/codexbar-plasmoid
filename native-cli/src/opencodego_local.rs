@@ -192,10 +192,10 @@ fn month_bounds_for(now: DateTime<Utc>, anchor_ms: i64) -> (i64, i64) {
         };
         start = anchored_month(year, month, &anchor);
     }
-    let (next_year, next_month) = if now.month() == 12 {
-        (now.year() + 1, 1)
+    let (next_year, next_month) = if start.month() == 12 {
+        (start.year() + 1, 1)
     } else {
-        (now.year(), now.month() + 1)
+        (start.year(), start.month() + 1)
     };
     let end = anchored_month(next_year, next_month, &anchor);
     (start.timestamp_millis(), end.timestamp_millis())
