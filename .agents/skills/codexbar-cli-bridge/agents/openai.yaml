@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodexBar CLI Bridge"
+  short_description: "Maintain the QML helper that normalizes CodexBar CLI JSON."
+  default_prompt: "Update the CodexBar CLI bridge and keep the plasmoid data contract stable."

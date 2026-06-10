@@ -1,0 +1,20 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Authors": [
+      {
+        "Email": "",
+        "Name": "CodexBar KDE"
+      }
+    ],
+    "Category": "System Information",
+    "Description": "KDE Plasma widget for CodexBar usage, credits, costs, provider status, and recent history.",
+    "Icon": "utilities-system-monitor",
+    "Id": "org.splazma.codexbar",
+    "License": "MIT",
+    "Name": "CodexBar",
+    "Version": "0.1.0",
+    "Website": "https://github.com/steipete/codexbar"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}

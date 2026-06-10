@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 https://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="cliPath" type="String">
+      <label>CodexBar CLI executable path</label>
+      <default>codexbar</default>
+    </entry>
+    <entry name="provider" type="String">
+      <label>Provider selector</label>
+      <default>all</default>
+    </entry>
+    <entry name="source" type="String">
+      <label>Usage source</label>
+      <default>auto</default>
+    </entry>
+    <entry name="providerConfigs" type="String">
+      <label>Provider configuration list</label>
+      <default>[{"provider":"codex","source":"cli","enabled":true},{"provider":"gemini","source":"api","enabled":true}]</default>
+    </entry>
+    <entry name="account" type="String">
+      <label>Provider account label</label>
+      <default></default>
+    </entry>
+    <entry name="accountIndex" type="Int">
+      <label>Provider account index</label>
+      <default>0</default>
+    </entry>
+    <entry name="allAccounts" type="Bool">
+      <label>Fetch all token accounts</label>
+      <default>false</default>
+    </entry>
+    <entry name="includeStatus" type="Bool">
+      <label>Fetch provider status pages</label>
+      <default>true</default>
+    </entry>
+    <entry name="includeCost" type="Bool">
+      <label>Fetch local token cost usage</label>
+      <default>true</default>
+    </entry>
+    <entry name="showCredits" type="Bool">
+      <label>Show credits</label>
+      <default>true</default>
+    </entry>
+    <entry name="showHistory" type="Bool">
+      <label>Show usage history chart</label>
+      <default>true</default>
+    </entry>
+    <entry name="refreshIntervalSeconds" type="Int">
+      <label>Refresh interval in seconds</label>
+      <default>300</default>
+      <min>30</min>
+      <max>86400</max>
+    </entry>
+    <entry name="requestTimeoutSeconds" type="Int">
+      <label>Request timeout in seconds</label>
+      <default>45</default>
+      <min>5</min>
+      <max>300</max>
+    </entry>
+    <entry name="compactMetric" type="String">
+      <label>Compact display metric</label>
+      <default>lowest</default>
+    </entry>
+    <entry name="compactDisplay" type="String">
+      <label>Compact tray display</label>
+      <default>icon</default>
+    </entry>
+  </group>
+</kcfg>

@@ -1,0 +1,161 @@
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls as QtControls
+import org.kde.kirigami as Kirigami
+
+Item {
+    id: switcher
+
+    signal providerSelected(string provider)
+
+    property var entries: []
+    property string selectedProvider: ""
+
+    implicitHeight: grid.implicitHeight
+    height: grid.implicitHeight
+    visible: entries.length > 1
+
+    TextMetrics {
+        id: nameMetrics
+        font.bold: true
+        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
+    }
+
+    readonly property real buttonWidth: {
+        let maxW = Kirigami.Units.gridUnit * 4.6;
+        for (let i = 0; i < entries.length; ++i) {
+            const name = providerName(entries[i].provider);
+            nameMetrics.text = name;
+            maxW = Math.max(maxW, nameMetrics.advanceWidth + Kirigami.Units.largeSpacing * 2);
+        }
+        return Math.ceil(maxW);
+    }
+
+    readonly property int gridColumns: {
+        if (entries.length <= 1) {
+            return 1;
+        }
+        const available = width > 0 ? width : Kirigami.Units.gridUnit * 24;
+        const maxCols = Math.max(1, Math.floor((available + Kirigami.Units.smallSpacing) / (buttonWidth + Kirigami.Units.smallSpacing)));
+        return Math.min(entries.length, maxCols);
+    }
+
+    GridLayout {
+        id: grid
+        anchors.horizontalCenter: parent.horizontalCenter
+        columns: switcher.gridColumns
+        rowSpacing: Kirigami.Units.smallSpacing
+        columnSpacing: Kirigami.Units.smallSpacing
+
+        Repeater {
+            model: switcher.entries
+
+            delegate: QtControls.AbstractButton {
+                id: button
+
+                required property var modelData
+
+                Layout.preferredWidth: switcher.buttonWidth
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 3.4
+                checkable: true
+                checked: switcher.selectedProvider === modelData.provider
+                onClicked: switcher.providerSelected(modelData.provider)
+
+                background: Rectangle {
+                    radius: Kirigami.Units.cornerRadius
+                    color: button.checked
+                        ? Kirigami.Theme.highlightColor
+                        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.hovered ? 0.10 : 0.04)
+                    border.width: button.checked ? 0 : 1
+                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.10)
+                }
+
+                contentItem: ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: Kirigami.Units.smallSpacing
+                    spacing: Kirigami.Units.smallSpacing / 2
+
+                    QtControls.Label {
+                        id: title
+                        Layout.fillWidth: true
+                        text: switcher.providerName(button.modelData.provider)
+                        color: button.checked ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        font.bold: button.checked
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Kirigami.Units.smallSpacing
+                        radius: height / 2
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.checked ? 0.18 : 0.12)
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            width: parent.width * switcher.primaryPercent(button.modelData) / 100
+                            radius: parent.radius
+                            color: button.checked ? Kirigami.Theme.highlightedTextColor : switcher.providerColor(button.modelData.provider)
+                        }
+                    }
+
+                    QtControls.Label {
+                        Layout.fillWidth: true
+                        text: button.modelData.source || ""
+                        color: button.checked
+                            ? Qt.rgba(Kirigami.Theme.highlightedTextColor.r, Kirigami.Theme.highlightedTextColor.g, Kirigami.Theme.highlightedTextColor.b, 0.78)
+                            : Kirigami.Theme.disabledTextColor
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        font: Kirigami.Theme.smallFont
+                    }
+                }
+            }
+        }
+    }
+
+    function primaryPercent(entry) {
+        const rows = entry && entry.rows ? entry.rows : [];
+        if (rows.length === 0) {
+            return 0;
+        }
+        const value = Number(rows[0].percentLeft);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+    }
+
+    function providerName(provider) {
+        const names = {
+            codex: "Codex",
+            openai: "OpenAI",
+            azureopenai: "Azure OpenAI",
+            claude: "Claude",
+            cursor: "Cursor",
+            gemini: "Gemini",
+            copilot: "Copilot",
+            antigravity: "Antigravity",
+            opencode: "OpenCode",
+            opencodego: "OpenCode Go",
+            minimax: "MiniMax",
+            grok: "Grok",
+            groq: "GroqCloud"
+        };
+        return names[provider] || String(provider || "");
+    }
+
+    function providerColor(provider) {
+        const colors = {
+            codex: "#49a3b0",
+            claude: "#cc7c5e",
+            cursor: "#00bfa5",
+            gemini: "#ab87ea",
+            copilot: "#a855f7",
+            openai: "#0f826e",
+            minimax: "#fe603c",
+            grok: "#10a37f",
+            groq: "#f56844"
+        };
+        return colors[provider] || Kirigami.Theme.highlightColor;
+    }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "KDE Plasmoid Workflow"
+  short_description: "Develop and verify the Splazma CodexBar Plasma widget."
+  default_prompt: "Work on the Splazma CodexBar KDE plasmoid using the project validation workflow."
