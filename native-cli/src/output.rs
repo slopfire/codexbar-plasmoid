@@ -158,3 +158,54 @@ pub fn clamp_percent(value: f64) -> f64 {
     }
     value.clamp(0.0, 100.0)
 }
+
+impl ProviderPayload {
+    pub fn anonymize_emails(&mut self) {
+        if let Some(ref email) = self.account {
+            self.account = Some(anonymize_email_str(email));
+        }
+        if let Some(ref mut usage) = self.usage {
+            if let Some(ref mut identity) = usage.identity {
+                if let Some(ref email) = identity.account_email {
+                    identity.account_email = Some(anonymize_email_str(email));
+                }
+            }
+        }
+    }
+}
+
+pub fn anonymize_email_str(email: &str) -> String {
+    if !email.contains('@') {
+        return email.to_string();
+    }
+    let parts: Vec<&str> = email.split('@').collect();
+    if parts.len() != 2 {
+        return email.to_string();
+    }
+    let local = parts[0];
+    let domain = parts[1];
+    if local.chars().count() <= 2 {
+        let masked_local: String = local.chars().take(1).chain(std::iter::once('*')).collect();
+        format!("{}@{}", masked_local, domain)
+    } else {
+        let first = local.chars().next().unwrap_or('*');
+        let last = local.chars().last().unwrap_or('*');
+        let stars: String = std::iter::repeat('*').take(local.chars().count() - 2).collect();
+        format!("{}{}{}@{}", first, stars, last, domain)
+    }
+}
+
+#[cfg(test)]
+mod anonymize_tests {
+    use super::*;
+
+    #[test]
+    fn test_anonymize_email() {
+        assert_eq!(anonymize_email_str("a@example.com"), "a*@example.com");
+        assert_eq!(anonymize_email_str("ab@example.com"), "a*@example.com");
+        assert_eq!(anonymize_email_str("abc@example.com"), "a*c@example.com");
+        assert_eq!(anonymize_email_str("user@example.com"), "u**r@example.com");
+        assert_eq!(anonymize_email_str("username@example.com"), "u******e@example.com");
+        assert_eq!(anonymize_email_str("not_an_email"), "not_an_email");
+    }
+}

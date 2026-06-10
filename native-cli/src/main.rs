@@ -56,12 +56,17 @@ fn run() -> anyhow::Result<()> {
         .get("provider")
         .map(|value| normalize_provider_id(value))
         .unwrap_or_else(|| "all".to_string());
+    let anonymize = parsed
+        .get("anonymize-emails")
+        .or_else(|| parsed.get("anonymize-email"))
+        .map(|value| value != "false")
+        .unwrap_or(true);
 
     let timeout = Duration::from_secs(timeout_secs);
     let http = HttpClient::new(timeout)?;
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
 
-    let payloads = if provider == "all" {
+    let mut payloads = if provider == "all" {
         NATIVE_PROVIDERS
             .iter()
             .map(|provider_id| fetch_provider(provider_id, &http, &home, include_status, timeout))
@@ -71,6 +76,12 @@ fn run() -> anyhow::Result<()> {
     } else {
         anyhow::bail!("Provider not supported by codexbar-plasmoid: {provider}");
     };
+
+    if anonymize {
+        for payload in &mut payloads {
+            payload.anonymize_emails();
+        }
+    }
 
     println!("{}", serde_json::to_string(&payloads)?);
     Ok(())

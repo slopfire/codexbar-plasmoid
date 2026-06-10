@@ -14,6 +14,7 @@ const providerConfigs = parseProviderConfigs(args.providers);
 const includeCost = args.cost !== "false";
 const includeStatus = args.status !== "false";
 const showCredits = args.credits !== "false";
+const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
 
 const nativeProviders = new Set(["antigravity", "cursor", "opencode", "opencodego"]);
 
@@ -120,6 +121,10 @@ function runUsageForConfig(config) {
     commandArgs.push("--account", clean(config.account));
   } else if (Number(config.accountIndex || 0) > 0) {
     commandArgs.push("--account-index", String(Number(config.accountIndex)));
+  }
+
+  if (!anonymizeEmails) {
+    commandArgs.push("--anonymize-emails", "false");
   }
 
   const command = commandForConfig(config);
@@ -240,10 +245,12 @@ function normalizeProvider(item, cost) {
   const identity = usage.identity || {};
   const rows = usageRows(providerId, usage);
   const dailyUsage = dailyUsagePoints(dashboard, cost);
+  const rawAccount = item.account || usage.accountEmail || identity.accountEmail || null;
+  const account = anonymizeEmails ? anonymizeEmailAddress(rawAccount) : rawAccount;
 
   return {
     provider: providerId,
-    account: item.account || usage.accountEmail || identity.accountEmail || null,
+    account,
     organization: usage.accountOrganization || identity.accountOrganization || null,
     plan: usage.loginMethod || identity.loginMethod || null,
     source: item.source || "unknown",
@@ -453,4 +460,20 @@ function shortError(error, command = cliPath) {
     return `CodexBar CLI timed out after ${Math.round(timeoutMs / 1000)} seconds`;
   }
   return error?.message || String(error);
+}
+
+function anonymizeEmailAddress(email) {
+  if (typeof email !== "string" || !email.includes("@")) {
+    return email;
+  }
+  const parts = email.split("@");
+  if (parts.length !== 2) {
+    return email;
+  }
+  const local = parts[0];
+  const domain = parts[1];
+  if (local.length <= 2) {
+    return `${local[0]}*@${domain}`;
+  }
+  return `${local[0]}${"*".repeat(local.length - 2)}${local[local.length - 1]}@${domain}`;
 }

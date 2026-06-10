@@ -74,7 +74,8 @@ PlasmoidItem {
                 "--allAccounts", quote(plasmoid.configuration.allAccounts ? "true" : "false"),
                 "--status", quote(plasmoid.configuration.includeStatus ? "true" : "false"),
                 "--cost", quote(plasmoid.configuration.includeCost ? "true" : "false"),
-                "--credits", quote(plasmoid.configuration.showCredits ? "true" : "false")
+                "--credits", quote(plasmoid.configuration.showCredits ? "true" : "false"),
+                "--anonymize-emails", quote(plasmoid.configuration.anonymizeEmail ? "true" : "false")
             ];
             return parts.join(" ");
         }
