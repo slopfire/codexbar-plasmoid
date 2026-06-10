@@ -1,5 +1,7 @@
 # codexbar-plasmoid
 
+![CodexBar Plasmoid Screenshot](assets/screenshot.png)
+
 This repository adds a Plasma 6 widget for the CodexBar CLI in `./codexbar`.
 The plasmoid shells out to the existing CLI instead of duplicating provider logic, then renders usage limits,
 credits, status, local token costs, and recent history with native Plasma/Kirigami controls.
