@@ -27,31 +27,40 @@ Control {
         return Qt.resolvedUrl("../images/ProviderIcon-codex.svg");
     }
 
+    readonly property bool isVertical: compact.width > 0 && compact.height > 0 && compact.width < compact.height
+    readonly property bool showText: compact.width > Kirigami.Units.gridUnit * 3 && !compact.isVertical
+    readonly property real rowSpacing: compact.isVertical ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
+
     readonly property real iconSize: compact.height > 0
         ? Math.max(16, Math.min(Kirigami.Units.iconSizes.smallMedium, Math.max(0, compact.availableHeight)))
         : Kirigami.Units.iconSizes.smallMedium
 
-    implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+    implicitWidth: compact.isVertical
+        ? compact.iconSize + leftPadding + rightPadding
+        : Math.max(Kirigami.Units.gridUnit * 4.5, compact.iconSize + compact.rowSpacing + valueLabel.implicitWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(Kirigami.Units.iconSizes.small, contentItem.implicitHeight) + topPadding + bottomPadding
-    leftPadding: Kirigami.Units.smallSpacing
-    rightPadding: Kirigami.Units.smallSpacing
-    topPadding: Kirigami.Units.smallSpacing / 2
-    bottomPadding: Kirigami.Units.smallSpacing / 2
+    leftPadding: compact.showText ? Kirigami.Units.largeSpacing : Math.round(Kirigami.Units.smallSpacing / 2)
+    rightPadding: leftPadding
+    topPadding: Math.round(Kirigami.Units.smallSpacing / 2)
+    bottomPadding: topPadding
 
     contentItem: RowLayout {
         id: row
-        spacing: Kirigami.Units.smallSpacing
+        spacing: compact.rowSpacing
         clip: true
 
         Item {
             id: visualSlot
-            width: compact.iconSize
-            height: compact.iconSize
-            Layout.preferredWidth: width
-            Layout.minimumWidth: width
-            Layout.preferredHeight: height
-            Layout.minimumHeight: height
+            implicitWidth: compact.iconSize
+            implicitHeight: compact.iconSize
+            width: implicitWidth
+            height: implicitHeight
+            Layout.preferredWidth: implicitWidth
+            Layout.minimumWidth: implicitWidth
+            Layout.preferredHeight: implicitHeight
+            Layout.minimumHeight: implicitHeight
             Layout.alignment: Qt.AlignVCenter
+            Layout.fillWidth: !compact.showText
 
             Kirigami.Icon {
                 anchors.centerIn: parent
@@ -91,6 +100,7 @@ Control {
         }
 
         ColumnLayout {
+            visible: compact.showText
             Layout.alignment: Qt.AlignVCenter
             Layout.minimumWidth: valueLabel.implicitWidth
             spacing: 0
