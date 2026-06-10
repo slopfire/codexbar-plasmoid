@@ -17,6 +17,7 @@ Kirigami.ScrollablePage {
     property alias cfg_includeCost: includeCost.checked
     property alias cfg_showCredits: showCredits.checked
     property alias cfg_showHistory: showHistory.checked
+    property alias cfg_anonymizeEmail: anonymizeEmail.checked
     property int cfg_refreshIntervalSeconds: refreshInterval.value
     property int cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
@@ -292,6 +293,11 @@ Kirigami.ScrollablePage {
             QtControls.CheckBox {
                 id: showHistory
                 text: i18n("History chart")
+            }
+
+            QtControls.CheckBox {
+                id: anonymizeEmail
+                text: i18n("Anonymize emails")
             }
 
             QtControls.SpinBox {

@@ -65,8 +65,12 @@
       <default>lowest</default>
     </entry>
     <entry name="compactDisplay" type="String">
-      <label>Compact tray display</label>
+      <label>Tray display</label>
       <default>icon</default>
+    </entry>
+    <entry name="anonymizeEmail" type="Bool">
+      <label>Anonymize email addresses</label>
+      <default>true</default>
     </entry>
   </group>
 </kcfg>
