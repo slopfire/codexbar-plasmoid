@@ -383,15 +383,15 @@ function resolveCommandInvocation(command) {
 function resolveNativeCliPath() {
   const codeDir = path.dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    path.join(codeDir, "splazma-codexbar"),
-    path.resolve(codeDir, "../../../native-cli/target/release/splazma-codexbar"),
+    path.join(codeDir, "codexbar-plasmoid"),
+    path.resolve(codeDir, "../../../native-cli/target/release/codexbar-plasmoid"),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
       return candidate;
     }
   }
-  return "splazma-codexbar";
+  return "codexbar-plasmoid";
 }
 
 function normalizeProviderId(providerId) {

@@ -1,11 +1,14 @@
 [package]
-name = "splazma-codexbar"
+name = "codexbar-plasmoid"
 version = "0.1.0"
 edition = "2021"
 description = "Linux-native usage fetcher for Cursor, OpenCode, and OpenCode Go"
+authors = ["slopfire"]
+license = "MIT"
+repository = "https://github.com/slopfire/codexbar-plasmoid.git"
 
 [[bin]]
-name = "splazma-codexbar"
+name = "codexbar-plasmoid"
 path = "src/main.rs"
 
 [dependencies]

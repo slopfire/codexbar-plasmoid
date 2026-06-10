@@ -1,4 +1,4 @@
-# Splazma CodexBar Plasmoid
+# codexbar-plasmoid
 
 This repository adds a Plasma 6 widget for the CodexBar CLI in `./codexbar`.
 The plasmoid shells out to the existing CLI instead of duplicating provider logic, then renders usage limits,
@@ -32,7 +32,7 @@ The default Linux provider set is Codex through the CLI source and Gemini throug
 added from the widget settings. Source selection is stored per provider because the CodexBar CLI does not support every
 source for every provider, and some web-backed sources are macOS-only.
 
-The Plasma package ID is `org.splazma.codexbar`.
+The Plasma package ID is `org.slopfire.codexbar-plasmoid`.
 
 ## CLI Contract
 
@@ -50,7 +50,7 @@ provider can use its own source mode.
 ## Native Linux CLI
 
 Cursor, OpenCode, and OpenCode Go are macOS-only in upstream CodexBar. This repository ships a Rust binary,
-`splazma-codexbar`, bundled inside the plasmoid at `plasmoid/contents/code/splazma-codexbar`. It reads browser cookies
+`codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
 or `~/.codexbar/config.json` manual cookie headers and calls the same provider APIs directly.
 
 Build and bundle it:
@@ -65,7 +65,7 @@ previewing the widget.
 Run it directly:
 
 ```sh
-plasmoid/contents/code/splazma-codexbar usage --format json --json-only --provider cursor --source native
+plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider cursor --source native
 ```
 
 In widget settings, choose **Native** as the source for Cursor, OpenCode, or OpenCode Go. Linux auto mode already
@@ -74,6 +74,6 @@ prefers Native for those providers.
 Authentication options:
 
 - `~/.codexbar/config.json` provider `cookieHeader`
-- `SPLAZMA_CURSOR_COOKIE`, `SPLAZMA_OPENCODE_COOKIE`, or `SPLAZMA_OPENCODEGO_COOKIE`
+- `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
 - Chrome/Chromium/Firefox cookie import (`secret-tool` required for encrypted Chromium cookies)
 - OpenCode Go local usage from `~/.local/share/opencode/opencode.db` when web cookies are unavailable

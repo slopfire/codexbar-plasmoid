@@ -285,7 +285,7 @@ fn test_endpoint_connectivity(http: &HttpClient, endpoint: &ConnectionEndpoint) 
                 "hasAnthropicModelAccess": "true",
                 "ide": "antigravity",
                 "ideVersion": "unknown",
-                "installationId": "splazma-codexbar",
+                "installationId": "codexbar-plasmoid",
                 "language": "UNSPECIFIED",
                 "os": "linux",
                 "requestedModelId": "MODEL_UNSPECIFIED",

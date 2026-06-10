@@ -70,6 +70,15 @@ fn provider_settings(provider_id: &str) -> Option<ProviderConfig> {
 
 pub fn cookie_env_name(provider_id: &str) -> Option<&'static str> {
     match normalize_provider_id(provider_id).as_str() {
+        "cursor" => Some("CODEXBAR_PLASMOID_CURSOR_COOKIE"),
+        "opencode" => Some("CODEXBAR_PLASMOID_OPENCODE_COOKIE"),
+        "opencodego" => Some("CODEXBAR_PLASMOID_OPENCODEGO_COOKIE"),
+        _ => None,
+    }
+}
+
+pub fn fallback_cookie_env_name(provider_id: &str) -> Option<&'static str> {
+    match normalize_provider_id(provider_id).as_str() {
         "cursor" => Some("SPLAZMA_CURSOR_COOKIE"),
         "opencode" => Some("SPLAZMA_OPENCODE_COOKIE"),
         "opencodego" => Some("SPLAZMA_OPENCODEGO_COOKIE"),
@@ -79,6 +88,14 @@ pub fn cookie_env_name(provider_id: &str) -> Option<&'static str> {
 
 pub fn manual_cookie_header(provider_id: &str) -> Option<String> {
     if let Some(env_name) = cookie_env_name(provider_id) {
+        if let Ok(value) = env::var(env_name) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    if let Some(env_name) = fallback_cookie_env_name(provider_id) {
         if let Ok(value) = env::var(env_name) {
             let trimmed = value.trim();
             if !trimmed.is_empty() {

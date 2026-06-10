@@ -36,7 +36,7 @@ Kirigami.ScrollablePage {
         oauth: i18n("Signed-in account"),
         api: i18n("API credentials"),
         web: i18n("Browser/web session"),
-        native: i18n("Splazma Linux fetcher")
+        native: i18n("Plasmoid fetcher")
     })
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },

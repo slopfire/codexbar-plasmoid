@@ -42,7 +42,7 @@ fn run() -> anyhow::Result<()> {
 
     let parsed = parse_args(&args[2..]);
     if parsed.get("source").map(String::as_str) != Some("native") {
-        anyhow::bail!("--source must be native for splazma-codexbar.");
+        anyhow::bail!("--source must be native for codexbar-plasmoid.");
     }
 
     let timeout_secs = parsed
@@ -69,7 +69,7 @@ fn run() -> anyhow::Result<()> {
     } else if NATIVE_PROVIDERS.contains(&provider.as_str()) {
         vec![fetch_provider(&provider, &http, &home, include_status, timeout)]
     } else {
-        anyhow::bail!("Provider not supported by splazma-codexbar: {provider}");
+        anyhow::bail!("Provider not supported by codexbar-plasmoid: {provider}");
     };
 
     println!("{}", serde_json::to_string(&payloads)?);
@@ -100,10 +100,10 @@ fn parse_args(args: &[String]) -> std::collections::HashMap<String, String> {
 
 fn print_help() {
     println!(
-        "splazma-codexbar — Linux-native usage fetcher for Antigravity, Cursor, OpenCode, and OpenCode Go
+        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Cursor, OpenCode, and OpenCode Go
 
 Usage:
-  splazma-codexbar usage --format json --json-only --provider <id> --source native [--status] [--web-timeout <seconds>]
+  codexbar-plasmoid usage --format json --json-only --provider <id> --source native [--status] [--web-timeout <seconds>]
 
 Providers:
   antigravity, cursor, opencode, opencodego, all
@@ -111,7 +111,7 @@ Providers:
 Authentication:
   - Antigravity: running agy or Antigravity IDE language server (local HTTPS probe)
   - ~/.codexbar/config.json provider cookieHeader
-  - SPLAZMA_CURSOR_COOKIE / SPLAZMA_OPENCODE_COOKIE / SPLAZMA_OPENCODEGO_COOKIE
+  - CODEXBAR_PLASMOID_CURSOR_COOKIE / CODEXBAR_PLASMOID_OPENCODE_COOKIE / CODEXBAR_PLASMOID_OPENCODEGO_COOKIE (or older SPLAZMA_* fallback)
   - Chrome/Chromium/Firefox cookie import (secret-tool required for encrypted Chromium cookies)
   - OpenCode Go local usage from ~/.local/share/opencode/opencode.db"
     );

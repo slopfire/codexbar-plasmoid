@@ -23,6 +23,6 @@ pub fn fetch_provider(
         "cursor" => cursor::fetch(http, include_status),
         "opencode" => opencode::fetch(http),
         "opencodego" => opencodego::fetch(http, home),
-        _ => ProviderPayload::error(provider, format!("Provider not supported by splazma-codexbar: {provider}")),
+        _ => ProviderPayload::error(provider, format!("Provider not supported by codexbar-plasmoid: {provider}")),
     }
 }

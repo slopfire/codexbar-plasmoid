@@ -83,9 +83,9 @@ pub fn filter_provider_cookies(header: &str, provider_id: &str) -> String {
 
 fn missing_cookie_message(provider_id: &str) -> String {
     match normalize_provider_id(provider_id).as_str() {
-        "cursor" => "No Cursor session found. Paste a Cookie header into ~/.codexbar/config.json, set SPLAZMA_CURSOR_COOKIE, or log in to cursor.com in Chrome/Chromium.".to_string(),
-        "opencode" => "No OpenCode session found. Paste a Cookie header into ~/.codexbar/config.json, set SPLAZMA_OPENCODE_COOKIE, or log in to opencode.ai in Chrome/Chromium.".to_string(),
-        "opencodego" => "No OpenCode Go session found. Paste a Cookie header into ~/.codexbar/config.json, set SPLAZMA_OPENCODEGO_COOKIE, log in to opencode.ai, or use OpenCode Go locally.".to_string(),
+        "cursor" => "No Cursor session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_CURSOR_COOKIE, or log in to cursor.com in Chrome/Chromium.".to_string(),
+        "opencode" => "No OpenCode session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODE_COOKIE, or log in to opencode.ai in Chrome/Chromium.".to_string(),
+        "opencodego" => "No OpenCode Go session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODEGO_COOKIE, log in to opencode.ai, or use OpenCode Go locally.".to_string(),
         _ => "No session cookie found.".to_string(),
     }
 }
@@ -506,7 +506,7 @@ fn looks_like_cookie_value(value: &str) -> bool {
 
 fn copy_to_temp(path: &Path) -> Option<PathBuf> {
     let temp_dir = std::env::temp_dir().join(format!(
-        "splazma-codexbar-cookies-{}",
+        "codexbar-plasmoid-cookies-{}",
         std::process::id()
     ));
     fs::create_dir_all(&temp_dir).ok()?;
