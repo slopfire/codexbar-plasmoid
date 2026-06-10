@@ -259,7 +259,7 @@ function normalizeProvider(item, cost) {
     status: item.status || null,
     error: item.error || null,
     rows,
-    creditsRemaining: numberOrNull(item.credits?.remaining),
+    creditsRemaining: numberOrNull(item.credits?.remaining ?? usage.openRouterUsage?.balance),
     codeReviewRemainingPercent: numberOrNull(dashboard.codeReviewRemainingPercent),
     tokenUsage: cost ? {
       sessionCostUSD: numberOrNull(cost.sessionCostUSD),
@@ -336,6 +336,10 @@ function providerLabels(providerId) {
       return { session: "Total", weekly: "Auto + Composer", tertiary: "API" };
     case "antigravity":
       return { session: "Claude", weekly: "Gemini Pro", tertiary: "Gemini Flash" };
+    case "opencode":
+      return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Extra" };
+    case "opencodego":
+      return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Monthly Usage" };
     default:
       return { session: "Session", weekly: "Weekly", tertiary: "Extra" };
   }
