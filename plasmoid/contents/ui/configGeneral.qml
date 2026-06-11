@@ -22,6 +22,8 @@ Kirigami.ScrollablePage {
     property int cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
     property alias cfg_compactDisplay: compactDisplay.currentValue
+    property alias cfg_compactBarsProviders: compactBarsProviders.currentValue
+    property alias cfg_compactBarsTint: compactBarsTint.currentValue
 
     readonly property var sourceLabels: ({
         auto: i18n("Auto"),
@@ -357,6 +359,30 @@ Kirigami.ScrollablePage {
                 model: [
                     { text: i18n("Provider icon"), value: "icon" },
                     { text: i18n("Usage bars"), value: "bars" }
+                ]
+            }
+
+            QtControls.ComboBox {
+                id: compactBarsProviders
+                Kirigami.FormData.label: i18n("Tray usage bars:")
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: i18n("Default provider"), value: "default" },
+                    { text: i18n("Selected provider"), value: "selected" },
+                    { text: i18n("All providers"), value: "all" }
+                ]
+            }
+
+            QtControls.ComboBox {
+                id: compactBarsTint
+                Kirigami.FormData.label: i18n("Bar tint:")
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: i18n("Provider colors"), value: "provider" },
+                    { text: i18n("Remaining limit"), value: "threshold" },
+                    { text: i18n("Theme text"), value: "theme" }
                 ]
             }
         }
