@@ -229,7 +229,27 @@ PlasmoidItem {
             if (!Number.isFinite(Number(value))) {
                 return "—";
             }
-            return (code || "USD") + " " + Number(value).toLocaleString(Qt.locale(), "f", 2);
+            const val = Number(value);
+            let sym = "";
+            const currency = String(code || "USD").toUpperCase();
+            if (currency === "USD") {
+                sym = "$";
+            } else if (currency === "EUR") {
+                sym = "€";
+            } else if (currency === "GBP") {
+                sym = "£";
+            } else if (currency === "JPY") {
+                sym = "¥";
+            } else {
+                sym = currency + " ";
+            }
+            let decimals = 0;
+            if (val < 1) {
+                decimals = 2;
+            } else if (val < 10) {
+                decimals = 1;
+            }
+            return sym + val.toLocaleString(Qt.locale(), "f", decimals);
         }
 
         function tokens(value) {
