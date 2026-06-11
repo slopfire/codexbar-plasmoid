@@ -7,6 +7,13 @@ import org.kde.plasma.components 3.0 as PlasmaComponents3
 Control {
     id: compact
 
+    Layout.minimumWidth: implicitWidth
+    Layout.preferredWidth: implicitWidth
+    Layout.maximumWidth: implicitWidth
+    Layout.minimumHeight: implicitHeight
+    Layout.preferredHeight: implicitHeight
+    clip: true
+
     property var entry
     property bool loading: false
     property string errorText: ""
@@ -15,10 +22,15 @@ Control {
     property color accentColor: Kirigami.Theme.highlightColor
     property string valueText: "—"
     property string displayMode: "icon"
+    property bool showMetricText: true
     property var usageRows: []
     property var barItems: []
+    property int providerBarWidth: 18
 
     readonly property bool showBars: compact.displayMode === "bars"
+    readonly property int barGroupCount: compact.showBars
+        ? Math.max(1, compact.barItems && compact.barItems.length > 0 ? compact.barItems.length : 1)
+        : 1
     readonly property url providerIconSource: {
         const known = ["abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram", "deepseek", "doubao", "elevenlabs", "factory", "gemini", "grok", "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo", "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "stepfun", "synthetic", "t3chat", "venice", "vertexai", "warp", "windsurf", "zai"];
         const id = String(compact.providerId || "").toLowerCase().replace(/[-_]/g, "");
@@ -29,19 +41,22 @@ Control {
     }
 
     readonly property bool isVertical: compact.width > 0 && compact.height > 0 && compact.width < compact.height
-    readonly property bool showText: compact.width > Kirigami.Units.gridUnit * 3 && !compact.isVertical
+    readonly property bool showText: compact.showMetricText && compact.width > Kirigami.Units.gridUnit * 3 && !compact.isVertical
     readonly property real rowSpacing: compact.isVertical ? Kirigami.Units.smallSpacing : Kirigami.Units.largeSpacing
 
     readonly property real iconSize: compact.height > 0
         ? Math.max(16, Math.min(Kirigami.Units.iconSizes.smallMedium, Math.max(0, compact.availableHeight)))
         : Kirigami.Units.iconSizes.smallMedium
-    readonly property real visualWidth: compact.showBars && compact.showText
-        ? Math.max(compact.iconSize, Kirigami.Units.gridUnit * 2.75)
+    readonly property real barGroupWidth: Math.max(8, Number(compact.providerBarWidth || 18))
+    readonly property real visualWidth: compact.showBars
+        ? Math.max(compact.iconSize, compact.barGroupCount * compact.barGroupWidth + Math.max(0, compact.barGroupCount - 1) * Kirigami.Units.smallSpacing)
         : compact.iconSize
 
-    implicitWidth: compact.isVertical
-        ? compact.visualWidth + leftPadding + rightPadding
-        : Math.max(Kirigami.Units.gridUnit * 4.5, compact.visualWidth + compact.rowSpacing + valueLabel.implicitWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(
+        compact.showMetricText ? Kirigami.Units.gridUnit * 4.5 : compact.visualWidth + leftPadding + rightPadding,
+        compact.showMetricText
+            ? compact.visualWidth + Kirigami.Units.largeSpacing + valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
+            : compact.visualWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(Kirigami.Units.iconSizes.small, contentItem.implicitHeight) + topPadding + bottomPadding
     leftPadding: compact.showText ? Kirigami.Units.largeSpacing : Math.round(Kirigami.Units.smallSpacing / 2)
     rightPadding: leftPadding

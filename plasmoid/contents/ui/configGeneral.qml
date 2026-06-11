@@ -21,9 +21,11 @@ Kirigami.ScrollablePage {
     property int cfg_refreshIntervalSeconds: refreshInterval.value
     property int cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
+    property alias cfg_compactShowMetric: compactShowMetric.checked
     property alias cfg_compactDisplay: compactDisplay.currentValue
     property alias cfg_compactBarsProviders: compactBarsProviders.currentValue
     property alias cfg_compactBarsTint: compactBarsTint.currentValue
+    property alias cfg_compactProviderBarWidth: compactProviderBarWidth.value
 
     readonly property var sourceLabels: ({
         auto: i18n("Auto"),
@@ -126,6 +128,8 @@ Kirigami.ScrollablePage {
                     required property string account
                     required property int accountIndex
                     required property bool allAccounts
+                    required property bool showInCompactAll
+                    required property string compactColor
 
                     Layout.fillWidth: true
                     padding: Kirigami.Units.smallSpacing
@@ -240,6 +244,40 @@ Kirigami.ScrollablePage {
                                 onToggled: page.setProviderProperty(providerDelegate.index, "allAccounts", checked)
                             }
                         }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            QtControls.CheckBox {
+                                text: i18n("Show in all-provider tray")
+                                checked: providerDelegate.showInCompactAll
+                                onToggled: page.setProviderProperty(providerDelegate.index, "showInCompactAll", checked)
+                            }
+
+                            Rectangle {
+                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                radius: 3
+                                color: providerDelegate.compactColor.length > 0 ? providerDelegate.compactColor : page.defaultProviderColor(providerDelegate.provider)
+                                border.width: 1
+                                border.color: Kirigami.Theme.disabledTextColor
+                            }
+
+                            QtControls.TextField {
+                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                text: providerDelegate.compactColor
+                                placeholderText: page.defaultProviderColor(providerDelegate.provider)
+                                inputMask: "\\#HHHHHH;_"
+                                onEditingFinished: page.setProviderProperty(providerDelegate.index, "compactColor", page.normalizeColor(text))
+                            }
+
+                            QtControls.ToolButton {
+                                icon.name: "edit-clear"
+                                text: i18n("Reset color")
+                                display: QtControls.AbstractButton.IconOnly
+                                onClicked: page.setProviderProperty(providerDelegate.index, "compactColor", "")
+                            }
+                        }
                     }
                 }
             }
@@ -258,7 +296,9 @@ Kirigami.ScrollablePage {
                             enabled: true,
                             account: "",
                             accountIndex: 0,
-                            allAccounts: false
+                            allAccounts: false,
+                            showInCompactAll: true,
+                            compactColor: ""
                         });
                         page.syncConfig();
                     }
@@ -351,6 +391,11 @@ Kirigami.ScrollablePage {
                 ]
             }
 
+            QtControls.CheckBox {
+                id: compactShowMetric
+                text: i18n("Show metric text")
+            }
+
             QtControls.ComboBox {
                 id: compactDisplay
                 Kirigami.FormData.label: i18n("Tray display:")
@@ -384,6 +429,22 @@ Kirigami.ScrollablePage {
                     { text: i18n("Remaining limit"), value: "threshold" },
                     { text: i18n("Theme text"), value: "theme" }
                 ]
+            }
+
+            QtControls.SpinBox {
+                id: compactProviderBarWidth
+                Kirigami.FormData.label: i18n("Provider bar width:")
+                from: 8
+                to: 96
+                stepSize: 2
+                editable: true
+                textFromValue: function(value) {
+                    return i18n("%1 px", value);
+                }
+                valueFromText: function(text) {
+                    const parsed = parseInt(text, 10);
+                    return Number.isFinite(parsed) ? parsed : 18;
+                }
             }
         }
     }
@@ -443,7 +504,9 @@ Kirigami.ScrollablePage {
                 enabled: item.enabled !== false,
                 account: String(item.account || ""),
                 accountIndex: Math.max(0, Number(item.accountIndex || 0)),
-                allAccounts: item.allAccounts === true
+                allAccounts: item.allAccounts === true,
+                showInCompactAll: item.showInCompactAll !== false,
+                compactColor: normalizeColor(item.compactColor || "")
             };
         });
     }
@@ -458,7 +521,9 @@ Kirigami.ScrollablePage {
                 enabled: item.enabled,
                 account: item.account,
                 accountIndex: item.accountIndex,
-                allAccounts: item.allAccounts
+                allAccounts: item.allAccounts,
+                showInCompactAll: item.showInCompactAll,
+                compactColor: item.compactColor
             });
         }
         return JSON.stringify(items);
@@ -524,5 +589,48 @@ Kirigami.ScrollablePage {
             }
         }
         return providerCatalog[0];
+    }
+
+    function defaultProviderColor(providerId) {
+        const colors = {
+            codex: "#49a3b0",
+            openai: "#0f826e",
+            azureopenai: "#0078d4",
+            claude: "#cc7c5e",
+            gemini: "#ab87ea",
+            antigravity: "#60ba7e",
+            cursor: "#00bfa5",
+            opencode: "#3b82f6",
+            opencodego: "#3b82f6",
+            alibaba: "#ff6a00",
+            alibabatokenplan: "#ff6a00",
+            zai: "#e85a6a",
+            factory: "#ff6b35",
+            copilot: "#a855f7",
+            minimax: "#fe603c",
+            vertexai: "#4285f4",
+            kilo: "#f27027",
+            kiro: "#ff9900",
+            augment: "#6366f1",
+            jetbrains: "#ff3399",
+            moonshot: "#205deb",
+            perplexity: "#20b2aa",
+            deepseek: "#527df0",
+            grok: "#10a37f",
+            groq: "#f56844",
+            llmproxy: "#24b47e"
+        };
+        const normalized = String(providerId || "").toLowerCase().replace(/[-_]/g, "");
+        const aliases = {
+            alibabacodingplan: "alibaba",
+            abacusai: "abacus",
+            groqcloud: "groq"
+        };
+        return colors[aliases[normalized] || normalized] || "#49a3b0";
+    }
+
+    function normalizeColor(value) {
+        const text = String(value || "").trim();
+        return /^#[0-9a-fA-F]{6}$/.test(text) ? text : "";
     }
 }
