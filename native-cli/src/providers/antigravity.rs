@@ -1,25 +1,32 @@
 use crate::http::HttpClient;
 use crate::output::{
-    clamp_percent, rate_window, ProviderIdentitySnapshot, ProviderPayload, UsageSnapshot,
+    clamp_percent, rate_window, ProviderIdentitySnapshot, ProviderPayload, ProviderStatusPayload,
+    UsageSnapshot,
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::Deserialize;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-const GET_USER_STATUS_PATH: &str =
-    "/exa.language_server_pb.LanguageServerService/GetUserStatus";
+const GET_USER_STATUS_PATH: &str = "/exa.language_server_pb.LanguageServerService/GetUserStatus";
 const GET_COMMAND_MODEL_CONFIGS_PATH: &str =
     "/exa.language_server_pb.LanguageServerService/GetCommandModelConfigs";
-const GET_UNLEASH_DATA_PATH: &str =
-    "/exa.language_server_pb.LanguageServerService/GetUnleashData";
+const GET_UNLEASH_DATA_PATH: &str = "/exa.language_server_pb.LanguageServerService/GetUnleashData";
+const NOT_RUNNING_MESSAGE: &str =
+    "Antigravity is not running. Start agy or the Antigravity IDE first.";
 
 pub fn fetch(timeout: Duration) -> ProviderPayload {
     match fetch_inner(timeout) {
-        Ok(payload) => payload,
+        Ok(payload) => {
+            save_cached_payload(&payload);
+            payload
+        }
+        Err(error) if is_not_running_error(&error) => cached_payload()
+            .unwrap_or_else(|| ProviderPayload::error("antigravity", error.to_string())),
         Err(error) => ProviderPayload::error("antigravity", error.to_string()),
     }
 }
@@ -33,12 +40,11 @@ fn fetch_inner(timeout: Duration) -> Result<ProviderPayload> {
 
     let snapshot = match fetch_user_status(&http, &request_endpoints) {
         Ok(snapshot) => snapshot,
-        Err(primary_error) => fetch_command_model_configs(&http, &request_endpoints)
-            .map_err(|fallback_error| {
-                anyhow!(
-                    "{primary_error}; fallback GetCommandModelConfigs failed: {fallback_error}"
-                )
-            })?,
+        Err(primary_error) => {
+            fetch_command_model_configs(&http, &request_endpoints).map_err(|fallback_error| {
+                anyhow!("{primary_error}; fallback GetCommandModelConfigs failed: {fallback_error}")
+            })?
+        }
     };
 
     let account_email = snapshot
@@ -99,7 +105,51 @@ fn process_info_from_ps_output(output: &str) -> Result<ProcessInfo> {
     if saw_tokenless_ide {
         anyhow::bail!("Antigravity IDE language server found without CSRF token");
     }
-    anyhow::bail!("Antigravity is not running. Start agy or the Antigravity IDE first.")
+    anyhow::bail!(NOT_RUNNING_MESSAGE)
+}
+
+fn is_not_running_error(error: &anyhow::Error) -> bool {
+    error.to_string().contains(NOT_RUNNING_MESSAGE)
+}
+
+fn cached_payload() -> Option<ProviderPayload> {
+    let raw = fs::read_to_string(cache_path()).ok()?;
+    let mut payload: ProviderPayload = serde_json::from_str(&raw).ok()?;
+    if payload.provider != "antigravity" || payload.usage.is_none() {
+        return None;
+    }
+    payload.status = Some(ProviderStatusPayload {
+        indicator: "minor".to_string(),
+        description: "Antigravity is not running; showing last fetched usage.".to_string(),
+        updated_at: Some(Utc::now().to_rfc3339()),
+        url: String::new(),
+    });
+    payload.error = None;
+    Some(payload)
+}
+
+fn save_cached_payload(payload: &ProviderPayload) {
+    if payload.provider != "antigravity" || payload.usage.is_none() || payload.error.is_some() {
+        return;
+    }
+    let path = cache_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(raw) = serde_json::to_string(payload) {
+        let _ = fs::write(path, raw);
+    }
+}
+
+fn cache_path() -> std::path::PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("/"))
+                .join(".cache")
+        })
+        .join("codexbar-plasmoid")
+        .join("antigravity-last.json")
 }
 
 fn parse_process_line(line: &str) -> Option<(u32, String)> {
@@ -132,15 +182,17 @@ fn antigravity_process_kind(command: &str) -> Option<ProcessKind> {
 
 fn is_language_server_command_line(lower_command: &str) -> bool {
     static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"(^|[/\\])language_server(_macos|\.exe)?(\s|$)").unwrap());
+    let re =
+        RE.get_or_init(|| Regex::new(r"(^|[/\\])language_server(_macos|\.exe)?(\s|$)").unwrap());
     re.is_match(lower_command)
 }
 
 fn is_antigravity_cli_command_line(lower_command: &str) -> bool {
     static CLI_PATH_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     static AGY_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let cli_path_re = CLI_PATH_RE
-        .get_or_init(|| Regex::new(r"(^|[/\\])(antigravity-cli|antigravity_cli)([\s/\\]|$)").unwrap());
+    let cli_path_re = CLI_PATH_RE.get_or_init(|| {
+        Regex::new(r"(^|[/\\])(antigravity-cli|antigravity_cli)([\s/\\]|$)").unwrap()
+    });
     let agy_re = AGY_RE.get_or_init(|| Regex::new(r"(^|[/\\])agy(\s|$)").unwrap());
     cli_path_re.is_match(lower_command) || agy_re.is_match(lower_command)
 }
@@ -177,14 +229,7 @@ fn listening_ports(pid: u32) -> Result<Vec<u16>> {
         .ok_or_else(|| anyhow!("lsof not available for Antigravity port detection"))?;
 
     let output = Command::new(lsof)
-        .args([
-            "-nP",
-            "-iTCP",
-            "-sTCP:LISTEN",
-            "-a",
-            "-p",
-            &pid.to_string(),
-        ])
+        .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-p", &pid.to_string()])
         .output()
         .with_context(|| format!("run {lsof} for pid {pid}"))?;
     if !output.status.success() {
@@ -230,7 +275,10 @@ fn request_endpoints(
 ) -> Vec<ConnectionEndpoint> {
     let mut endpoints = vec![resolved.clone()];
     for candidate in language_server_endpoints(ports, csrf_token) {
-        if !endpoints.iter().any(|endpoint| endpoint.matches(&candidate)) {
+        if !endpoints
+            .iter()
+            .any(|endpoint| endpoint.matches(&candidate))
+        {
             endpoints.push(candidate);
         }
     }
@@ -292,7 +340,11 @@ fn test_endpoint_connectivity(http: &HttpClient, endpoint: &ConnectionEndpoint) 
             }
         }
     });
-    match http.post_connect_json(&endpoint.url(GET_UNLEASH_DATA_PATH), &endpoint.csrf_token, &body) {
+    match http.post_connect_json(
+        &endpoint.url(GET_UNLEASH_DATA_PATH),
+        &endpoint.csrf_token,
+        &body,
+    ) {
         Ok(_) => Ok(true),
         Err(error) => {
             let message = error.to_string();
@@ -453,7 +505,8 @@ struct NormalizedModel {
 }
 
 fn parse_user_status_response(text: &str) -> Result<UsageSnapshot> {
-    let response: UserStatusResponse = serde_json::from_str(text).context("parse GetUserStatus JSON")?;
+    let response: UserStatusResponse =
+        serde_json::from_str(text).context("parse GetUserStatus JSON")?;
     if let Some(code) = invalid_code(response.code.as_ref()) {
         anyhow::bail!("GetUserStatus API error: {code}");
     }
@@ -528,10 +581,7 @@ fn usage_snapshot_from_quotas(
         anyhow::bail!("No Antigravity quota models available");
     }
 
-    let normalized = quotas
-        .into_iter()
-        .map(normalize_model)
-        .collect::<Vec<_>>();
+    let normalized = quotas.into_iter().map(normalize_model).collect::<Vec<_>>();
     let summary_models: Vec<_> = normalized
         .iter()
         .filter(|model| model.quota.remaining_fraction.is_some())
@@ -541,8 +591,10 @@ fn usage_snapshot_from_quotas(
     let primary = representative(ModelFamily::Claude, &summary_models)
         .or_else(|| fallback_representative(&summary_models))
         .map(rate_window_for_quota);
-    let secondary = representative(ModelFamily::GeminiPro, &summary_models).map(rate_window_for_quota);
-    let tertiary = representative(ModelFamily::GeminiFlash, &summary_models).map(rate_window_for_quota);
+    let secondary =
+        representative(ModelFamily::GeminiPro, &summary_models).map(rate_window_for_quota);
+    let tertiary =
+        representative(ModelFamily::GeminiFlash, &summary_models).map(rate_window_for_quota);
 
     Ok(UsageSnapshot {
         primary,
@@ -692,10 +744,9 @@ mod tests {
 
     #[test]
     fn detects_agy_process_without_csrf_token() {
-        let info = process_info_from_ps_output(
-            "523690 /home/sfire/.local/bin/agy\n99999 /usr/bin/bash\n",
-        )
-        .expect("agy process should be detected");
+        let info =
+            process_info_from_ps_output("523690 /home/sfire/.local/bin/agy\n99999 /usr/bin/bash\n")
+                .expect("agy process should be detected");
         assert_eq!(info.pid, 523690);
         assert_eq!(info.csrf_token, "");
     }

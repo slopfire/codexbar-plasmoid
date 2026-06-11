@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,6 +16,7 @@ const includeCost = args.cost !== "false";
 const includeStatus = args.status !== "false";
 const showCredits = args.credits !== "false";
 const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
+const kdeProviderConfig = loadKdeProviderConfig();
 
 const nativeProviders = new Set(["antigravity", "cursor", "opencode", "opencodego"]);
 
@@ -129,7 +131,7 @@ function runUsageForConfig(config) {
 
   const command = commandForConfig(config);
   try {
-    return runJSON(command, commandArgs);
+    return runJSON(command, commandArgs, config.provider);
   } catch (error) {
     return [{
       provider: normalizeProviderId(config.provider),
@@ -157,7 +159,7 @@ function runCost() {
     ];
     const command = commandForConfig(config);
     try {
-      results.push(...asArray(runJSON(command, commandArgs)));
+      results.push(...asArray(runJSON(command, commandArgs, config.provider)));
     } catch (error) {
       results.push({
         provider: "cost",
@@ -183,13 +185,13 @@ function effectiveProviderConfigs() {
   return [];
 }
 
-function runJSON(command, commandArgs) {
+function runJSON(command, commandArgs, providerId = "") {
   const invocation = resolveCommandInvocation(command);
   let stdout = "";
   try {
     stdout = execFileSync(invocation.command, [...invocation.prefix, ...commandArgs], {
       encoding: "utf8",
-      env: process.env,
+      env: cliEnvForProvider(providerId),
       stdio: ["ignore", "pipe", "pipe"],
       timeout: timeoutMs,
       windowsHide: true,
@@ -403,6 +405,88 @@ function resolveNativeCliPath() {
     }
   }
   return "codexbar-plasmoid";
+}
+
+function cliEnvForProvider(providerId) {
+  const env = { ...process.env };
+  const envName = providerApiKeyEnvName(providerId);
+  const apiKey = providerApiKey(providerId);
+  if (envName && apiKey && !clean(env[envName])) {
+    env[envName] = apiKey;
+  }
+  return env;
+}
+
+function providerApiKey(providerId) {
+  const normalized = normalizeProviderId(providerId);
+  const provider = kdeProviderConfig[normalized] || kdeProviderConfig[clean(providerId).toLowerCase()];
+  return clean(provider?.apiKey);
+}
+
+function providerApiKeyEnvName(providerId) {
+  switch (normalizeProviderId(providerId)) {
+    case "azureopenai":
+      return "AZURE_OPENAI_API_KEY";
+    case "alibaba":
+      return "ALIBABA_API_KEY";
+    case "alibabatokenplan":
+      return "ALIBABA_API_KEY";
+    case "copilot":
+      return "GITHUB_TOKEN";
+    case "deepseek":
+      return "DEEPSEEK_API_KEY";
+    case "doubao":
+      return "DOUBAO_API_KEY";
+    case "gemini":
+      return "GEMINI_API_KEY";
+    case "groq":
+      return "GROQ_API_KEY";
+    case "kilo":
+      return "KILO_API_KEY";
+    case "kimik2":
+      return "MOONSHOT_API_KEY";
+    case "llmproxy":
+      return "LLMPROXY_API_KEY";
+    case "minimax":
+      return "MINIMAX_API_KEY";
+    case "moonshot":
+      return "MOONSHOT_API_KEY";
+    case "openai":
+      return "OPENAI_API_KEY";
+    case "openrouter":
+      return "OPENROUTER_API_KEY";
+    case "synthetic":
+      return "SYNTHETIC_API_KEY";
+    case "venice":
+      return "VENICE_API_KEY";
+    case "zai":
+      return "ZAI_API_KEY";
+    default:
+      return "";
+  }
+}
+
+function loadKdeProviderConfig() {
+  const candidates = [
+    path.join(os.homedir(), ".config", "codexbar-kde", "config.json"),
+    path.join(os.homedir(), ".codexbar", "config.json"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(candidate, "utf8"));
+      const providers = parsed?.providers;
+      if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+        const normalized = {};
+        for (const [providerId, config] of Object.entries(providers)) {
+          normalized[normalizeProviderId(providerId)] = config;
+        }
+        return normalized;
+      }
+    } catch {
+      // Missing or malformed optional config files should not block widget updates.
+    }
+  }
+  return {};
 }
 
 function normalizeProviderId(providerId) {
