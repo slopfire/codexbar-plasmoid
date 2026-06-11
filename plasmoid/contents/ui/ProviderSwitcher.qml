@@ -15,18 +15,11 @@ Item {
     height: grid.implicitHeight
     visible: entries.length > 1
 
-    TextMetrics {
-        id: nameMetrics
-        font.bold: true
-        font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
-    }
-
     readonly property real buttonWidth: {
         let maxW = Kirigami.Units.gridUnit * 4.6;
         for (let i = 0; i < entries.length; ++i) {
             const name = providerName(entries[i].provider);
-            nameMetrics.text = name;
-            maxW = Math.max(maxW, nameMetrics.advanceWidth + Kirigami.Units.largeSpacing * 2);
+            maxW = Math.max(maxW, name.length * Kirigami.Theme.defaultFont.pixelSize * 0.64 + Kirigami.Units.largeSpacing * 2);
         }
         return Math.ceil(maxW);
     }
@@ -88,6 +81,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: Kirigami.Units.smallSpacing
+                        visible: !switcher.hasBalance(button.modelData)
                         radius: height / 2
                         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.checked ? 0.18 : 0.12)
 
@@ -99,6 +93,17 @@ Item {
                             radius: parent.radius
                             color: button.checked ? Kirigami.Theme.highlightedTextColor : switcher.providerColor(button.modelData.provider)
                         }
+                    }
+
+                    QtControls.Label {
+                        Layout.fillWidth: true
+                        visible: switcher.hasBalance(button.modelData)
+                        text: switcher.balanceText(button.modelData)
+                        color: button.checked ? Kirigami.Theme.highlightedTextColor : switcher.providerColor(button.modelData.provider)
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        font.bold: true
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
 
                     QtControls.Label {
@@ -119,10 +124,22 @@ Item {
     function primaryPercent(entry) {
         const rows = entry && entry.rows ? entry.rows : [];
         if (rows.length === 0) {
-            return 0;
+            return entry && (entry.creditsRemaining !== null || entry.tokenUsage) ? 100 : 0;
         }
         const value = Number(rows[0].percentLeft);
         return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+    }
+
+    function hasBalance(entry) {
+        const rows = entry && entry.rows ? entry.rows : [];
+        return !!(entry && rows.length === 0 && entry.creditsRemaining !== null);
+    }
+
+    function balanceText(entry) {
+        if (!hasBalance(entry)) {
+            return "";
+        }
+        return "USD " + Number(entry.creditsRemaining).toLocaleString(Qt.locale(), "f", entry.creditsRemaining >= 100 ? 0 : 2);
     }
 
     function providerName(provider) {
@@ -139,7 +156,8 @@ Item {
             opencodego: "OpenCode Go",
             minimax: "MiniMax",
             grok: "Grok",
-            groq: "GroqCloud"
+            groq: "GroqCloud",
+            openrouter: "OpenRouter"
         };
         return names[provider] || String(provider || "");
     }
@@ -154,7 +172,8 @@ Item {
             openai: "#0f826e",
             minimax: "#fe603c",
             grok: "#10a37f",
-            groq: "#f56844"
+            groq: "#f56844",
+            openrouter: "#3da3d9"
         };
         return colors[provider] || Kirigami.Theme.highlightColor;
     }

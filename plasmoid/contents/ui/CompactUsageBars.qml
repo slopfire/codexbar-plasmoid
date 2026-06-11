@@ -27,6 +27,15 @@ Item {
             const maxRows = Math.min(itemRows.length, 2);
             for (let rowIndex = 0; rowIndex < maxRows; rowIndex += 1) {
                 const row = itemRows[rowIndex];
+                if (row.kind === "credits") {
+                    rows.push({
+                        kind: "credits",
+                        title: String(row.title || ""),
+                        valueText: String(row.valueText || ""),
+                        color: row.color || item.color || bars.accentColor
+                    });
+                    continue;
+                }
                 const rowValue = Number(row.percentLeft);
                 if (!Number.isFinite(rowValue)) {
                     continue;
@@ -109,6 +118,7 @@ Item {
                 model: groupRows
 
                 Rectangle {
+                    visible: modelData.kind !== "credits"
                     readonly property int laneCount: Math.max(1, groupRows.length)
                     readonly property real availableHeight: Math.max(0, parent.height - (laneCount - 1) * bars.laneGap)
 
@@ -131,6 +141,29 @@ Item {
                             ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)
                             : modelData.color
                     }
+                }
+            }
+
+            Rectangle {
+                visible: groupRows.length > 0 && groupRows[0].kind === "credits"
+                anchors.centerIn: parent
+                width: parent.width
+                height: Math.min(parent.height, Kirigami.Units.gridUnit)
+                radius: Math.max(3, height / 3)
+                color: bars.stale
+                    ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)
+                    : groupRows[0].color
+                border.width: 1
+                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.30)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: groupRows.length > 0 ? String(groupRows[0].valueText || "") : ""
+                    color: "white"
+                    font.bold: true
+                    font.pixelSize: Math.max(6, Math.min(10, Math.floor(parent.width / Math.max(1, text.length) * 1.35)))
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }

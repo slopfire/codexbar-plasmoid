@@ -136,6 +136,10 @@ PlasmoidItem {
         }
 
         function color(provider) {
+            const settings = providerConfig(provider);
+            if (settings && settings.compactColor) {
+                return settings.compactColor;
+            }
             const colors = {
                 codex: "#49a3b0",
                 openai: "#0f826e",
@@ -165,6 +169,36 @@ PlasmoidItem {
                 llmproxy: "#24b47e"
             };
             return colors[provider] || Kirigami.Theme.highlightColor;
+        }
+
+        function providerConfig(provider) {
+            const normalized = normalizeProviderId(provider);
+            const configs = parseProviderConfigs();
+            for (const config of configs) {
+                if (normalizeProviderId(config.provider) === normalized) {
+                    return config;
+                }
+            }
+            return null;
+        }
+
+        function parseProviderConfigs() {
+            try {
+                const parsed = JSON.parse(String(plasmoid.configuration.providerConfigs || ""));
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                return [];
+            }
+        }
+
+        function normalizeProviderId(provider) {
+            const normalized = String(provider || "").toLowerCase().replace(/[-_]/g, "");
+            const aliases = {
+                abacusai: "abacus",
+                alibabacodingplan: "alibaba",
+                groqcloud: "groq"
+            };
+            return aliases[normalized] || normalized;
         }
 
         function compactBarColor(provider, percentLeft) {
@@ -248,7 +282,16 @@ PlasmoidItem {
                     lowest = value;
                 }
             }
-            return lowest === null ? "—" : percent(lowest);
+            if (lowest !== null) {
+                return percent(lowest);
+            }
+            if (entry.creditsRemaining !== null) {
+                return Number(entry.creditsRemaining).toLocaleString(Qt.locale(), "f", 1);
+            }
+            if (entry.tokenUsage) {
+                return money(entry.tokenUsage.sessionCostUSD, entry.tokenUsage.currencyCode);
+            }
+            return "—";
         }
 
         function compactBarPercent(entry) {
@@ -292,7 +335,7 @@ PlasmoidItem {
                     color: compactBarColor(entry.provider, percentLeft)
                 });
             }
-            if (output.length === 0) {
+            if (output.length === 0 && rows.length > 0) {
                 const percentLeft = compactBarPercent(entry);
                 if (Number.isFinite(percentLeft)) {
                     output.push({
@@ -302,13 +345,26 @@ PlasmoidItem {
                     });
                 }
             }
+            if (output.length === 0 && entry && (entry.creditsRemaining !== null || entry.tokenUsage)) {
+                output.push({
+                    kind: "credits",
+                    title: providerName(entry.provider),
+                    valueText: entry.creditsRemaining !== null
+                        ? Number(entry.creditsRemaining).toLocaleString(Qt.locale(), "f", entry.creditsRemaining < 10 ? 1 : 0)
+                        : money(entry.tokenUsage.sessionCostUSD, entry.tokenUsage.currencyCode),
+                    color: compactBarColor(entry.provider, 100)
+                });
+            }
             return output;
         }
 
         function compactBarEntries() {
             const mode = plasmoid.configuration.compactBarsProviders || "default";
             if (mode === "all") {
-                return root.entries;
+                return root.entries.filter(function(entry) {
+                    const config = providerConfig(entry.provider);
+                    return !config || config.showInCompactAll !== false;
+                });
             }
             if (mode === "selected") {
                 return root.primaryEntry ? [root.primaryEntry] : [];
@@ -394,8 +450,10 @@ PlasmoidItem {
         accentColor: root.primaryEntry ? codexBar.color(root.primaryEntry.provider) : Kirigami.Theme.highlightColor
         valueText: root.primaryEntry ? codexBar.compactValue(root.primaryEntry) : "—"
         displayMode: plasmoid.configuration.compactDisplay || "bars"
+        showMetricText: plasmoid.configuration.compactShowMetric !== false
         usageRows: root.primaryEntry && root.primaryEntry.rows ? root.primaryEntry.rows : []
         barItems: codexBar.compactBarItems()
+        providerBarWidth: plasmoid.configuration.compactProviderBarWidth || 18
         onClicked: root.expanded = !root.expanded
     }
 

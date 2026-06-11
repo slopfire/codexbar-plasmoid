@@ -18,7 +18,7 @@
     </entry>
     <entry name="providerConfigs" type="String">
       <label>Provider configuration list</label>
-      <default>[{"provider":"codex","source":"cli","enabled":true},{"provider":"gemini","source":"api","enabled":true}]</default>
+      <default>[{"provider":"codex","source":"cli","enabled":true,"showInCompactAll":true,"compactColor":""},{"provider":"gemini","source":"api","enabled":true,"showInCompactAll":true,"compactColor":""}]</default>
     </entry>
     <entry name="account" type="String">
       <label>Provider account label</label>
@@ -64,6 +64,10 @@
       <label>Compact display metric</label>
       <default>lowest</default>
     </entry>
+    <entry name="compactShowMetric" type="Bool">
+      <label>Show compact metric text</label>
+      <default>true</default>
+    </entry>
     <entry name="compactDisplay" type="String">
       <label>Tray display</label>
       <default>bars</default>
@@ -75,6 +79,12 @@
     <entry name="compactBarsTint" type="String">
       <label>Tray usage bar tinting</label>
       <default>provider</default>
+    </entry>
+    <entry name="compactProviderBarWidth" type="Int">
+      <label>Tray provider bar width</label>
+      <default>18</default>
+      <min>8</min>
+      <max>96</max>
     </entry>
     <entry name="anonymizeEmail" type="Bool">
       <label>Anonymize email addresses</label>

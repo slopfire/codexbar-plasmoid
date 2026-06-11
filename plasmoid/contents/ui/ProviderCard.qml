@@ -88,6 +88,66 @@ PlasmaComponents3.Frame {
             accentColor: card.accentColor
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.smallSpacing
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+            visible: card.showBalanceSummary()
+            spacing: Kirigami.Units.largeSpacing
+
+            Rectangle {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: parent.height
+                Layout.minimumHeight: Kirigami.Units.gridUnit * 2.4
+                radius: width / 2
+                color: card.accentColor
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: card.primarySummaryLabel()
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: card.primarySummaryValue()
+                    font.bold: true
+                    font.pointSize: Kirigami.Theme.defaultFont.pointSize + 2
+                    elide: Text.ElideRight
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: card.secondarySummaryValue().length > 0
+                spacing: 0
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: card.secondarySummaryLabel()
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignRight
+                }
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: card.secondarySummaryValue()
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+        }
+
         GridLayout {
             Layout.fillWidth: true
             columns: width > Kirigami.Units.gridUnit * 18 ? 2 : 1
@@ -96,7 +156,7 @@ PlasmaComponents3.Frame {
 
             MetricLine {
                 Layout.fillWidth: true
-                visible: card.showCredits && card.entry && card.entry.creditsRemaining !== null
+                visible: card.showCredits && card.entry && card.entry.creditsRemaining !== null && !card.showBalanceSummary()
                 title: i18n("Credits")
                 value: card.entry ? Number(card.entry.creditsRemaining).toLocaleString(Qt.locale(), "f", 2) : "—"
             }
@@ -189,6 +249,51 @@ PlasmaComponents3.Frame {
             return "";
         }
         return Math.round(Number(value)).toLocaleString(Qt.locale(), "f", 0) + " " + i18n("tokens");
+    }
+
+    function hasUsageRows() {
+        return !!(entry && entry.rows && entry.rows.length > 0);
+    }
+
+    function showBalanceSummary() {
+        return !!(entry && !hasUsageRows() && (entry.creditsRemaining !== null || entry.tokenUsage));
+    }
+
+    function primarySummaryLabel() {
+        if (!entry) {
+            return "";
+        }
+        if (entry.creditsRemaining !== null) {
+            return i18n("Balance");
+        }
+        return entry.tokenUsage ? entry.tokenUsage.sessionLabel : "";
+    }
+
+    function primarySummaryValue() {
+        if (!entry) {
+            return "—";
+        }
+        if (entry.creditsRemaining !== null) {
+            return money(entry.creditsRemaining, entry.tokenUsage ? entry.tokenUsage.currencyCode : "USD");
+        }
+        return entry.tokenUsage ? money(entry.tokenUsage.sessionCostUSD, entry.tokenUsage.currencyCode) : "—";
+    }
+
+    function secondarySummaryLabel() {
+        if (!entry || !entry.tokenUsage) {
+            return "";
+        }
+        return entry.creditsRemaining !== null ? entry.tokenUsage.sessionLabel : entry.tokenUsage.last30DaysLabel;
+    }
+
+    function secondarySummaryValue() {
+        if (!entry || !entry.tokenUsage) {
+            return "";
+        }
+        const cost = entry.creditsRemaining !== null ? entry.tokenUsage.sessionCostUSD : entry.tokenUsage.last30DaysCostUSD;
+        const tokens = entry.creditsRemaining !== null ? entry.tokenUsage.sessionTokens : entry.tokenUsage.last30DaysTokens;
+        const tokenPart = tokenText(tokens);
+        return money(cost, entry.tokenUsage.currencyCode) + (tokenPart.length > 0 ? " · " + tokenPart : "");
     }
 
     function costAndTokens(kind) {
