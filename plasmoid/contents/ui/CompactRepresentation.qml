@@ -16,6 +16,7 @@ Control {
     property string valueText: "—"
     property string displayMode: "icon"
     property var usageRows: []
+    property var barItems: []
 
     readonly property bool showBars: compact.displayMode === "bars"
     readonly property url providerIconSource: {
@@ -34,10 +35,13 @@ Control {
     readonly property real iconSize: compact.height > 0
         ? Math.max(16, Math.min(Kirigami.Units.iconSizes.smallMedium, Math.max(0, compact.availableHeight)))
         : Kirigami.Units.iconSizes.smallMedium
+    readonly property real visualWidth: compact.showBars && compact.showText
+        ? Math.max(compact.iconSize, Kirigami.Units.gridUnit * 2.75)
+        : compact.iconSize
 
     implicitWidth: compact.isVertical
-        ? compact.iconSize + leftPadding + rightPadding
-        : Math.max(Kirigami.Units.gridUnit * 4.5, compact.iconSize + compact.rowSpacing + valueLabel.implicitWidth + leftPadding + rightPadding)
+        ? compact.visualWidth + leftPadding + rightPadding
+        : Math.max(Kirigami.Units.gridUnit * 4.5, compact.visualWidth + compact.rowSpacing + valueLabel.implicitWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(Kirigami.Units.iconSizes.small, contentItem.implicitHeight) + topPadding + bottomPadding
     leftPadding: compact.showText ? Kirigami.Units.largeSpacing : Math.round(Kirigami.Units.smallSpacing / 2)
     rightPadding: leftPadding
@@ -51,7 +55,7 @@ Control {
 
         Item {
             id: visualSlot
-            implicitWidth: compact.iconSize
+            implicitWidth: compact.visualWidth
             implicitHeight: compact.iconSize
             width: implicitWidth
             height: implicitHeight
@@ -85,6 +89,7 @@ Control {
                 height: parent.height
                 visible: !compact.loading && compact.errorText.length === 0 && compact.showBars
                 usageRows: compact.usageRows
+                barItems: compact.barItems
                 accentColor: compact.accentColor
             }
 

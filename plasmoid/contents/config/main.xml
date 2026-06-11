@@ -66,7 +66,15 @@
     </entry>
     <entry name="compactDisplay" type="String">
       <label>Tray display</label>
-      <default>icon</default>
+      <default>bars</default>
+    </entry>
+    <entry name="compactBarsProviders" type="String">
+      <label>Tray usage bar providers</label>
+      <default>default</default>
+    </entry>
+    <entry name="compactBarsTint" type="String">
+      <label>Tray usage bar tinting</label>
+      <default>provider</default>
     </entry>
     <entry name="anonymizeEmail" type="Bool">
       <label>Anonymize email addresses</label>

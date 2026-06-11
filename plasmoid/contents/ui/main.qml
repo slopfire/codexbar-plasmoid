@@ -21,6 +21,7 @@ PlasmoidItem {
     readonly property var visibleEntries: selectedProvider.length > 0
         ? entries.filter(function(entry) { return entry.provider === selectedProvider; })
         : entries
+    readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
     readonly property int refreshInterval: Math.max(30, plasmoid.configuration.refreshIntervalSeconds || 300)
 
@@ -166,6 +167,26 @@ PlasmoidItem {
             return colors[provider] || Kirigami.Theme.highlightColor;
         }
 
+        function compactBarColor(provider, percentLeft) {
+            const tint = plasmoid.configuration.compactBarsTint || "provider";
+            if (tint === "threshold") {
+                const value = Number(percentLeft);
+                if (Number.isFinite(value)) {
+                    if (value <= 15) {
+                        return Kirigami.Theme.negativeTextColor;
+                    }
+                    if (value <= 35) {
+                        return Kirigami.Theme.neutralTextColor;
+                    }
+                    return Kirigami.Theme.positiveTextColor;
+                }
+            }
+            if (tint === "theme") {
+                return Kirigami.Theme.textColor;
+            }
+            return color(provider);
+        }
+
         function percent(value) {
             return Number.isFinite(Number(value)) ? Math.round(Number(value)) + "%" : "—";
         }
@@ -229,6 +250,88 @@ PlasmoidItem {
             }
             return lowest === null ? "—" : percent(lowest);
         }
+
+        function compactBarPercent(entry) {
+            if (!entry) {
+                return 0;
+            }
+            const metric = plasmoid.configuration.compactMetric || "lowest";
+            const rows = entry.rows || [];
+            if (metric === "session" && rows.length > 0) {
+                return Number(rows[0].percentLeft);
+            }
+            if (metric === "weekly" && rows.length > 1) {
+                return Number(rows[1].percentLeft);
+            }
+            let lowest = null;
+            for (const row of rows) {
+                const value = Number(row.percentLeft);
+                if (Number.isFinite(value) && (lowest === null || value < lowest)) {
+                    lowest = value;
+                }
+            }
+            if (lowest !== null) {
+                return lowest;
+            }
+            return rows.length > 0 ? Number(rows[0].percentLeft) : 0;
+        }
+
+        function compactBarRows(entry) {
+            const output = [];
+            const rows = entry && entry.rows ? entry.rows : [];
+            const maxRows = Math.min(rows.length, 2);
+            for (let index = 0; index < maxRows; index += 1) {
+                const row = rows[index];
+                const percentLeft = Number(row.percentLeft);
+                if (!Number.isFinite(percentLeft)) {
+                    continue;
+                }
+                output.push({
+                    title: String(row.title || ""),
+                    percentLeft: Math.max(0, Math.min(100, percentLeft)),
+                    color: compactBarColor(entry.provider, percentLeft)
+                });
+            }
+            if (output.length === 0) {
+                const percentLeft = compactBarPercent(entry);
+                if (Number.isFinite(percentLeft)) {
+                    output.push({
+                        title: providerName(entry.provider),
+                        percentLeft: Math.max(0, Math.min(100, percentLeft)),
+                        color: compactBarColor(entry.provider, percentLeft)
+                    });
+                }
+            }
+            return output;
+        }
+
+        function compactBarEntries() {
+            const mode = plasmoid.configuration.compactBarsProviders || "default";
+            if (mode === "all") {
+                return root.entries;
+            }
+            if (mode === "selected") {
+                return root.primaryEntry ? [root.primaryEntry] : [];
+            }
+            return root.defaultEntry ? [root.defaultEntry] : [];
+        }
+
+        function compactBarItems() {
+            const items = [];
+            const sourceEntries = compactBarEntries();
+            for (const entry of sourceEntries) {
+                const rows = compactBarRows(entry);
+                if (rows.length === 0) {
+                    continue;
+                }
+                items.push({
+                    provider: entry.provider,
+                    title: providerName(entry.provider),
+                    rows
+                });
+            }
+            return items;
+        }
     }
 
     Plasma5Support.DataSource {
@@ -290,8 +393,9 @@ PlasmoidItem {
         providerName: root.primaryEntry ? codexBar.providerName(root.primaryEntry.provider) : i18n("CodexBar")
         accentColor: root.primaryEntry ? codexBar.color(root.primaryEntry.provider) : Kirigami.Theme.highlightColor
         valueText: root.primaryEntry ? codexBar.compactValue(root.primaryEntry) : "—"
-        displayMode: plasmoid.configuration.compactDisplay || "icon"
+        displayMode: plasmoid.configuration.compactDisplay || "bars"
         usageRows: root.primaryEntry && root.primaryEntry.rows ? root.primaryEntry.rows : []
+        barItems: codexBar.compactBarItems()
         onClicked: root.expanded = !root.expanded
     }
 
