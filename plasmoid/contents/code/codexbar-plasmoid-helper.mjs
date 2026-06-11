@@ -131,7 +131,7 @@ function runUsageForConfig(config) {
 
   const command = commandForConfig(config);
   try {
-    return runJSON(command, commandArgs, config.provider);
+    return runJSON(command, commandArgs, config.provider, config.apiKey);
   } catch (error) {
     return [{
       provider: normalizeProviderId(config.provider),
@@ -159,7 +159,7 @@ function runCost() {
     ];
     const command = commandForConfig(config);
     try {
-      results.push(...asArray(runJSON(command, commandArgs, config.provider)));
+      results.push(...asArray(runJSON(command, commandArgs, config.provider, config.apiKey || "")));
     } catch (error) {
       results.push({
         provider: "cost",
@@ -185,13 +185,13 @@ function effectiveProviderConfigs() {
   return [];
 }
 
-function runJSON(command, commandArgs, providerId = "") {
+function runJSON(command, commandArgs, providerId = "", apiKey = "") {
   const invocation = resolveCommandInvocation(command);
   let stdout = "";
   try {
     stdout = execFileSync(invocation.command, [...invocation.prefix, ...commandArgs], {
       encoding: "utf8",
-      env: cliEnvForProvider(providerId),
+      env: cliEnvForProvider(providerId, apiKey),
       stdio: ["ignore", "pipe", "pipe"],
       timeout: timeoutMs,
       windowsHide: true,
@@ -388,6 +388,7 @@ function parseProviderConfigs(raw) {
       account: clean(item.account),
       accountIndex: Number(item.accountIndex || 0),
       allAccounts: item.allAccounts === true,
+      apiKey: clean(item.apiKey),
     }));
 }
 
@@ -430,12 +431,12 @@ function resolveNativeCliPath() {
   return "codexbar-plasmoid";
 }
 
-function cliEnvForProvider(providerId) {
+function cliEnvForProvider(providerId, apiKey) {
   const env = { ...process.env };
   const envName = providerApiKeyEnvName(providerId);
-  const apiKey = providerApiKey(providerId);
-  if (envName && apiKey && !clean(env[envName])) {
-    env[envName] = apiKey;
+  const resolvedApiKey = clean(apiKey) || providerApiKey(providerId);
+  if (envName && resolvedApiKey && !clean(env[envName])) {
+    env[envName] = resolvedApiKey;
   }
   return env;
 }
@@ -490,12 +491,9 @@ function providerApiKeyEnvName(providerId) {
 }
 
 function loadKdeProviderConfig() {
-  const candidates = [
-    path.join(os.homedir(), ".config", "codexbar-kde", "config.json"),
-    path.join(os.homedir(), ".codexbar", "config.json"),
-  ];
-  for (const candidate of candidates) {
-    try {
+  const candidate = path.join(os.homedir(), ".codexbar", "config.json");
+  try {
+    if (fs.existsSync(candidate)) {
       const parsed = JSON.parse(fs.readFileSync(candidate, "utf8"));
       const providers = parsed?.providers;
       if (providers && typeof providers === "object" && !Array.isArray(providers)) {
@@ -505,9 +503,9 @@ function loadKdeProviderConfig() {
         }
         return normalized;
       }
-    } catch {
-      // Missing or malformed optional config files should not block widget updates.
     }
+  } catch {
+    // Missing or malformed optional config files should not block widget updates.
   }
   return {};
 }

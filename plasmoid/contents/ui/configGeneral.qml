@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QtControls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import QtQml.Models
 
 Kirigami.ScrollablePage {
     id: page
@@ -115,167 +116,314 @@ Kirigami.ScrollablePage {
                 text: i18n("Providers")
             }
 
-            Repeater {
-                model: providerModel
+            ListView {
+                id: providersListView
+                Layout.fillWidth: true
+                implicitHeight: contentHeight
+                interactive: false
+                spacing: Kirigami.Units.smallSpacing
 
-                delegate: Kirigami.AbstractCard {
-                    id: providerDelegate
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        easing.type: Easing.OutQuad
+                        duration: 150
+                    }
+                }
 
-                    required property int index
-                    required property string provider
-                    required property string source
-                    required property bool enabled
-                    required property string account
-                    required property int accountIndex
-                    required property bool allAccounts
-                    required property bool showInCompactAll
-                    required property string compactColor
+                model: DelegateModel {
+                    id: visualModel
+                    model: providerModel
+                    delegate: DropArea {
+                        id: delegateRoot
 
-                    Layout.fillWidth: true
-                    padding: Kirigami.Units.smallSpacing
+                        required property int index
+                        required property string provider
+                        required property string source
+                        required property bool enabled
+                        required property string account
+                        required property int accountIndex
+                        required property bool allAccounts
+                        required property bool showInCompactAll
+                        required property string compactColor
+                        required property string apiKey
 
-                    contentItem: ColumnLayout {
-                        spacing: Kirigami.Units.smallSpacing
+                        property int visualIndex: DelegateModel.itemsIndex
 
-                        RowLayout {
-                            Layout.fillWidth: true
+                        width: providersListView.width
+                        height: providerDelegate.implicitHeight
 
-                            QtControls.CheckBox {
-                                checked: providerDelegate.enabled
-                                onToggled: page.setProviderProperty(providerDelegate.index, "enabled", checked)
-                            }
-
-                            QtControls.ComboBox {
-                                Layout.fillWidth: true
-                                textRole: "name"
-                                valueRole: "id"
-                                model: page.providerCatalog
-                                currentIndex: page.providerIndex(providerDelegate.provider)
-                                onActivated: function(row) {
-                                    const selected = page.providerCatalog[row];
-                                    page.setProviderProperty(providerDelegate.index, "provider", selected.id);
-                                    if (selected.sources.indexOf(providerDelegate.source) === -1) {
-                                        page.setProviderProperty(providerDelegate.index, "source", selected.linuxDefault);
-                                    }
-                                }
-                            }
-
-                            QtControls.ToolButton {
-                                icon.name: "list-remove"
-                                text: i18n("Remove")
-                                display: QtControls.AbstractButton.IconOnly
-                                onClicked: {
-                                    providerModel.remove(providerDelegate.index);
+                        onEntered: (drag) => {
+                            if (drag.source && drag.source.visualIndex !== undefined) {
+                                const fromIndex = drag.source.visualIndex;
+                                const toIndex = delegateRoot.visualIndex;
+                                if (fromIndex !== toIndex) {
+                                    providerModel.move(fromIndex, toIndex, 1);
                                     page.syncConfig();
                                 }
                             }
                         }
 
-                        RowLayout {
-                            Layout.fillWidth: true
+                        Kirigami.AbstractCard {
+                            id: providerDelegate
 
-                            QtControls.ComboBox {
-                                id: sourceCombo
-                                Layout.fillWidth: true
-                                textRole: "text"
-                                valueRole: "value"
-                                model: page.sourceModel(providerDelegate.provider)
-                                currentIndex: page.sourceIndex(providerDelegate.provider, providerDelegate.source)
-                                onActivated: function(row) {
-                                    page.setProviderProperty(providerDelegate.index, "source", sourceCombo.model[row].value);
+                            readonly property int index: delegateRoot.index
+                            readonly property string provider: delegateRoot.provider
+                            readonly property string source: delegateRoot.source
+                            readonly property bool enabled: delegateRoot.enabled
+                            readonly property string account: delegateRoot.account
+                            readonly property int accountIndex: delegateRoot.accountIndex
+                            readonly property bool allAccounts: delegateRoot.allAccounts
+                            readonly property bool showInCompactAll: delegateRoot.showInCompactAll
+                            readonly property string compactColor: delegateRoot.compactColor
+                            readonly property string apiKey: delegateRoot.apiKey
+
+                            property int visualIndex: delegateRoot.visualIndex
+
+                            width: delegateRoot.width
+                            z: dragMouseArea.drag.active ? 100 : 0
+                            
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                verticalCenter: parent.verticalCenter
+                            }
+
+                            opacity: dragMouseArea.drag.active ? 0.9 : 1.0
+                            scale: dragMouseArea.drag.active ? 1.02 : 1.0
+                            
+                            Behavior on scale { NumberAnimation { duration: 100 } }
+                            Behavior on opacity { NumberAnimation { duration: 100 } }
+
+                            Drag.active: dragMouseArea.drag.active
+                            Drag.source: providerDelegate
+                            Drag.hotSpot.x: Kirigami.Units.gridUnit * 1.5
+                            Drag.hotSpot.y: height / 2
+
+                            states: [
+                                State {
+                                    when: dragMouseArea.drag.active
+                                    ParentChange {
+                                        target: providerDelegate
+                                        parent: page
+                                    }
+                                    AnchorChanges {
+                                        target: providerDelegate
+                                        anchors {
+                                            left: undefined
+                                            right: undefined
+                                            top: undefined
+                                            bottom: undefined
+                                            verticalCenter: undefined
+                                            horizontalCenter: undefined
+                                        }
+                                    }
                                 }
-                            }
+                            ]
 
-                            QtControls.Label {
-                                Layout.fillWidth: true
-                                text: page.sourceNotes[providerDelegate.source] || ""
-                                color: Kirigami.Theme.disabledTextColor
-                                elide: Text.ElideRight
-                            }
-                        }
+                            padding: Kirigami.Units.smallSpacing
 
-                        QtControls.Button {
-                            id: accountToggle
-                            Layout.fillWidth: true
-                            checkable: true
-                            checked: providerDelegate.account.length > 0 || providerDelegate.accountIndex > 0 || providerDelegate.allAccounts
-                            text: checked ? i18n("Account filter enabled") : i18n("Account filter")
-                            icon.name: "user-identity"
-                            onToggled: {
-                                if (!checked) {
-                                    page.setProviderProperty(providerDelegate.index, "account", "");
-                                    page.setProviderProperty(providerDelegate.index, "accountIndex", 0);
-                                    page.setProviderProperty(providerDelegate.index, "allAccounts", false);
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Item {
+                                    id: dragHandle
+                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 1.5
+                                    Layout.fillHeight: true
+                                    Layout.alignment: Qt.AlignVCenter
+
+                                    Kirigami.Icon {
+                                        anchors.centerIn: parent
+                                        source: "list-drag-handle-symbolic"
+                                        width: Kirigami.Units.iconSizes.small
+                                        height: Kirigami.Units.iconSizes.small
+                                        color: dragMouseArea.pressed ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                                        opacity: dragMouseArea.containsMouse || dragMouseArea.pressed ? 1.0 : 0.4
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    MouseArea {
+                                        id: dragMouseArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        drag.target: providerDelegate
+                                        drag.axis: Drag.YAxis
+                                        cursorShape: drag.active ? Qt.ClosedHandCursor : (containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
+                                    }
                                 }
-                            }
-                        }
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            visible: accountToggle.checked
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Kirigami.Units.smallSpacing
 
-                            QtControls.TextField {
-                                Layout.fillWidth: true
-                                text: providerDelegate.account
-                                placeholderText: i18n("Account name")
-                                enabled: !providerDelegate.allAccounts
-                                onEditingFinished: page.setProviderProperty(providerDelegate.index, "account", text)
-                            }
+                                    RowLayout {
+                                        Layout.fillWidth: true
 
-                            QtControls.SpinBox {
-                                from: 0
-                                to: 99
-                                value: providerDelegate.accountIndex
-                                editable: true
-                                enabled: !providerDelegate.allAccounts && providerDelegate.account.length === 0
-                                textFromValue: function(value) {
-                                    return value === 0 ? i18n("Any") : i18n("#%1", value);
+                                        QtControls.CheckBox {
+                                            checked: providerDelegate.enabled
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "enabled", checked)
+                                        }
+
+                                        QtControls.ComboBox {
+                                            Layout.fillWidth: true
+                                            textRole: "name"
+                                            valueRole: "id"
+                                            model: page.providerCatalog
+                                            currentIndex: page.providerIndex(providerDelegate.provider)
+                                            onActivated: function(row) {
+                                                const selected = page.providerCatalog[row];
+                                                page.setProviderProperty(providerDelegate.index, "provider", selected.id);
+                                                if (selected.sources.indexOf(providerDelegate.source) === -1) {
+                                                    page.setProviderProperty(providerDelegate.index, "source", selected.linuxDefault);
+                                                }
+                                            }
+                                        }
+
+                                        QtControls.ToolButton {
+                                            icon.name: "list-remove"
+                                            text: i18n("Remove")
+                                            display: QtControls.AbstractButton.IconOnly
+                                            onClicked: {
+                                                providerModel.remove(providerDelegate.index);
+                                                page.syncConfig();
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        QtControls.ComboBox {
+                                            id: sourceCombo
+                                            Layout.fillWidth: true
+                                            textRole: "text"
+                                            valueRole: "value"
+                                            model: page.sourceModel(providerDelegate.provider)
+                                            currentIndex: page.sourceIndex(providerDelegate.provider, providerDelegate.source)
+                                            onActivated: function(row) {
+                                                page.setProviderProperty(providerDelegate.index, "source", sourceCombo.model[row].value);
+                                            }
+                                        }
+
+                                        QtControls.Label {
+                                            Layout.fillWidth: true
+                                            text: page.sourceNotes[providerDelegate.source] || ""
+                                            color: Kirigami.Theme.disabledTextColor
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: providerDelegate.source === "api"
+
+                                        QtControls.Label {
+                                            text: i18n("API Key:")
+                                        }
+
+                                        QtControls.TextField {
+                                            id: apiKeyField
+                                            Layout.fillWidth: true
+                                            text: providerDelegate.apiKey
+                                            echoMode: showKeyButton.checked ? TextInput.Normal : TextInput.Password
+                                            placeholderText: i18n("API key (optional if set in env)")
+                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "apiKey", text)
+                                        }
+
+                                        QtControls.ToolButton {
+                                            id: showKeyButton
+                                            checkable: true
+                                            icon.name: checked ? "password-show" : "password-hide"
+                                            text: checked ? i18n("Hide key") : i18n("Show key")
+                                            display: QtControls.AbstractButton.IconOnly
+                                        }
+                                    }
+
+                                    QtControls.Button {
+                                        id: accountToggle
+                                        Layout.fillWidth: true
+                                        checkable: true
+                                        checked: providerDelegate.account.length > 0 || providerDelegate.accountIndex > 0 || providerDelegate.allAccounts
+                                        text: checked ? i18n("Account filter enabled") : i18n("Account filter")
+                                        icon.name: "user-identity"
+                                        onToggled: {
+                                            if (!checked) {
+                                                page.setProviderProperty(providerDelegate.index, "account", "");
+                                                page.setProviderProperty(providerDelegate.index, "accountIndex", 0);
+                                                page.setProviderProperty(providerDelegate.index, "allAccounts", false);
+                                            }
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: accountToggle.checked
+
+                                        QtControls.TextField {
+                                            Layout.fillWidth: true
+                                            text: providerDelegate.account
+                                            placeholderText: i18n("Account name")
+                                            enabled: !providerDelegate.allAccounts
+                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "account", text)
+                                        }
+
+                                        QtControls.SpinBox {
+                                            from: 0
+                                            to: 99
+                                            value: providerDelegate.accountIndex
+                                            editable: true
+                                            enabled: !providerDelegate.allAccounts && providerDelegate.account.length === 0
+                                            textFromValue: function(value) {
+                                                return value === 0 ? i18n("Any") : i18n("#%1", value);
+                                            }
+                                            valueFromText: function(text) {
+                                                const parsed = parseInt(text, 10);
+                                                return Number.isFinite(parsed) ? parsed : 0;
+                                            }
+                                            onValueModified: page.setProviderProperty(providerDelegate.index, "accountIndex", value)
+                                        }
+
+                                        QtControls.CheckBox {
+                                            text: i18n("All accounts")
+                                            checked: providerDelegate.allAccounts
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "allAccounts", checked)
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        QtControls.CheckBox {
+                                            text: i18n("Show in all-provider tray")
+                                            checked: providerDelegate.showInCompactAll
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "showInCompactAll", checked)
+                                        }
+
+                                        Rectangle {
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                            radius: 3
+                                            color: providerDelegate.compactColor.length > 0 ? providerDelegate.compactColor : page.defaultProviderColor(providerDelegate.provider)
+                                            border.width: 1
+                                            border.color: Kirigami.Theme.disabledTextColor
+                                        }
+
+                                        QtControls.TextField {
+                                            Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                                            text: providerDelegate.compactColor
+                                            placeholderText: page.defaultProviderColor(providerDelegate.provider)
+                                            inputMask: "\\#HHHHHH;_"
+                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "compactColor", page.normalizeColor(text))
+                                        }
+
+                                        QtControls.ToolButton {
+                                            icon.name: "edit-clear"
+                                            text: i18n("Reset color")
+                                            display: QtControls.AbstractButton.IconOnly
+                                            onClicked: page.setProviderProperty(providerDelegate.index, "compactColor", "")
+                                        }
+                                    }
                                 }
-                                valueFromText: function(text) {
-                                    const parsed = parseInt(text, 10);
-                                    return Number.isFinite(parsed) ? parsed : 0;
-                                }
-                                onValueModified: page.setProviderProperty(providerDelegate.index, "accountIndex", value)
-                            }
-
-                            QtControls.CheckBox {
-                                text: i18n("All accounts")
-                                checked: providerDelegate.allAccounts
-                                onToggled: page.setProviderProperty(providerDelegate.index, "allAccounts", checked)
-                            }
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-
-                            QtControls.CheckBox {
-                                text: i18n("Show in all-provider tray")
-                                checked: providerDelegate.showInCompactAll
-                                onToggled: page.setProviderProperty(providerDelegate.index, "showInCompactAll", checked)
-                            }
-
-                            Rectangle {
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                radius: 3
-                                color: providerDelegate.compactColor.length > 0 ? providerDelegate.compactColor : page.defaultProviderColor(providerDelegate.provider)
-                                border.width: 1
-                                border.color: Kirigami.Theme.disabledTextColor
-                            }
-
-                            QtControls.TextField {
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-                                text: providerDelegate.compactColor
-                                placeholderText: page.defaultProviderColor(providerDelegate.provider)
-                                inputMask: "\\#HHHHHH;_"
-                                onEditingFinished: page.setProviderProperty(providerDelegate.index, "compactColor", page.normalizeColor(text))
-                            }
-
-                            QtControls.ToolButton {
-                                icon.name: "edit-clear"
-                                text: i18n("Reset color")
-                                display: QtControls.AbstractButton.IconOnly
-                                onClicked: page.setProviderProperty(providerDelegate.index, "compactColor", "")
                             }
                         }
                     }
@@ -291,15 +439,16 @@ Kirigami.ScrollablePage {
                     onClicked: {
                         const provider = page.firstMissingProvider();
                         providerModel.append({
-                            provider: provider.id,
-                            source: provider.linuxDefault,
-                            enabled: true,
-                            account: "",
-                            accountIndex: 0,
-                            allAccounts: false,
-                            showInCompactAll: true,
-                            compactColor: ""
-                        });
+                                provider: provider.id,
+                                source: provider.linuxDefault,
+                                enabled: true,
+                                account: "",
+                                accountIndex: 0,
+                                allAccounts: false,
+                                showInCompactAll: true,
+                                compactColor: "",
+                                apiKey: ""
+                            });
                         page.syncConfig();
                     }
                 }
@@ -506,7 +655,8 @@ Kirigami.ScrollablePage {
                 accountIndex: Math.max(0, Number(item.accountIndex || 0)),
                 allAccounts: item.allAccounts === true,
                 showInCompactAll: item.showInCompactAll !== false,
-                compactColor: normalizeColor(item.compactColor || "")
+                compactColor: normalizeColor(item.compactColor || ""),
+                apiKey: String(item.apiKey || "")
             };
         });
     }
@@ -523,7 +673,8 @@ Kirigami.ScrollablePage {
                 accountIndex: item.accountIndex,
                 allAccounts: item.allAccounts,
                 showInCompactAll: item.showInCompactAll,
-                compactColor: item.compactColor
+                compactColor: item.compactColor,
+                apiKey: item.apiKey
             });
         }
         return JSON.stringify(items);

@@ -69,10 +69,10 @@ widget may display full account addresses.
 
 For providers that use the `api` source, the helper can inject API keys from either:
 
-- `~/.config/codexbar-kde/config.json`
+- Directly within the widget's settings for that provider
 - `~/.codexbar/config.json`
 
-The KDE-specific file wins when both exist. Use a provider-keyed object:
+The inline widget settings configuration wins when both exist. When using `~/.codexbar/config.json`, use a provider-keyed object:
 
 ```json
 {
