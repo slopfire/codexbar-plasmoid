@@ -245,23 +245,29 @@ function normalizeProvider(item, cost) {
   const usage = item.usage || {};
   const dashboard = item.openaiDashboard || {};
   const identity = usage.identity || {};
-  const rows = usageRows(providerId, usage);
+  const source = item.source || "unknown";
+  const rows = usageRows(providerId, usage, source);
   const dailyUsage = dailyUsagePoints(dashboard, cost);
   const rawAccount = item.account || usage.accountEmail || identity.accountEmail || null;
   const account = anonymizeEmails ? anonymizeEmailAddress(rawAccount) : rawAccount;
+
+  let creditsRemaining = numberOrNull(item.credits?.remaining ?? usage.openRouterUsage?.balance);
+  if (creditsRemaining === null && source === "api" && usage.primary?.resetDescription) {
+    creditsRemaining = parseBalanceFromDescription(usage.primary.resetDescription);
+  }
 
   return {
     provider: providerId,
     account,
     organization: usage.accountOrganization || identity.accountOrganization || null,
     plan: usage.loginMethod || identity.loginMethod || null,
-    source: item.source || "unknown",
+    source,
     version: item.version || null,
     updatedAt: usage.updatedAt || item.credits?.updatedAt || cost?.updatedAt || new Date().toISOString(),
     status: item.status || null,
     error: item.error || null,
     rows,
-    creditsRemaining: numberOrNull(item.credits?.remaining ?? usage.openRouterUsage?.balance),
+    creditsRemaining,
     codeReviewRemainingPercent: numberOrNull(dashboard.codeReviewRemainingPercent),
     tokenUsage: cost ? {
       sessionCostUSD: numberOrNull(cost.sessionCostUSD),
@@ -276,7 +282,7 @@ function normalizeProvider(item, cost) {
   };
 }
 
-function usageRows(providerId, usage) {
+function usageRows(providerId, usage, source) {
   if (Array.isArray(usage.usageRows)) {
     return usage.usageRows.map((row) => ({
       id: String(row.id || row.title || "usage"),
@@ -300,8 +306,25 @@ function usageRows(providerId, usage) {
       : usedPercent !== null
         ? Math.max(0, Math.min(100, 100 - usedPercent))
         : null;
-    return { id, title, percentLeft, resetsAt: window?.resetsAt || null };
-  }).filter((row) => row.percentLeft !== null);
+    const resetsAt = window?.resetsAt || null;
+    // For API providers, a window without resetsAt is just a balance placeholder,
+    // not a real usage bar. Skip it so the balance summary renders instead.
+    if (source === "api" && !resetsAt && percentLeft !== null) {
+      return null;
+    }
+    return { id, title, percentLeft, resetsAt };
+  }).filter((row) => row !== null && row.percentLeft !== null);
+}
+
+function parseBalanceFromDescription(description) {
+  if (typeof description !== "string") {
+    return null;
+  }
+  const match = description.match(/^\$([\d,.]+)/);
+  if (!match) {
+    return null;
+  }
+  return numberOrNull(match[1].replace(/,/g, ""));
 }
 
 function dailyUsagePoints(dashboard, cost) {

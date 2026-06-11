@@ -103,6 +103,11 @@ Item {
         Kirigami.Theme.textColor.b,
         bars.stale ? 0.28 : 0.44)
 
+    function textColorForBg(bg) {
+        const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
+        return lum > 0.55 ? "#1a1a1a" : "white";
+    }
+
     Repeater {
         model: bars.barsModel
 
@@ -158,8 +163,12 @@ Item {
 
                 Text {
                     anchors.centerIn: parent
-                    text: groupRows.length > 0 ? String(groupRows[0].valueText || "") : ""
-                    color: "white"
+                    readonly property string _firstRowValueText:
+                        groupRows.length > 0 && groupRows[0] && groupRows[0].kind === "credits"
+                            ? String(groupRows[0].valueText || "")
+                            : ""
+                    text: _firstRowValueText
+                    color: textColorForBg(parent.color)
                     font.bold: true
                     font.pixelSize: Math.max(6, Math.min(10, Math.floor(parent.width / Math.max(1, text.length) * 1.35)))
                     horizontalAlignment: Text.AlignHCenter
