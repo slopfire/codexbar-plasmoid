@@ -248,8 +248,8 @@ PlasmoidItem {
                 const parsed = JSON.parse(output);
                 root.snapshot = parsed;
                 root.lastError = parsed.ok === false ? (parsed.error || i18n("CodexBar refresh failed")) : "";
-                if (parsed.entries && parsed.entries.length > 0 && (!root.selectedProvider || !parsed.entries.some(function(entry) { return entry.provider === root.selectedProvider; }))) {
-                    root.selectedProvider = parsed.entries[0].provider;
+                if (root.selectedProvider && parsed.entries && !parsed.entries.some(function(entry) { return entry.provider === root.selectedProvider; })) {
+                    root.selectedProvider = "";
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
