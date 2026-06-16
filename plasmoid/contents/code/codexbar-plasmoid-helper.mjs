@@ -9,6 +9,9 @@ const args = parseArgs(process.argv.slice(2));
 const timeoutMs = Math.max(5, Number(args.timeout || 45)) * 1000;
 const cliPath = args.cli || process.env.CODEXBAR_CLI || "codexbar";
 const nativeCliPath = args.nativeCli || process.env.CODEXBAR_NATIVE_CLI || resolveNativeCliPath();
+const autoUpdate = args.autoUpdate === "true" || args["auto-update"] === "true";
+const updateTag = clean(args.tag) || "latest";
+const managedCliBinary = managedBinary();
 const provider = clean(args.provider) || "all";
 const source = clean(args.source) || "auto";
 const providerConfigs = parseProviderConfigs(args.providers);
@@ -56,15 +59,46 @@ const linuxAutoFallbacks = {
   vertexai: "oauth",
 };
 
-try {
-  const usage = runUsage();
-  const cost = includeCost ? runCost() : [];
-  const snapshot = normalizeSnapshot(usage, cost);
-  process.stdout.write(`${JSON.stringify(snapshot)}\n`);
-} catch (error) {
-  process.stdout.write(`${JSON.stringify(errorSnapshot(error))}\n`);
-  process.exitCode = 0;
+function currentCliPath() {
+  return resolveEffectiveCliPath(cliPath, autoUpdate, managedCliBinary);
 }
+
+function shouldAutoUpdate() {
+  if (!autoUpdate) {
+    return false;
+  }
+  // Only manage the binary when the user has not pointed us at a specific
+  // installation. An absolute or relative path means they want that binary.
+  const requested = clean(cliPath);
+  return requested === "" || requested === "codexbar" || requested === managedCliBinary;
+}
+
+async function main() {
+  let updateResult = null;
+  if (shouldAutoUpdate()) {
+    try {
+      const updaterModule = await import(new URL("./codexbar-cli-updater.mjs", import.meta.url).href);
+      updateResult = await updaterModule.updateIfNeeded({ targetDir: path.dirname(managedCliBinary), tag: updateTag });
+    } catch (error) {
+      updateResult = { ok: false, updated: false, error: shortError(error) };
+    }
+  }
+
+  try {
+    const usage = runUsage();
+    const cost = includeCost ? runCost() : [];
+    const snapshot = normalizeSnapshot(usage, cost);
+    snapshot.cliUpdate = updateResult;
+    process.stdout.write(`${JSON.stringify(snapshot)}\n`);
+  } catch (error) {
+    const snapshot = errorSnapshot(error);
+    snapshot.cliUpdate = updateResult;
+    process.stdout.write(`${JSON.stringify(snapshot)}\n`);
+    process.exitCode = 0;
+  }
+}
+
+main();
 
 function parseArgs(rawArgs) {
   const parsed = {};
@@ -410,11 +444,27 @@ function commandForConfig(config) {
   if (usesNativeCli(config.provider, config.source)) {
     return nativeCliPath;
   }
-  return cliPath;
+  return currentCliPath();
 }
 
 function resolveCommandInvocation(command) {
   return { command, prefix: [] };
+}
+
+function managedBinary() {
+  return path.join(os.homedir(), ".local", "share", "codexbar-plasmoid", "bin", "codexbar");
+}
+
+function resolveEffectiveCliPath(requestedCli, enabledAutoUpdate, managed) {
+  // If the user supplied an absolute or explicit relative path, honor it.
+  if (requestedCli && requestedCli !== "codexbar") {
+    return requestedCli;
+  }
+  // When auto-update is enabled, prefer the managed binary if it exists.
+  if (enabledAutoUpdate && fs.existsSync(managed)) {
+    return managed;
+  }
+  return requestedCli;
 }
 
 function resolveNativeCliPath() {
@@ -557,7 +607,7 @@ function errorSnapshot(error) {
   };
 }
 
-function shortError(error, command = cliPath) {
+function shortError(error, command = currentCliPath()) {
   const stderr = clean(error?.stderr?.toString?.());
   if (stderr) {
     return stderr.split("\n").slice(-4).join("\n");

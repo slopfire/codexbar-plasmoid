@@ -19,6 +19,8 @@ Kirigami.ScrollablePage {
     property alias cfg_showCredits: showCredits.checked
     property alias cfg_showHistory: showHistory.checked
     property alias cfg_anonymizeEmail: anonymizeEmail.checked
+    property alias cfg_autoUpdateCli: autoUpdateCli.checked
+    property string cfg_cliUpdateChannel: cliUpdateChannel.currentValue
     property int cfg_refreshIntervalSeconds: refreshInterval.value
     property int cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
@@ -103,6 +105,33 @@ Kirigami.ScrollablePage {
                 id: cliPath
                 Kirigami.FormData.label: i18n("CLI executable:")
                 placeholderText: "codexbar"
+            }
+
+            QtControls.CheckBox {
+                id: autoUpdateCli
+                Kirigami.FormData.label: i18n("CLI updates:")
+                text: i18n("Auto-download from GitHub")
+            }
+
+            QtControls.ComboBox {
+                id: cliUpdateChannel
+                Kirigami.FormData.label: i18n("Release channel:")
+                textRole: "text"
+                valueRole: "value"
+                model: [
+                    { text: i18n("Latest stable"), value: "latest" }
+                ]
+                currentIndex: 0
+                enabled: cfg_autoUpdateCli
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: cfg_autoUpdateCli
+                    ? i18n("Managed binary will be installed at ~/.local/share/codexbar-plasmoid/bin/codexbar")
+                    : i18n("Leave the executable as \"codexbar\" to use the binary on PATH")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
             }
         }
 

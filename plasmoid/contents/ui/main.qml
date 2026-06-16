@@ -12,6 +12,7 @@ PlasmoidItem {
     id: root
 
     property var snapshot: ({ ok: false, entries: [] })
+    property var cliUpdateInfo: ({ ok: true, installedVersion: "", latestVersion: "", needsUpdate: false, updated: false, error: "" })
     property bool loading: false
     property string lastError: ""
     property string selectedProvider: ""
@@ -76,7 +77,9 @@ PlasmoidItem {
                 "--status", quote(plasmoid.configuration.includeStatus ? "true" : "false"),
                 "--cost", quote(plasmoid.configuration.includeCost ? "true" : "false"),
                 "--credits", quote(plasmoid.configuration.showCredits ? "true" : "false"),
-                "--anonymize-emails", quote(plasmoid.configuration.anonymizeEmail ? "true" : "false")
+                "--anonymize-emails", quote(plasmoid.configuration.anonymizeEmail ? "true" : "false"),
+                "--auto-update", quote(plasmoid.configuration.autoUpdateCli ? "true" : "false"),
+                "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest")
             ];
             return parts.join(" ");
         }
@@ -427,11 +430,34 @@ PlasmoidItem {
                 const parsed = JSON.parse(output);
                 root.snapshot = parsed;
                 root.lastError = parsed.ok === false ? (parsed.error || i18n("CodexBar refresh failed")) : "";
+                if (parsed.cliUpdate) {
+                    root.cliUpdateInfo = parsed.cliUpdate;
+                }
                 if (root.selectedProvider && parsed.entries && !parsed.entries.some(function(entry) { return entry.provider === root.selectedProvider; })) {
                     root.selectedProvider = "";
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
+            }
+        }
+    }
+
+    Plasma5Support.DataSource {
+        id: updater
+        engine: "executable"
+        connectedSources: []
+        interval: 0
+        onNewData: function(sourceName, data) {
+            updater.disconnectSource(sourceName);
+            const output = String(data.stdout || data["stdout"] || "").trim();
+            if (!output.length) {
+                root.cliUpdateInfo = { ok: false, error: i18n("CLI updater returned no data") };
+                return;
+            }
+            try {
+                root.cliUpdateInfo = JSON.parse(output);
+            } catch (error) {
+                root.cliUpdateInfo = { ok: false, error: String(error) + "\n" + output.slice(0, 500) };
             }
         }
     }
@@ -446,6 +472,33 @@ PlasmoidItem {
         loading = true;
         lastError = "";
         executable.connectSource(command);
+    }
+
+    function checkCliUpdate() {
+        const script = codexBar.localPath(Qt.resolvedUrl("../code/codexbar-cli-updater.mjs"));
+        updater.connectSource(quote(script) + " --action check --tag " + quote(plasmoid.configuration.cliUpdateChannel || "latest"));
+    }
+
+    function updateCliNow() {
+        const script = codexBar.localPath(Qt.resolvedUrl("../code/codexbar-cli-updater.mjs"));
+        updater.connectSource(quote(script) + " --action update --tag " + quote(plasmoid.configuration.cliUpdateChannel || "latest"));
+    }
+
+    function cliUpdateLabel() {
+        const info = root.cliUpdateInfo;
+        if (!info || info.error) {
+            return info && info.error ? info.error : "";
+        }
+        if (info.updated) {
+            return i18n("Updated CLI to %1", info.installedVersion || info.latestVersion);
+        }
+        if (info.needsUpdate) {
+            return i18n("CLI %1 available (installed %2)", info.latestVersion, info.installedVersion || i18n("none"));
+        }
+        if (info.installedVersion) {
+            return i18n("CLI %1 is up to date", info.installedVersion);
+        }
+        return "";
     }
 
     function tooltipText() {
@@ -579,6 +632,37 @@ PlasmoidItem {
                             showHistory: plasmoid.configuration.showHistory
                         }
                     }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.smallSpacing
+                visible: root.cliUpdateLabel().length > 0
+
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: root.cliUpdateLabel()
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                }
+
+                PlasmaComponents3.ToolButton {
+                    icon.name: "view-refresh"
+                    text: i18n("Check CLI update")
+                    display: QtControls.AbstractButton.IconOnly
+                    onClicked: root.checkCliUpdate()
+                }
+
+                PlasmaComponents3.ToolButton {
+                    icon.name: "download"
+                    text: i18n("Update CLI")
+                    display: QtControls.AbstractButton.IconOnly
+                    visible: root.cliUpdateInfo && root.cliUpdateInfo.needsUpdate && !root.cliUpdateInfo.updated
+                    onClicked: root.updateCliNow()
                 }
             }
 

@@ -8,6 +8,14 @@
       <label>CodexBar CLI executable path</label>
       <default>codexbar</default>
     </entry>
+    <entry name="autoUpdateCli" type="Bool">
+      <label>Automatically download and update the CodexBar CLI from GitHub</label>
+      <default>false</default>
+    </entry>
+    <entry name="cliUpdateChannel" type="String">
+      <label>CodexBar CLI GitHub release channel</label>
+      <default>latest</default>
+    </entry>
     <entry name="provider" type="String">
       <label>Provider selector</label>
       <default>all</default>

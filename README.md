@@ -20,6 +20,30 @@ For local preview without installing:
 ./scripts/run-windowed.sh
 ```
 
+## Automatic CLI Updates
+
+The widget can download and keep the CodexBar CLI up to date from the upstream
+[steipete/CodexBar](https://github.com/steipete/CodexBar) GitHub releases.
+Enable **Auto-download from GitHub** in the widget settings. When enabled, the
+helper installs a managed binary at:
+
+```text
+~/.local/share/codexbar-plasmoid/bin/codexbar
+```
+
+and checks for a newer release before each refresh. Updates are atomic: the new
+tarball is downloaded, its SHA-256 checksum is verified, the binary is tested
+with `--version`, and only then is the managed copy replaced. If the download
+or test fails, the previous managed binary is preserved.
+
+You can also check or trigger an update manually from the widget's full view
+using the CLI update status row at the bottom.
+
+The updater picks the release asset for the current platform and architecture
+(`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-arm64`). Leave the
+**CLI executable** setting as `codexbar` to use the managed binary when
+auto-update is enabled, or set an absolute path to use your own installation.
+
 ## Configure
 
 Open the widget configuration from Plasma and adjust:
