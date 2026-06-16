@@ -92,6 +92,7 @@ fn missing_cookie_message(provider_id: &str) -> String {
 
 struct CookieStore {
     browser: ChromiumBrowser,
+    firefox: bool,
     label: String,
     cookies_path: PathBuf,
 }
@@ -102,6 +103,7 @@ enum ChromiumBrowser {
     Chromium,
     Brave,
     Edge,
+    Helium,
 }
 
 impl ChromiumBrowser {
@@ -111,6 +113,7 @@ impl ChromiumBrowser {
             Self::Chromium => "chromium",
             Self::Brave => "brave",
             Self::Edge => "msedge",
+            Self::Helium => "helium",
         }
     }
 
@@ -120,6 +123,7 @@ impl ChromiumBrowser {
             Self::Chromium => "Chromium Keys",
             Self::Brave => "Brave Keys",
             Self::Edge => "Edge Keys",
+            Self::Helium => "Helium Keys",
         }
     }
 
@@ -129,6 +133,7 @@ impl ChromiumBrowser {
             Self::Chromium => "Chromium Safe Storage",
             Self::Brave => "Brave Safe Storage",
             Self::Edge => "Edge Safe Storage",
+            Self::Helium => "Helium Safe Storage",
         }
     }
 
@@ -138,6 +143,7 @@ impl ChromiumBrowser {
             Self::Chromium => "Chromium Safe Storage",
             Self::Brave => "Brave Safe Storage",
             Self::Edge => "Edge Safe Storage",
+            Self::Helium => "Helium Safe Storage",
         }
     }
 
@@ -147,6 +153,7 @@ impl ChromiumBrowser {
             Self::Chromium => "Chromium",
             Self::Brave => "Brave",
             Self::Edge => "Edge",
+            Self::Helium => "Helium",
         }
     }
 }
@@ -168,6 +175,7 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
             ChromiumBrowser::Edge,
             "Edge",
         ),
+        (home.join(".config/helium"), ChromiumBrowser::Helium, "Helium"),
     ];
 
     for (root, browser, label) in chromium_roots {
@@ -179,6 +187,7 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
             if cookies_path.exists() {
                 stores.push(CookieStore {
                     browser,
+                    firefox: false,
                     label: format!("{label} ({profile})"),
                     cookies_path,
                 });
@@ -198,7 +207,39 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
                 if cookies_path.exists() {
                     stores.push(CookieStore {
                         browser: ChromiumBrowser::Chrome,
+                        firefox: true,
                         label: format!("Firefox ({name})"),
+                        cookies_path,
+                    });
+                }
+            }
+        }
+    }
+
+    let zen_roots = [
+        (home.join(".zen"), "Zen"),
+        (home.join(".config/zen"), "Zen"),
+        (
+            home.join(".var/app/app.zen_browser.zen/zen"),
+            "Zen Flatpak",
+        ),
+    ];
+    for (root, label) in zen_roots {
+        if !root.exists() {
+            continue;
+        }
+        if let Ok(entries) = fs::read_dir(&root) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == "Crash Reports" || name == "Pending Pings" {
+                    continue;
+                }
+                let cookies_path = entry.path().join("cookies.sqlite");
+                if cookies_path.exists() {
+                    stores.push(CookieStore {
+                        browser: ChromiumBrowser::Chrome,
+                        firefox: true,
+                        label: format!("{label} ({name})"),
                         cookies_path,
                     });
                 }
@@ -231,7 +272,7 @@ fn read_cookie_header_from_store(
     provider_id: &str,
     strict_names: bool,
 ) -> Option<String> {
-    if store.label.starts_with("Firefox (") {
+    if store.firefox {
         return read_firefox_cookies(&store.cookies_path, provider_id, strict_names);
     }
     let passwords = chromium_passwords(store.browser);
@@ -369,6 +410,21 @@ fn chromium_passwords(browser: ChromiumBrowser) -> Vec<String> {
     }
     if let Some(value) = kwallet_password(browser) {
         push(value);
+    }
+    if matches!(browser, ChromiumBrowser::Helium) {
+        // Helium is ungoogled-chromium-based and may reuse Chromium's keyring entries.
+        if let Some(value) = secret_tool_lookup(&[
+            "lookup",
+            "service",
+            "Chromium Safe Storage",
+            "account",
+            "Chromium",
+        ]) {
+            push(value);
+        }
+        if let Some(value) = secret_tool_lookup(&["lookup", "application", "chromium"]) {
+            push(value);
+        }
     }
     push("peanuts".to_string());
     push(String::new());

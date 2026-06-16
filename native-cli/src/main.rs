@@ -123,7 +123,7 @@ Authentication:
   - Antigravity: running agy or Antigravity IDE language server (local HTTPS probe)
   - ~/.codexbar/config.json provider cookieHeader
   - CODEXBAR_PLASMOID_CURSOR_COOKIE / CODEXBAR_PLASMOID_OPENCODE_COOKIE / CODEXBAR_PLASMOID_OPENCODEGO_COOKIE (or older SPLAZMA_* fallback)
-  - Chrome/Chromium/Firefox cookie import (secret-tool required for encrypted Chromium cookies)
+  - Chrome/Chromium/Helium/Firefox/Zen cookie import (secret-tool required for encrypted Chromium cookies)
   - OpenCode Go local usage from ~/.local/share/opencode/opencode.db"
     );
 }

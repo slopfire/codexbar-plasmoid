@@ -36,6 +36,13 @@ tarball is downloaded, its SHA-256 checksum is verified, the binary is tested
 with `--version`, and only then is the managed copy replaced. If the download
 or test fails, the previous managed binary is preserved.
 
+The upstream Linux release asset is dynamically linked and needs `libcurl`,
+`libstdc++`, and `libsqlite3` available at runtime. On NixOS or other
+non-FHS systems, auto-download may fail with a shared-library error. In that
+case install a compatible CodexBar CLI through your package manager (or use
+`nix-ld` on NixOS) and set the CLI path manually, or stick to providers that
+use the bundled native fetcher.
+
 You can also check or trigger an update manually from the widget's full view
 using the CLI update status row at the bottom.
 
@@ -160,7 +167,7 @@ Authentication options:
 - Antigravity: a running `agy` process or Antigravity IDE language server
 - `~/.codexbar/config.json` provider `cookie_header`
 - `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
-- Chrome/Chromium/Firefox cookie import (`secret-tool` required for encrypted Chromium cookies)
+- Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)
 - OpenCode Go local usage from `~/.local/share/opencode/opencode.db` when web cookies are unavailable
 
 Native cookie configuration uses a provider list:

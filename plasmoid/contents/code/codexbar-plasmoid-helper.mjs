@@ -12,6 +12,21 @@ const nativeCliPath = args.nativeCli || process.env.CODEXBAR_NATIVE_CLI || resol
 const autoUpdate = args.autoUpdate === "true" || args["auto-update"] === "true";
 const updateTag = clean(args.tag) || "latest";
 const managedCliBinary = managedBinary();
+
+function injectSqliteEnv(targetDir) {
+  for (const envVar of ["NIX_LD_LIBRARY_PATH", "LD_LIBRARY_PATH"]) {
+    const existing = process.env[envVar] || "";
+    const paths = existing.split(":").filter(Boolean);
+    if (!paths.includes(targetDir)) {
+      process.env[envVar] = [targetDir, ...paths].join(":");
+    }
+  }
+}
+
+const managedDir = path.dirname(managedCliBinary);
+if (fs.existsSync(path.join(managedDir, "libsqlite3.so.0"))) {
+  injectSqliteEnv(managedDir);
+}
 const provider = clean(args.provider) || "all";
 const source = clean(args.source) || "auto";
 const providerConfigs = parseProviderConfigs(args.providers);

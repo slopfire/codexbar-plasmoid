@@ -5,12 +5,159 @@
 import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+function injectSqliteEnv(targetDir) {
+  for (const envVar of ["NIX_LD_LIBRARY_PATH", "LD_LIBRARY_PATH"]) {
+    const existing = process.env[envVar] || "";
+    const paths = existing.split(":").filter(Boolean);
+    if (!paths.includes(targetDir)) {
+      process.env[envVar] = [targetDir, ...paths].join(":");
+    }
+  }
+}
+
+function extractDebDataTar(debBuffer) {
+  if (debBuffer.toString("utf8", 0, 8) !== "!<arch>\n") {
+    throw new Error("Invalid deb format");
+  }
+  let offset = 8;
+  while (offset < debBuffer.length) {
+    const name = debBuffer.toString("utf8", offset, offset + 16).trim();
+    const sizeStr = debBuffer.toString("utf8", offset + 48, offset + 58).trim();
+    const size = parseInt(sizeStr, 10);
+    offset += 60; // skip header
+    if (name.startsWith("data.tar")) {
+      return {
+        name,
+        buffer: debBuffer.subarray(offset, offset + size)
+      };
+    }
+    offset += size;
+    if (size % 2 !== 0) {
+      offset += 1; // skip padding byte
+    }
+  }
+  throw new Error("data.tar not found in deb");
+}
+
+function extractTarball(archivePath, destDir) {
+  fs.mkdirSync(destDir, { recursive: true, mode: 0o755 });
+  const result = spawn("tar", ["-xf", archivePath, "-C", destDir], {
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 60000,
+  });
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    result.stdout.on("data", (data) => { stdout += data; });
+    result.stderr.on("data", (data) => { stderr += data; });
+    result.on("error", reject);
+    result.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`tar extraction failed (${code}): ${stderr || stdout}`));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+async function downloadSqlite(targetDir) {
+  const arch = process.arch;
+  let debArch = "amd64";
+  if (arch === "arm64") {
+    debArch = "arm64";
+  } else if (arch === "ia32") {
+    debArch = "i386";
+  } else if (arch === "x64") {
+    debArch = "amd64";
+  }
+  const url = `https://snapshot.debian.org/archive/debian/20240301T030000Z/pool/main/s/sqlite3/libsqlite3-0_3.45.1-1_${debArch}.deb`;
+  
+  const tempDir = path.join(targetDir, `.sqlite-download-${process.pid}-${Date.now()}`);
+  fs.mkdirSync(tempDir, { recursive: true });
+  
+  try {
+    const debBuffer = await downloadToBuffer(url);
+    const dataTar = extractDebDataTar(debBuffer);
+    const tarPath = path.join(tempDir, dataTar.name);
+    fs.writeFileSync(tarPath, dataTar.buffer);
+    
+    const extractDir = path.join(tempDir, "extracted");
+    fs.mkdirSync(extractDir, { recursive: true });
+    
+    await extractTarball(tarPath, extractDir);
+    
+    const findSqlite = (dir) => {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          const found = findSqlite(fullPath);
+          if (found) return found;
+        } else if (file === "libsqlite3.so.0" || file.startsWith("libsqlite3.so.0.")) {
+          return fs.realpathSync(fullPath);
+        }
+      }
+      return null;
+    };
+    
+    const realSqlitePath = findSqlite(extractDir);
+    if (!realSqlitePath) {
+      throw new Error("libsqlite3.so.0 not found in extracted deb");
+    }
+    
+    const destPath = path.join(targetDir, "libsqlite3.so.0");
+    fs.copyFileSync(realSqlitePath, destPath);
+    const realFileName = path.basename(realSqlitePath);
+    if (realFileName !== "libsqlite3.so.0") {
+      fs.copyFileSync(realSqlitePath, path.join(targetDir, realFileName));
+    }
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
+async function ensureSqlite(targetDir, testBinaryPath) {
+  if (process.platform !== "linux") {
+    return;
+  }
+  const sqliteFile = path.join(targetDir, "libsqlite3.so.0");
+  if (fs.existsSync(sqliteFile)) {
+    injectSqliteEnv(targetDir);
+    return;
+  }
+  if (!testBinaryPath || !fs.existsSync(testBinaryPath)) {
+    return;
+  }
+  try {
+    execFileSync(testBinaryPath, ["--version"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5000,
+      argv0: "/tmp/CodexBarCLI",
+    });
+  } catch (error) {
+    const errMsg = error.message || String(error);
+    if (errMsg.includes("libsqlite3.so.0")) {
+      await downloadSqlite(targetDir);
+      injectSqliteEnv(targetDir);
+    }
+  }
+}
+
+const sqliteFile = path.join(managedDir(), "libsqlite3.so.0");
+if (fs.existsSync(sqliteFile)) {
+  injectSqliteEnv(managedDir());
+}
 
 const DEFAULT_REPO = "steipete/CodexBar";
 const RELEASE_API_LATEST = (repo) => `https://api.github.com/repos/${repo}/releases/latest`;
@@ -96,7 +243,7 @@ function userAgent() {
 
 async function httpsRequest(url, options = {}) {
   return new Promise((resolve, reject) => {
-    const client = url.startsWith("https:") ? https : require("node:http");
+    const client = url.startsWith("https:") ? https : http;
     const req = client.get(
       url,
       {
@@ -246,6 +393,7 @@ function getInstalledVersion(binaryPath) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 10000,
+      argv0: "/tmp/CodexBarCLI",
     });
     const match = stdout.match(/(\d+\.\d+\.\d+[^\s]*)/);
     return match ? match[1] : null;
@@ -301,11 +449,14 @@ async function performUpdate(metadata, options = {}) {
     const extractDir = path.join(tempRoot, "extracted");
     await extractTarGz(archivePath, extractDir);
 
-    const candidates = ["codexbar", "CodexBarCLI"];
+    const candidates = ["CodexBarCLI", "codexbar"];
     for (const name of candidates) {
       const candidate = path.join(extractDir, name);
       if (fs.existsSync(candidate)) {
-        extractedBinary = candidate;
+        // The upstream tarball ships `codexbar` as a symlink to `CodexBarCLI`.
+        // If we moved the symlink, it would break once the temp directory is
+        // removed, so always install the real executable.
+        extractedBinary = fs.realpathSync(candidate);
         break;
       }
     }
@@ -316,10 +467,12 @@ async function performUpdate(metadata, options = {}) {
     fs.chmodSync(extractedBinary, 0o755);
 
     // Test the binary before replacing the managed copy.
+    await ensureSqlite(targetDir, extractedBinary);
     const testStdout = execFileSync(extractedBinary, ["--version"], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 10000,
+      argv0: "/tmp/CodexBarCLI",
     });
     const versionMatch = testStdout.match(/(\d+\.\d+\.\d+[^\s]*)/);
     if (!versionMatch) {
@@ -371,6 +524,7 @@ export async function checkUpdate(options = {}) {
   const targetDir = options.targetDir || managedDir();
   const targetBinary = path.join(targetDir, "codexbar");
   const metadata = await fetchReleaseMetadata(repo, tag, options.force === true);
+  await ensureSqlite(targetDir, targetBinary);
   const installedVersion = getInstalledVersion(targetBinary);
   return {
     ok: true,
@@ -388,6 +542,7 @@ export async function updateIfNeeded(options = {}) {
   const force = options.force === true;
 
   const metadata = await fetchReleaseMetadata(repo, tag, force);
+  await ensureSqlite(targetDir, targetBinary);
   const installedVersion = getInstalledVersion(targetBinary);
   const status = buildStatus(metadata, installedVersion, targetBinary);
 
