@@ -15,12 +15,12 @@ PlasmoidItem {
     property var cliUpdateInfo: ({ ok: true, installedVersion: "", latestVersion: "", needsUpdate: false, updated: false, error: "" })
     property bool loading: false
     property string lastError: ""
-    property string selectedProvider: ""
+    property string selectedEntryId: ""
     property string activeCommand: ""
     property string previousCommand: ""
     readonly property var entries: snapshot.entries || []
-    readonly property var visibleEntries: selectedProvider.length > 0
-        ? entries.filter(function(entry) { return entry.provider === selectedProvider; })
+    readonly property var visibleEntries: selectedEntryId.length > 0
+        ? entries.filter(function(entry) { return entry.id === selectedEntryId; })
         : entries
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
@@ -430,11 +430,11 @@ PlasmoidItem {
                 const parsed = JSON.parse(output);
                 root.snapshot = parsed;
                 root.lastError = parsed.ok === false ? (parsed.error || i18n("CodexBar refresh failed")) : "";
-                if (parsed.cliUpdate) {
+                if (parsed.cliUpdate && (parsed.cliUpdate.updated || parsed.cliUpdate.error)) {
                     root.cliUpdateInfo = parsed.cliUpdate;
                 }
-                if (root.selectedProvider && parsed.entries && !parsed.entries.some(function(entry) { return entry.provider === root.selectedProvider; })) {
-                    root.selectedProvider = "";
+                if (root.selectedEntryId && parsed.entries && !parsed.entries.some(function(entry) { return entry.id === root.selectedEntryId; })) {
+                    root.selectedEntryId = "";
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
@@ -490,6 +490,9 @@ PlasmoidItem {
             return info && info.error ? info.error : "";
         }
         if (info.updated) {
+            if (info.previousVersion && info.installedVersion && info.previousVersion !== info.installedVersion) {
+                return i18n("Updated CLI %1 → %2", info.previousVersion, info.installedVersion);
+            }
             return i18n("Updated CLI to %1", info.installedVersion || info.latestVersion);
         }
         if (info.needsUpdate) {
@@ -580,9 +583,9 @@ PlasmoidItem {
                 Layout.leftMargin: Kirigami.Units.smallSpacing
                 Layout.rightMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
-                selectedProvider: root.selectedProvider
-                onProviderSelected: function(provider) {
-                    root.selectedProvider = root.selectedProvider === provider ? "" : provider;
+                selectedEntryId: root.selectedEntryId
+                onEntrySelected: function(entryId) {
+                    root.selectedEntryId = root.selectedEntryId === entryId ? "" : entryId;
                 }
             }
 
@@ -643,7 +646,9 @@ PlasmoidItem {
                 PlasmaComponents3.Label {
                     Layout.fillWidth: true
                     text: root.cliUpdateLabel()
-                    color: Kirigami.Theme.disabledTextColor
+                    color: root.cliUpdateInfo && root.cliUpdateInfo.updated
+                        ? Kirigami.Theme.positiveTextColor
+                        : (root.cliUpdateInfo && root.cliUpdateInfo.error ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor)
                     font: Kirigami.Theme.smallFont
                     wrapMode: Text.Wrap
                     maximumLineCount: 2

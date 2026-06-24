@@ -62,6 +62,55 @@ pub fn resolve_cookie_header(provider_id: &str) -> Result<CookieResolution> {
     Err(anyhow::anyhow!(missing_cookie_message(provider_id)))
 }
 
+/// Resolve every distinct opencode.ai session cookie across all browser stores.
+///
+/// Unlike `resolve_cookie_header` (first match), this collects one entry per
+/// distinct cookie value so a user logged into several OpenCode Go accounts
+/// (e.g. different Zen/Chromium profiles) gets one payload per account.
+/// Cookies are deduplicated by their filtered value so the same account found
+/// in multiple profiles is fetched only once. A manual config cookie always
+/// wins and is returned as the sole entry.
+pub fn resolve_all_cookie_headers(provider_id: &str) -> Vec<CookieResolution> {
+    if let Some(header) = manual_cookie_header(provider_id) {
+        return vec![CookieResolution {
+            header: filter_provider_cookies(&header, provider_id),
+            source: "config".to_string(),
+        }];
+    }
+
+    let stores = browser_cookie_stores();
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+
+    // Strict name match first (proper `auth`/`__Host-auth` cookies).
+    for store in &stores {
+        if let Some(header) = read_cookie_header_from_store(store, provider_id, true) {
+            let filtered = filter_provider_cookies(&header, provider_id);
+            if !filtered.is_empty() && seen.insert(filtered.clone()) {
+                out.push(CookieResolution {
+                    header: filtered,
+                    source: store.label.clone(),
+                });
+            }
+        }
+    }
+
+    // Loose fallback for stores that had no strict match.
+    for store in &stores {
+        if let Some(header) = read_cookie_header_from_store(store, provider_id, false) {
+            let filtered = filter_provider_cookies(&header, provider_id);
+            if !filtered.is_empty() && seen.insert(filtered.clone()) {
+                out.push(CookieResolution {
+                    header: filtered,
+                    source: store.label.clone(),
+                });
+            }
+        }
+    }
+
+    out
+}
+
 pub fn filter_provider_cookies(header: &str, provider_id: &str) -> String {
     if normalize_provider_id(provider_id) == "cursor" {
         return header.to_string();

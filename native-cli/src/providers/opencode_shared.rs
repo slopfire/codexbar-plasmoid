@@ -94,6 +94,57 @@ pub fn fetch_usage_page(
     Ok(text)
 }
 
+/// Best-effort extraction of the signed-in account email from an OpenCode Go
+/// page response. The workspace/go HTML and server-action responses may embed
+/// the user's email as a JSON field (`"email":"…"`, `"accountEmail":"…"`) or,
+/// less reliably, as a bare address. Prefer quoted JSON fields and fall back to
+/// a scoped bare-address scan so support/noreply addresses are avoided.
+pub fn extract_account_email(text: &str) -> Option<String> {
+    let quoted_keys = ["email", "accountEmail", "userEmail", "primaryEmail"];
+    for key in quoted_keys {
+        let pattern = format!(r#""{key}"\s*:\s*"([^"]+@[^"]+)""#);
+        if let Some(capture) = Regex::new(&pattern).ok()?.captures(text) {
+            if let Some(matched) = capture.get(1) {
+                let email = matched.as_str().trim().to_string();
+                if is_account_email(&email) {
+                    return Some(email);
+                }
+            }
+        }
+    }
+
+    // Fallback: scan for bare addresses near account/user context, skipping
+    // generic service mailboxes.
+    let bare = Regex::new(r"(?i)\b([\w.+-]+@[\w-]+\.[\w.-]+)\b").ok()?;
+    let context = Regex::new(r"(?i)(account|user|profile|signed in|email)").ok()?;
+    for capture in bare.captures_iter(text) {
+        if let Some(matched) = capture.get(1) {
+            let email = matched.as_str().to_string();
+            if !is_account_email(&email) {
+                continue;
+            }
+            let start = matched.start();
+            let window_start = start.saturating_sub(120);
+            let window_end = (start + 120).min(text.len());
+            if context.is_match(&text[window_start..window_end]) {
+                return Some(email);
+            }
+        }
+    }
+    None
+}
+
+fn is_account_email(email: &str) -> bool {
+    let lower = email.to_lowercase();
+    if !lower.contains('@') || lower.chars().filter(|c| *c == '@').count() != 1 {
+        return false;
+    }
+    let local = lower.split('@').next().unwrap_or("");
+    !matches!(local, "noreply" | "no-reply" | "support" | "admin" | "contact" | "team" | "hello")
+        && !lower.ends_with("@example.com")
+        && !lower.ends_with("@sentry.io")
+}
+
 pub fn parse_usage(text: &str, include_monthly: bool) -> Result<OpenCodeUsage> {
     if let Some(snapshot) = parse_usage_object(&serde_json::from_str(text).ok(), include_monthly) {
         return Ok(snapshot);
@@ -364,5 +415,45 @@ fn value_as_i64(value: &Value) -> Option<i64> {
         Value::Number(number) => number.as_i64(),
         Value::String(text) => text.trim().parse().ok(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod email_tests {
+    use super::extract_account_email;
+
+    #[test]
+    fn extracts_quoted_email_field() {
+        let page = r#"{"user":{"name":"Huxidi","email":"huxidi@gmail.com"},"rollingUsage":{}}"#;
+        assert_eq!(extract_account_email(page).as_deref(), Some("huxidi@gmail.com"));
+    }
+
+    #[test]
+    fn extracts_account_email_key() {
+        let page = r#"{"accountEmail":"other@user.com"}"#;
+        assert_eq!(extract_account_email(page).as_deref(), Some("other@user.com"));
+    }
+
+    #[test]
+    fn skips_service_addresses_in_quoted_field() {
+        let page = r#"{"email":"support@opencode.ai","accountEmail":"real@user.com"}"#;
+        assert_eq!(extract_account_email(page).as_deref(), Some("real@user.com"));
+    }
+
+    #[test]
+    fn bare_address_needs_account_context() {
+        let page = "Welcome back, your account is huxidi@gmail.com with usage data.";
+        assert_eq!(extract_account_email(page).as_deref(), Some("huxidi@gmail.com"));
+    }
+
+    #[test]
+    fn bare_address_without_context_is_skipped() {
+        let page = "Contact huxidi@gmail.com for help. rollingUsage usagePercent: 11";
+        assert_eq!(extract_account_email(page), None);
+    }
+
+    #[test]
+    fn no_email_returns_none() {
+        assert_eq!(extract_account_email("rollingUsage usagePercent: 11"), None);
     }
 }

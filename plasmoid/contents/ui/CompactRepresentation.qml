@@ -47,7 +47,7 @@ Control {
     readonly property real barGroupWidth: Math.max(8, Number(compact.providerBarWidth || 18))
 
     function creditsGroupWidth(text) {
-        return Math.min(96, Math.max(compact.barGroupWidth, String(text).length * 7 + 8));
+        return Math.min(64, Math.max(compact.barGroupWidth, String(text).length * 6 + 4));
     }
 
     function barGroupsTotalWidth() {
@@ -74,10 +74,15 @@ Control {
         : compact.iconSize
 
     implicitWidth: Math.max(
-        compact.showMetricText ? Kirigami.Units.gridUnit * 4.5 : compact.visualWidth + leftPadding + rightPadding,
-        compact.showMetricText
-            ? compact.visualWidth + Kirigami.Units.largeSpacing + valueLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-            : compact.visualWidth + leftPadding + rightPadding)
+        compact.showMetricText ? Kirigami.Units.gridUnit * 4.5 : 0,
+        compact.visualWidth + leftPadding + rightPadding
+            + (compact.showText ? compact.rowSpacing + valueLabel.implicitWidth + compact.rowSpacing : 0))
+
+    // When the text column is hidden, force it to 0 width so the row does not
+    // reserve phantom space (QML layouts include invisible items by default).
+    readonly property real _textColumnReserved: compact.showText
+        ? compact.rowSpacing + valueLabel.implicitWidth + compact.rowSpacing
+        : 0
     implicitHeight: Math.max(Kirigami.Units.iconSizes.small, contentItem.implicitHeight) + topPadding + bottomPadding
     leftPadding: compact.showText ? Kirigami.Units.largeSpacing : Math.round(Kirigami.Units.smallSpacing / 2)
     rightPadding: leftPadding
@@ -98,7 +103,7 @@ Control {
             Layout.preferredWidth: implicitWidth
             Layout.minimumWidth: implicitWidth
             Layout.preferredHeight: implicitHeight
-            Layout.minimumHeight: implicitHeight
+            Layout.minimumHeight: 0
             Layout.alignment: Qt.AlignVCenter
             Layout.fillWidth: !compact.showText
 
@@ -115,8 +120,8 @@ Control {
                 anchors.centerIn: parent
                 width: parent.width
                 height: parent.height
-                running: compact.loading
-                visible: compact.loading && compact.errorText.length === 0
+                running: false
+                visible: false
             }
 
             CompactUsageBars {
@@ -144,7 +149,8 @@ Control {
         ColumnLayout {
             visible: compact.showText
             Layout.alignment: Qt.AlignVCenter
-            Layout.minimumWidth: valueLabel.implicitWidth
+            Layout.minimumWidth: compact.showText ? valueLabel.implicitWidth : 0
+            Layout.preferredWidth: compact.showText ? valueLabel.implicitWidth : 0
             spacing: 0
 
             PlasmaComponents3.Label {

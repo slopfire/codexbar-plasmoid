@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::Deserialize;
 use std::fs;
-use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
@@ -222,16 +221,16 @@ fn extract_flag(flag: &str, command: &str) -> Option<String> {
 }
 
 fn listening_ports(pid: u32) -> Result<Vec<u16>> {
-    let lsof = ["/usr/sbin/lsof", "/usr/bin/lsof"]
-        .iter()
-        .find(|path| Path::new(path).exists())
-        .copied()
+    // Locate lsof via PATH. The plasmoid runs under a stripped environment
+    // on some distros (notably NixOS), so the only portable lookup is a
+    // PATH walk instead of hard-coded absolute paths.
+    let lsof = which("lsof")
         .ok_or_else(|| anyhow!("lsof not available for Antigravity port detection"))?;
 
-    let output = Command::new(lsof)
+    let output = Command::new(&lsof)
         .args(["-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-p", &pid.to_string()])
         .output()
-        .with_context(|| format!("run {lsof} for pid {pid}"))?;
+        .with_context(|| format!("run {} for pid {pid}", lsof.display()))?;
     if !output.status.success() {
         anyhow::bail!("lsof failed while listing Antigravity listening ports");
     }
@@ -241,6 +240,28 @@ fn listening_ports(pid: u32) -> Result<Vec<u16>> {
         anyhow::bail!("No listening ports found for Antigravity process");
     }
     Ok(ports)
+}
+
+fn which(name: &str) -> Option<std::path::PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let path = std::env::var_os("PATH")?;
+    for dir in std::env::split_paths(&path) {
+        if dir.as_os_str().is_empty() {
+            continue;
+        }
+        let candidate = dir.join(name);
+        let Ok(meta) = std::fs::metadata(&candidate) else {
+            continue;
+        };
+        if !meta.is_file() {
+            continue;
+        }
+        if meta.permissions().mode() & 0o111 == 0 {
+            continue;
+        }
+        return Some(candidate);
+    }
+    None
 }
 
 fn parse_listening_ports(output: &str) -> Vec<u16> {

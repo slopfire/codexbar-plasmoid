@@ -15,6 +15,17 @@ PlasmaComponents3.Frame {
 
     padding: Kirigami.Units.smallSpacing
 
+    // Collapse to a compact error notice when the entry has an error and no
+    // usage data to render (e.g. an expired OpenCode Go session in a
+    // secondary browser profile). Keeps the dashboard readable when several
+    // accounts of the same provider surface failures.
+    readonly property bool isErrorOnly: !!(
+        entry && entry.error
+        && (!entry.rows || entry.rows.length === 0)
+        && !showBalanceSummary()
+    )
+    opacity: isErrorOnly ? 0.72 : 1.0
+
     background: Rectangle {
         color: "transparent"
         border.width: 0
@@ -69,6 +80,7 @@ PlasmaComponents3.Frame {
         }
 
         Repeater {
+            visible: !card.isErrorOnly
             model: card.entry && card.entry.rows ? card.entry.rows : []
 
             UsageBarRow {
@@ -82,7 +94,7 @@ PlasmaComponents3.Frame {
 
         UsageBarRow {
             Layout.fillWidth: true
-            visible: card.entry && card.entry.codeReviewRemainingPercent !== null
+            visible: !card.isErrorOnly && card.entry && card.entry.codeReviewRemainingPercent !== null
             title: i18n("Code review")
             percentLeft: card.entry ? card.entry.codeReviewRemainingPercent : null
             accentColor: card.accentColor
@@ -92,7 +104,7 @@ PlasmaComponents3.Frame {
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.smallSpacing
             Layout.bottomMargin: Kirigami.Units.smallSpacing
-            visible: card.showBalanceSummary()
+            visible: !card.isErrorOnly && card.showBalanceSummary()
             spacing: Kirigami.Units.largeSpacing
 
             Rectangle {
@@ -150,6 +162,7 @@ PlasmaComponents3.Frame {
 
         GridLayout {
             Layout.fillWidth: true
+            visible: !card.isErrorOnly
             columns: width > Kirigami.Units.gridUnit * 18 ? 2 : 1
             rowSpacing: Kirigami.Units.smallSpacing
             columnSpacing: Kirigami.Units.largeSpacing
@@ -179,20 +192,34 @@ PlasmaComponents3.Frame {
         HistoryChart {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 3
-            visible: card.showHistory && card.entry && card.entry.dailyUsage && card.entry.dailyUsage.length > 0
+            visible: !card.isErrorOnly && card.showHistory && card.entry && card.entry.dailyUsage && card.entry.dailyUsage.length > 0
             points: card.entry && card.entry.dailyUsage ? card.entry.dailyUsage : []
             accentColor: card.accentColor
         }
 
-        PlasmaComponents3.Label {
+        RowLayout {
             Layout.fillWidth: true
+            Layout.topMargin: card.isErrorOnly ? 0 : Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
             visible: card.entry && card.entry.error
-            text: card.entry && card.entry.error ? (card.entry.error.message || card.entry.error.description || JSON.stringify(card.entry.error)) : ""
-            color: Kirigami.Theme.negativeTextColor
-            font: Kirigami.Theme.smallFont
-            wrapMode: Text.Wrap
-            maximumLineCount: 3
-            elide: Text.ElideRight
+
+            Kirigami.Icon {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                source: "dialog-warning"
+                color: Kirigami.Theme.negativeTextColor
+                visible: card.isErrorOnly
+            }
+
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                text: card.entry && card.entry.error ? (card.entry.error.message || card.entry.error.description || JSON.stringify(card.entry.error)) : ""
+                color: Kirigami.Theme.negativeTextColor
+                font: card.isErrorOnly ? Kirigami.Theme.defaultFont : Kirigami.Theme.smallFont
+                wrapMode: Text.Wrap
+                maximumLineCount: card.isErrorOnly ? -1 : 3
+                elide: Text.ElideRight
+            }
         }
 
         PlasmaComponents3.Label {

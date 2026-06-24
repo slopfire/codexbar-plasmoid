@@ -143,7 +143,6 @@ async function ensureSqlite(targetDir, testBinaryPath) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 5000,
-      argv0: "/tmp/CodexBarCLI",
     });
   } catch (error) {
     const errMsg = error.message || String(error);
@@ -233,8 +232,19 @@ function archId() {
   }
 }
 
-function assetName(version) {
-  return `CodexBarCLI-v${version}-${platformId()}-${archId()}.tar.gz`;
+function candidateAssetNames(version) {
+  const plat = platformId();
+  const arch = archId();
+  if (plat === "linux") {
+    // Prefer the statically-linked musl build: it runs on non-FHS systems
+    // (NixOS, Alpine, etc.) without libcurl/libstdc++/libsqlite3 at runtime.
+    // Fall back to the glibc build for releases that don't ship a musl asset.
+    return [
+      `CodexBarCLI-v${version}-linux-musl-${arch}.tar.gz`,
+      `CodexBarCLI-v${version}-linux-${arch}.tar.gz`,
+    ];
+  }
+  return [`CodexBarCLI-v${version}-${plat}-${arch}.tar.gz`];
 }
 
 function userAgent() {
@@ -359,13 +369,16 @@ async function fetchReleaseMetadata(repo, tag, force) {
   if (!version) {
     throw new Error("GitHub release has no version tag");
   }
-  const name = assetName(version);
-  const checksumName = `${name}.sha256`;
-  const asset = (release.assets || []).find((a) => a.name === name);
-  const checksumAsset = (release.assets || []).find((a) => a.name === checksumName);
-  if (!asset) {
-    throw new Error(`No release asset found for ${name}`);
+  const assets = release.assets || [];
+  const name = candidateAssetNames(version).find((candidate) =>
+    assets.some((a) => a.name === candidate)
+  );
+  if (!name) {
+    throw new Error(`No release asset found for ${candidateAssetNames(version).join(" or ")}`);
   }
+  const checksumName = `${name}.sha256`;
+  const asset = assets.find((a) => a.name === name);
+  const checksumAsset = assets.find((a) => a.name === checksumName);
   const metadata = {
     version,
     tag: release.tag_name,
@@ -393,9 +406,20 @@ function getInstalledVersion(binaryPath) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 10000,
-      argv0: "/tmp/CodexBarCLI",
     });
     const match = stdout.match(/(\d+\.\d+\.\d+[^\s]*)/);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+    // Binary could not be probed; fall through to the VERSION file.
+  }
+  // The CLI resolves its version from a sibling `VERSION` file. When the
+  // binary prints no version (file missing at its argv[0] dir) or cannot run,
+  // read the file next to the managed binary directly.
+  try {
+    const raw = clean(fs.readFileSync(path.join(path.dirname(binaryPath), "VERSION"), "utf8"));
+    const match = raw.match(/(\d+\.\d+\.\d+[^\s]*)/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -424,10 +448,36 @@ function extractTarGz(archivePath, destDir) {
   });
 }
 
+function cleanupStaleUpdateDirs(targetDir) {
+  // Remove leftover `.update-*` temp directories from killed or crashed
+  // update attempts. Each holds the downloaded tarball + extracted binary,
+  // so accumulating them wastes real disk space.
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(targetDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.startsWith(".update-")) {
+      continue;
+    }
+    const full = path.join(targetDir, entry);
+    try {
+      const st = fs.statSync(full);
+      if (st.mtimeMs < cutoff) {
+        fs.rmSync(full, { recursive: true, force: true });
+      }
+    } catch {}
+  }
+}
+
 async function performUpdate(metadata, options = {}) {
   const targetDir = options.targetDir || managedDir();
   const targetBinary = path.join(targetDir, "codexbar");
   ensureManagedDir();
+  cleanupStaleUpdateDirs(targetDir);
 
   const tempRoot = path.join(targetDir, `.update-${process.pid}-${Date.now()}`);
   fs.mkdirSync(tempRoot, { recursive: true, mode: 0o700 });
@@ -472,7 +522,6 @@ async function performUpdate(metadata, options = {}) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 10000,
-      argv0: "/tmp/CodexBarCLI",
     });
     const versionMatch = testStdout.match(/(\d+\.\d+\.\d+[^\s]*)/);
     if (!versionMatch) {
@@ -481,6 +530,14 @@ async function performUpdate(metadata, options = {}) {
 
     // Atomic replacement via rename.
     fs.renameSync(extractedBinary, targetBinary);
+    // The CLI reads its version from a `VERSION` file next to the executable,
+    // so install it alongside the managed binary (the tarball ships one).
+    const versionFile = path.join(extractDir, "VERSION");
+    if (fs.existsSync(versionFile)) {
+      const tmpVersion = `${path.join(targetDir, "VERSION")}.tmp.${process.pid}`;
+      fs.copyFileSync(versionFile, tmpVersion);
+      fs.renameSync(tmpVersion, path.join(targetDir, "VERSION"));
+    }
     return { version: versionMatch[1], targetBinary };
   } finally {
     try {
@@ -558,6 +615,7 @@ export async function updateIfNeeded(options = {}) {
   const result = await performUpdate(metadata, { targetDir });
   return {
     ok: true,
+    previousVersion: installedVersion || null,
     installedVersion: result.version,
     latestVersion: metadata.version,
     targetBinary: result.targetBinary,

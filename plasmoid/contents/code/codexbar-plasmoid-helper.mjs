@@ -6,6 +6,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const args = parseArgs(process.argv.slice(2));
+// KDE's plasmoid process inherits the user's session env from systemd --user
+// (which sources $XDG_CONFIG_HOME/environment.d/*.conf), but env vars the
+// user only set in their shell rc files (e.g. ~/.zshrc) do not make it
+// across. Re-read the standard env.d directory plus a plasmoid-local
+// ~/.codexbar/.env so API keys and other exports still reach the spawned
+// CLIs. Values that were already on process.env when the helper started
+// take precedence so explicit overrides still win.
+loadEnvironmentFromFiles();
 const timeoutMs = Math.max(5, Number(args.timeout || 45)) * 1000;
 const cliPath = args.cli || process.env.CODEXBAR_CLI || "codexbar";
 const nativeCliPath = args.nativeCli || process.env.CODEXBAR_NATIVE_CLI || resolveNativeCliPath();
@@ -21,6 +29,93 @@ function injectSqliteEnv(targetDir) {
       process.env[envVar] = [targetDir, ...paths].join(":");
     }
   }
+}
+
+function loadEnvironmentFromFiles() {
+  // systemd --user sources KEY=VAL entries from $XDG_CONFIG_HOME/environment.d
+  // (default ~/.config/environment.d). KDE inherits that into the user session,
+  // but the plasmoid process sometimes loses them — re-read the directory
+  // so API keys set with `systemctl --user set-environment` or by hand survive
+  // a plasmoid restart. Values that were already on process.env when the
+  // helper started win so explicit overrides still take precedence; later
+  // files override earlier ones (matching systemd semantics).
+  const preExisting = new Set(Object.keys(process.env));
+  const applied = new Map();
+  const envDir = path.join(
+    process.env.XDG_CONFIG_HOME && clean(process.env.XDG_CONFIG_HOME)
+      ? process.env.XDG_CONFIG_HOME
+      : path.join(os.homedir(), ".config"),
+    "environment.d",
+  );
+  const entries = [];
+  if (fs.existsSync(envDir) && fs.statSync(envDir).isDirectory()) {
+    try {
+      for (const name of fs.readdirSync(envDir)) {
+        if (name.endsWith(".conf")) {
+          entries.push(path.join(envDir, name));
+        }
+      }
+    } catch {
+      // unreadable env dir: skip without blocking the helper
+    }
+  }
+  entries.sort();
+  // ~/.codexbar/.env is the plasmoid-local dotenv; convenient for keys the
+  // user does not want to leak into a system-wide environment.d. It loads
+  // last so its values win over system-wide defaults.
+  const dotenvPath = path.join(os.homedir(), ".codexbar", ".env");
+  if (fs.existsSync(dotenvPath)) {
+    entries.push(dotenvPath);
+  }
+  for (const file of entries) {
+    for (const [key, value] of parseEnvFile(file)) {
+      if (preExisting.has(key)) {
+        continue;
+      }
+      applied.set(key, value);
+    }
+  }
+  for (const [key, value] of applied) {
+    process.env[key] = value;
+  }
+}
+
+function parseEnvFile(filePath) {
+  const pairs = [];
+  let raw;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch {
+    return pairs;
+  }
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    // Skip shell-only prefixes (`export FOO=bar`) and command substitutions
+    // we cannot safely expand inside a Node process.
+    const stripped = trimmed.replace(/^export\s+/, "");
+    const eqIndex = stripped.indexOf("=");
+    if (eqIndex <= 0) {
+      continue;
+    }
+    const key = stripped.slice(0, eqIndex).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+    let value = stripped.slice(eqIndex + 1).trim();
+    // Strip matching single or double quotes.
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    pairs.push([key, value]);
+  }
+  return pairs;
 }
 
 const managedDir = path.dirname(managedCliBinary);
@@ -174,9 +269,6 @@ function runUsageForConfig(config) {
     commandArgs.push("--account-index", String(Number(config.accountIndex)));
   }
 
-  if (!anonymizeEmails) {
-    commandArgs.push("--anonymize-emails", "false");
-  }
 
   const command = commandForConfig(config);
   try {
@@ -267,15 +359,45 @@ function normalizeSnapshot(usagePayload, costPayload) {
     }
   }
 
-  const entries = asArray(usagePayload).map((item) => {
+  const entries = asArray(usagePayload).map((item, index) => {
     const cost = costByProvider.get(item.provider);
-    return normalizeProvider(item, cost);
+    const normalized = normalizeProvider(item, cost);
+    // Stable id so the switcher can select between multiple accounts of the
+    // same provider (e.g. several OpenCode Go accounts). Prefer the account
+    // email; fall back to the entry index to guarantee uniqueness.
+    normalized.id = `${normalized.provider}:${normalized.account || String(index)}`;
+    return normalized;
   });
 
-  if (entries.length === 0 && costByProvider.size > 0) {
+  // For each provider, keep only working accounts. If every account failed,
+  // retain a single error entry so the user can see why nothing loaded.
+  const visibleByProvider = new Map();
+  for (const entry of entries) {
+    const bucket = visibleByProvider.get(entry.provider) || { successes: [], firstError: null };
+    if (entry.error) {
+      if (!bucket.firstError) bucket.firstError = entry;
+    } else {
+      bucket.successes.push(entry);
+    }
+    visibleByProvider.set(entry.provider, bucket);
+  }
+  const filteredEntries = [];
+  for (const bucket of visibleByProvider.values()) {
+    if (bucket.successes.length > 0) {
+      filteredEntries.push(...bucket.successes);
+    } else if (bucket.firstError) {
+      filteredEntries.push(bucket.firstError);
+    }
+  }
+
+  if (filteredEntries.length === 0 && costByProvider.size > 0) {
+    let fallbackIndex = 0;
     for (const [providerId, cost] of costByProvider) {
       if (providerId !== "cost") {
-        entries.push(normalizeProvider({ provider: providerId, source: "local" }, cost));
+        const fallback = normalizeProvider({ provider: providerId, source: "local" }, cost);
+        fallback.id = `${fallback.provider}:${fallback.account || String(fallbackIndex)}`;
+        filteredEntries.push(fallback);
+        fallbackIndex += 1;
       }
     }
   }
@@ -284,10 +406,11 @@ function normalizeSnapshot(usagePayload, costPayload) {
     ok: true,
     generatedAt: new Date().toISOString(),
     requestedProvider: provider,
-    entries,
+    entries: filteredEntries,
     costError: costByProvider.get("cost")?.error?.message || null,
   };
 }
+
 
 function normalizeProvider(item, cost) {
   const providerId = item.provider || "unknown";

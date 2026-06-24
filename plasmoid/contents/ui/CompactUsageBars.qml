@@ -23,7 +23,7 @@ Item {
         const rows = item.rows || [];
         if (rows.length > 0 && rows[0].kind === "credits") {
             const text = String(rows[0].valueText || "");
-            return Math.min(96, Math.max(bars.defaultGroupWidth, text.length * 7 + 8));
+            return Math.min(64, Math.max(bars.defaultGroupWidth, text.length * 6 + 4));
         }
         return bars.defaultGroupWidth;
     }
@@ -119,12 +119,12 @@ Item {
         Kirigami.Theme.textColor.r,
         Kirigami.Theme.textColor.g,
         Kirigami.Theme.textColor.b,
-        bars.stale ? 0.18 : 0.28)
+        bars.stale ? 0.30 : 0.45)
     readonly property color strokeColor: Qt.rgba(
         Kirigami.Theme.textColor.r,
         Kirigami.Theme.textColor.g,
         Kirigami.Theme.textColor.b,
-        bars.stale ? 0.28 : 0.44)
+        bars.stale ? 0.45 : 0.65)
 
     function textColorForBg(bg) {
         const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
@@ -139,8 +139,8 @@ Item {
 
             y: 2
             width: bars.groupWidthFor(index)
-            height: bars.height - 4
-            x: 2 + bars.groupXFor(index)
+            height: Math.max(0, bars.height - 5)
+            x: bars.groupXFor(index)
 
             Repeater {
                 model: groupRows
@@ -163,7 +163,7 @@ Item {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: parent.width * Number(modelData.percentLeft) / 100
+                        width: Math.max(3, parent.width * Number(modelData.percentLeft) / 100)
                         radius: parent.radius
                         color: bars.stale
                             ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)

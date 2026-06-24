@@ -6,10 +6,10 @@ import org.kde.kirigami as Kirigami
 Item {
     id: switcher
 
-    signal providerSelected(string provider)
+    signal entrySelected(string entryId)
 
     property var entries: []
-    property string selectedProvider: ""
+    property string selectedEntryId: ""
 
     implicitHeight: grid.implicitHeight
     height: grid.implicitHeight
@@ -51,8 +51,8 @@ Item {
                 Layout.preferredWidth: switcher.buttonWidth
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3.4
                 checkable: true
-                checked: switcher.selectedProvider === modelData.provider
-                onClicked: switcher.providerSelected(modelData.provider)
+                checked: switcher.selectedEntryId === button.modelData.id
+                onClicked: switcher.entrySelected(button.modelData.id)
 
                 background: Rectangle {
                     radius: Kirigami.Units.cornerRadius
@@ -108,7 +108,7 @@ Item {
 
                     QtControls.Label {
                         Layout.fillWidth: true
-                        text: button.modelData.source || ""
+                        text: button.modelData.account || button.modelData.source || ""
                         color: button.checked
                             ? Qt.rgba(Kirigami.Theme.highlightedTextColor.r, Kirigami.Theme.highlightedTextColor.g, Kirigami.Theme.highlightedTextColor.b, 0.78)
                             : Kirigami.Theme.disabledTextColor

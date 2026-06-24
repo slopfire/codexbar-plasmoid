@@ -66,13 +66,13 @@ fn run() -> anyhow::Result<()> {
     let http = HttpClient::new(timeout)?;
     let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
 
-    let mut payloads = if provider == "all" {
+    let mut payloads: Vec<ProviderPayload> = if provider == "all" {
         NATIVE_PROVIDERS
             .iter()
-            .map(|provider_id| fetch_provider(provider_id, &http, &home, include_status, timeout))
+            .flat_map(|provider_id| fetch_provider(provider_id, &http, &home, include_status, timeout))
             .collect::<Vec<_>>()
     } else if NATIVE_PROVIDERS.contains(&provider.as_str()) {
-        vec![fetch_provider(&provider, &http, &home, include_status, timeout)]
+        fetch_provider(&provider, &http, &home, include_status, timeout)
     } else {
         anyhow::bail!("Provider not supported by codexbar-plasmoid: {provider}");
     };

@@ -17,12 +17,15 @@ pub fn fetch_provider(
     home: &Path,
     include_status: bool,
     timeout: Duration,
-) -> ProviderPayload {
+) -> Vec<ProviderPayload> {
     match provider {
-        "antigravity" => antigravity::fetch(timeout),
-        "cursor" => cursor::fetch(http, include_status),
-        "opencode" => opencode::fetch(http),
+        "antigravity" => vec![antigravity::fetch(timeout)],
+        "cursor" => vec![cursor::fetch(http, include_status)],
+        "opencode" => vec![opencode::fetch(http)],
         "opencodego" => opencodego::fetch(http, home),
-        _ => ProviderPayload::error(provider, format!("Provider not supported by codexbar-plasmoid: {provider}")),
+        _ => vec![ProviderPayload::error(
+            provider,
+            format!("Provider not supported by codexbar-plasmoid: {provider}"),
+        )],
     }
 }

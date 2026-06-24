@@ -36,20 +36,23 @@ tarball is downloaded, its SHA-256 checksum is verified, the binary is tested
 with `--version`, and only then is the managed copy replaced. If the download
 or test fails, the previous managed binary is preserved.
 
-The upstream Linux release asset is dynamically linked and needs `libcurl`,
-`libstdc++`, and `libsqlite3` available at runtime. On NixOS or other
-non-FHS systems, auto-download may fail with a shared-library error. In that
-case install a compatible CodexBar CLI through your package manager (or use
-`nix-ld` on NixOS) and set the CLI path manually, or stick to providers that
-use the bundled native fetcher.
+On Linux the updater prefers the statically-linked musl release asset
+(`linux-musl-x86_64` / `linux-musl-aarch64`), which runs on NixOS and other
+non-FHS systems without `libcurl`, `libstdc++`, or `libsqlite3` at runtime. It
+falls back to the glibc asset only for releases that do not ship a musl build;
+in that case a non-FHS host needs `nix-ld` (NixOS) or those libraries present,
+or you can install a compatible CodexBar CLI yourself and point the CLI path at
+it.
 
 You can also check or trigger an update manually from the widget's full view
 using the CLI update status row at the bottom.
 
-The updater picks the release asset for the current platform and architecture
-(`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-arm64`). Leave the
-**CLI executable** setting as `codexbar` to use the managed binary when
-auto-update is enabled, or set an absolute path to use your own installation.
+The updater installs the release asset for the current platform and
+architecture (`linux-musl-x86_64`, `linux-musl-aarch64`, `macos-x86_64`,
+`macos-arm64`) together with its `VERSION` file, which the CLI reads to report
+its version. Leave the **CLI executable** setting as `codexbar` to use the
+managed binary when auto-update is enabled, or set an absolute path to use your
+own installation.
 
 ## Configure
 
@@ -95,6 +98,40 @@ provider, or all providers, and can be tinted by provider color, remaining-limit
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the
 widget may display full account addresses.
+
+### Environment Variables on Linux (esp. NixOS)
+
+The plasmoid process inherits the user's session environment from `systemd --user`, which only sources
+`$XDG_CONFIG_HOME/environment.d/*.conf`. Variables exported from `~/.zshrc`, `~/.bashrc`, or a nix profile are
+**not** available to spawned children, so the upstream CodexBar CLI sees no API keys and the bundled native
+binary cannot find `lsof` even when both exist on the shell's `PATH`.
+
+Two opt-in sources are loaded by the helper **before** it spawns the upstream CLI or the native binary:
+
+1. `$XDG_CONFIG_HOME/environment.d/*.conf` (default `~/.config/environment.d/*.conf`) — systemd-style `KEY=VAL` files,
+   loaded in lexical order so later files override earlier ones. This is the right place to put `DEEPSEEK_API_KEY`,
+   `OPENROUTER_API_KEY`, `NIX_LD_LIBRARY_PATH`, `PATH`, and any other env var the widget should see.
+2. `~/.codexbar/.env` — a plasmoid-local dotenv. Its values win over `environment.d` (matching systemd's later-wins
+   semantics), so it is a convenient place to override a system-wide key for this widget without touching the global
+   env. The format is the same `KEY=VAL` per line; `#` comments and `export FOO=bar` prefixes are accepted, and
+   surrounding single or double quotes are stripped.
+
+Values that are already set in the plasmoid process's `process.env` (e.g. injected by systemd or Plasma) always
+take precedence over anything loaded from disk.
+
+Example NixOS setup that gets Antigravity, DeepSeek, and OpenRouter working without touching shell rc files:
+
+```ini
+# ~/.config/environment.d/codexbar.conf
+PATH=/run/current-system/sw/bin:/etc/profiles/per-user/<user>/bin:/home/<user>/.nix-profile/bin:/run/wrappers/bin
+NIX_LD_LIBRARY_PATH=/run/current-system/sw/share/nix-ld/lib
+DEEPSEEK_API_KEY=sk-...
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+Then log out and back in (or `systemctl --user import-environment`) so `systemd --user` picks up the new file.
+The widget does not modify `PATH` or `NIX_LD_LIBRARY_PATH` itself — set them where the rest of your environment
+lives.
 
 ### API Key Configuration
 
