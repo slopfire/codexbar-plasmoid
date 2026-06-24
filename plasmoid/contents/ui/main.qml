@@ -24,7 +24,7 @@ PlasmoidItem {
         : entries
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
-    readonly property int refreshInterval: Math.max(30, plasmoid.configuration.refreshIntervalSeconds || 300)
+    readonly property int refreshInterval: Math.max(30, plasmoid.configuration.refreshIntervalSeconds || 120)
 
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : compactRepresentation
     toolTipMainText: primaryEntry

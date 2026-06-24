@@ -58,7 +58,7 @@
     </entry>
     <entry name="refreshIntervalSeconds" type="Int">
       <label>Refresh interval in seconds</label>
-      <default>300</default>
+      <default>120</default>
       <min>30</min>
       <max>86400</max>
     </entry>

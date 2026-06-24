@@ -8,11 +8,34 @@ Item {
     property var barItems: []
     property color accentColor: Kirigami.Theme.highlightColor
     property bool stale: false
+    property real barGroupWidth: 18
 
     readonly property var barsModel: normalizedBars()
-    readonly property int barCount: Math.max(1, barsModel.length)
-    readonly property real groupGap: barsModel.length > 1 ? 3 : 0
+    readonly property real groupGap: barsModel.length > 1 ? Kirigami.Units.smallSpacing : 0
     readonly property real laneGap: 2
+    readonly property real defaultGroupWidth: Math.max(8, Number(bars.barGroupWidth || 18))
+
+    function groupWidthFor(rowIndex) {
+        const item = bars.barsModel[rowIndex];
+        if (!item) {
+            return bars.defaultGroupWidth;
+        }
+        const rows = item.rows || [];
+        if (rows.length > 0 && rows[0].kind === "credits") {
+            const text = String(rows[0].valueText || "");
+            return Math.min(96, Math.max(bars.defaultGroupWidth, text.length * 7 + 8));
+        }
+        return bars.defaultGroupWidth;
+    }
+
+    function groupXFor(rowIndex) {
+        let x = 0;
+        for (let i = 0; i < rowIndex; i += 1) {
+            x += bars.groupWidthFor(i) + bars.groupGap;
+        }
+        return x;
+    }
+
 
     implicitWidth: Kirigami.Units.iconSizes.smallMedium
     implicitHeight: Kirigami.Units.iconSizes.smallMedium
@@ -115,9 +138,9 @@ Item {
             readonly property var groupRows: modelData.rows || []
 
             y: 2
-            width: Math.max(3, (bars.width - 4 - (bars.barCount - 1) * bars.groupGap) / bars.barCount)
+            width: bars.groupWidthFor(index)
             height: bars.height - 4
-            x: 2 + index * (width + bars.groupGap)
+            x: 2 + bars.groupXFor(index)
 
             Repeater {
                 model: groupRows
@@ -151,10 +174,8 @@ Item {
 
             Rectangle {
                 visible: groupRows.length > 0 && groupRows[0].kind === "credits"
-                anchors.centerIn: parent
-                width: parent.width
-                height: Math.min(parent.height, Kirigami.Units.gridUnit)
-                radius: Math.max(3, height / 3)
+                anchors.fill: parent
+                radius: Math.max(3, Math.min(height, parent.width) / 4)
                 color: bars.stale
                     ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)
                     : groupRows[0].color
@@ -162,7 +183,9 @@ Item {
                 border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.30)
 
                 Text {
-                    anchors.centerIn: parent
+                    anchors.fill: parent
+                    anchors.leftMargin: 2
+                    anchors.rightMargin: 2
                     readonly property string _firstRowValueText:
                         groupRows.length > 0 && groupRows[0] && groupRows[0].kind === "credits"
                             ? String(groupRows[0].valueText || "")
@@ -170,7 +193,8 @@ Item {
                     text: _firstRowValueText
                     color: textColorForBg(parent.color)
                     font.bold: true
-                    font.pixelSize: Math.max(6, Math.min(10, Math.floor(parent.width / Math.max(1, text.length) * 1.35)))
+                    font.pixelSize: Math.max(7, Math.min(11, Math.floor(parent.height * 0.5)))
+                    elide: Text.ElideRight
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }

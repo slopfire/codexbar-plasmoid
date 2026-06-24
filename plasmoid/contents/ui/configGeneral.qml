@@ -21,8 +21,8 @@ Kirigami.ScrollablePage {
     property alias cfg_anonymizeEmail: anonymizeEmail.checked
     property alias cfg_autoUpdateCli: autoUpdateCli.checked
     property string cfg_cliUpdateChannel: cliUpdateChannel.currentValue
-    property int cfg_refreshIntervalSeconds: refreshInterval.value
-    property int cfg_requestTimeoutSeconds: requestTimeout.value
+    property alias cfg_refreshIntervalSeconds: refreshInterval.value
+    property alias cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
     property alias cfg_compactShowMetric: compactShowMetric.checked
     property alias cfg_compactDisplay: compactDisplay.currentValue
@@ -535,7 +535,7 @@ Kirigami.ScrollablePage {
                 }
                 valueFromText: function(text) {
                     const parsed = parseInt(text, 10);
-                    return Number.isFinite(parsed) ? parsed : 300;
+                    return Number.isFinite(parsed) ? parsed : 120;
                 }
             }
 

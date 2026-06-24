@@ -28,9 +28,6 @@ Control {
     property int providerBarWidth: 18
 
     readonly property bool showBars: compact.displayMode === "bars"
-    readonly property int barGroupCount: compact.showBars
-        ? Math.max(1, compact.barItems && compact.barItems.length > 0 ? compact.barItems.length : 1)
-        : 1
     readonly property url providerIconSource: {
         const known = ["abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram", "deepseek", "doubao", "elevenlabs", "factory", "gemini", "grok", "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo", "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "stepfun", "synthetic", "t3chat", "venice", "vertexai", "warp", "windsurf", "zai"];
         const id = String(compact.providerId || "").toLowerCase().replace(/[-_]/g, "");
@@ -48,8 +45,32 @@ Control {
         ? Math.max(16, Math.min(Kirigami.Units.iconSizes.smallMedium, Math.max(0, compact.availableHeight)))
         : Kirigami.Units.iconSizes.smallMedium
     readonly property real barGroupWidth: Math.max(8, Number(compact.providerBarWidth || 18))
+
+    function creditsGroupWidth(text) {
+        return Math.min(96, Math.max(compact.barGroupWidth, String(text).length * 7 + 8));
+    }
+
+    function barGroupsTotalWidth() {
+        const items = compact.barItems || [];
+        if (items.length === 0) {
+            return compact.barGroupWidth;
+        }
+        let total = 0;
+        for (let i = 0; i < items.length; i += 1) {
+            const rows = items[i].rows || [];
+            const isCredits = rows.length > 0 && rows[0].kind === "credits";
+            total += isCredits
+                ? compact.creditsGroupWidth(rows[0].valueText)
+                : compact.barGroupWidth;
+            if (i > 0) {
+                total += Kirigami.Units.smallSpacing;
+            }
+        }
+        return total;
+    }
+
     readonly property real visualWidth: compact.showBars
-        ? Math.max(compact.iconSize, compact.barGroupCount * compact.barGroupWidth + Math.max(0, compact.barGroupCount - 1) * Kirigami.Units.smallSpacing)
+        ? Math.max(compact.iconSize, compact.barGroupsTotalWidth())
         : compact.iconSize
 
     implicitWidth: Math.max(
@@ -106,6 +127,7 @@ Control {
                 usageRows: compact.usageRows
                 barItems: compact.barItems
                 accentColor: compact.accentColor
+                barGroupWidth: compact.barGroupWidth
             }
 
             Kirigami.Icon {
