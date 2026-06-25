@@ -128,7 +128,7 @@ Control {
                 anchors.centerIn: parent
                 width: parent.width
                 height: parent.height
-                visible: !compact.loading && compact.errorText.length === 0 && compact.showBars
+                visible: compact.errorText.length === 0 && compact.showBars
                 usageRows: compact.usageRows
                 barItems: compact.barItems
                 accentColor: compact.accentColor
@@ -139,7 +139,7 @@ Control {
                 anchors.centerIn: parent
                 width: parent.width
                 height: parent.height
-                visible: !compact.loading && compact.errorText.length === 0 && !compact.showBars
+                visible: compact.errorText.length === 0 && !compact.showBars
                 source: compact.providerIconSource
                 isMask: true
                 color: Kirigami.Theme.textColor
@@ -155,7 +155,7 @@ Control {
 
             PlasmaComponents3.Label {
                 id: valueLabel
-                text: compact.loading ? i18n("…") : compact.valueText
+                text: compact.loading && !compact.entry ? i18n("…") : compact.valueText
                 font.bold: true
                 horizontalAlignment: Text.AlignLeft
                 elide: Text.ElideRight
