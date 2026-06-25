@@ -1,7 +1,7 @@
 use crate::http::HttpClient;
 use crate::output::{
     clamp_percent, rate_window, ProviderIdentitySnapshot, ProviderPayload, ProviderStatusPayload,
-    UsageSnapshot,
+    UsageRowSnapshot, UsageSnapshot,
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
@@ -15,6 +15,14 @@ const GET_USER_STATUS_PATH: &str = "/exa.language_server_pb.LanguageServerServic
 const GET_COMMAND_MODEL_CONFIGS_PATH: &str =
     "/exa.language_server_pb.LanguageServerService/GetCommandModelConfigs";
 const GET_UNLEASH_DATA_PATH: &str = "/exa.language_server_pb.LanguageServerService/GetUnleashData";
+const RETRIEVE_USER_QUOTA_SUMMARY_PATH: &str =
+    "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary";
+const QUOTA_SUMMARY_ROW_ORDER: &[(&str, &str, &str)] = &[
+    ("gemini-5h", "gemini-five-hour", "Gemini five-hour limit"),
+    ("gemini-weekly", "gemini-weekly", "Gemini weekly limit"),
+    ("3p-5h", "claude-gpt-five-hour", "Claude/GPT five-hour limit"),
+    ("3p-weekly", "claude-gpt-weekly", "Claude/GPT weekly limit"),
+];
 const NOT_RUNNING_MESSAGE: &str =
     "Antigravity is not running. Start agy or the Antigravity IDE first.";
 
@@ -37,7 +45,7 @@ fn fetch_inner(timeout: Duration) -> Result<ProviderPayload> {
     let endpoint = resolve_working_endpoint(&http, &ports, &process.csrf_token)?;
     let request_endpoints = request_endpoints(&endpoint, &ports, &process.csrf_token);
 
-    let snapshot = match fetch_user_status(&http, &request_endpoints) {
+    let mut snapshot = match fetch_user_status(&http, &request_endpoints) {
         Ok(snapshot) => snapshot,
         Err(primary_error) => {
             fetch_command_model_configs(&http, &request_endpoints).map_err(|fallback_error| {
@@ -45,6 +53,10 @@ fn fetch_inner(timeout: Duration) -> Result<ProviderPayload> {
             })?
         }
     };
+
+    if let Ok(quota_rows) = fetch_quota_summary_rows(&http, &request_endpoints) {
+        snapshot.usage_rows = Some(quota_rows);
+    }
 
     let account_email = snapshot
         .identity
@@ -430,6 +442,94 @@ fn fetch_command_model_configs(
     Err(last_error.unwrap_or_else(|| anyhow!("GetCommandModelConfigs failed")))
 }
 
+fn fetch_quota_summary_rows(
+    http: &HttpClient,
+    endpoints: &[ConnectionEndpoint],
+) -> Result<Vec<UsageRowSnapshot>> {
+    let body = default_request_body();
+    let mut last_error = None;
+    for endpoint in endpoints {
+        match http.post_connect_json(
+            &endpoint.url(RETRIEVE_USER_QUOTA_SUMMARY_PATH),
+            &endpoint.csrf_token,
+            &body,
+        ) {
+            Ok(text) => match parse_quota_summary_response(&text) {
+                Ok(rows) => return Ok(rows),
+                Err(error) => last_error = Some(error),
+            },
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("RetrieveUserQuotaSummary failed")))
+}
+
+fn parse_quota_summary_response(text: &str) -> Result<Vec<UsageRowSnapshot>> {
+    let response: QuotaSummaryResponse =
+        serde_json::from_str(text).context("parse RetrieveUserQuotaSummary JSON")?;
+    let groups = response
+        .response
+        .and_then(|payload| payload.groups)
+        .unwrap_or_default();
+    let mut bucket_map = std::collections::HashMap::new();
+    for group in groups {
+        for bucket in group.buckets.unwrap_or_default() {
+            if let Some(id) = bucket.bucket_id.clone() {
+                bucket_map.insert(id, bucket);
+            }
+        }
+    }
+
+    let rows = QUOTA_SUMMARY_ROW_ORDER
+        .iter()
+        .filter_map(|(bucket_id, row_id, title)| {
+            bucket_map.get(*bucket_id).map(|bucket| UsageRowSnapshot {
+                id: (*row_id).to_string(),
+                title: (*title).to_string(),
+                percent_left: bucket
+                    .remaining_fraction
+                    .map(|fraction| clamp_percent(fraction * 100.0))
+                    .unwrap_or(0.0),
+                resets_at: bucket
+                    .reset_time
+                    .as_deref()
+                    .and_then(parse_iso_date),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if rows.is_empty() {
+        anyhow::bail!("RetrieveUserQuotaSummary returned no quota buckets");
+    }
+    Ok(rows)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuotaSummaryResponse {
+    response: Option<QuotaSummaryPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuotaSummaryPayload {
+    groups: Option<Vec<QuotaGroup>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuotaGroup {
+    buckets: Option<Vec<QuotaBucket>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QuotaBucket {
+    bucket_id: Option<String>,
+    remaining_fraction: Option<f64>,
+    reset_time: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UserStatusResponse {
@@ -514,8 +614,23 @@ struct ModelQuota {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ModelFamily {
     Claude,
+    Gpt,
     GeminiPro,
     GeminiFlash,
+    Unknown,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ModelGroup {
+    Gemini,
+    ClaudeGpt,
+    Unknown,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QuotaWindow {
+    Weekly,
+    FiveHour,
     Unknown,
 }
 
@@ -602,14 +717,22 @@ fn usage_snapshot_from_quotas(
         anyhow::bail!("No Antigravity quota models available");
     }
 
+    let now = Utc::now();
     let normalized = quotas.into_iter().map(normalize_model).collect::<Vec<_>>();
-    let summary_models: Vec<_> = normalized
+    let usage_models: Vec<_> = normalized
+        .iter()
+        .filter(|model| model.quota.remaining_fraction.is_some() || model.quota.reset_time.is_some())
+        .cloned()
+        .collect();
+    let summary_models: Vec<_> = usage_models
         .iter()
         .filter(|model| model.quota.remaining_fraction.is_some())
         .cloned()
         .collect();
+    let usage_rows = grouped_usage_rows(&usage_models, now);
 
     let primary = representative(ModelFamily::Claude, &summary_models)
+        .or_else(|| representative(ModelFamily::Gpt, &summary_models))
         .or_else(|| fallback_representative(&summary_models))
         .map(rate_window_for_quota);
     let secondary =
@@ -621,9 +744,14 @@ fn usage_snapshot_from_quotas(
         primary,
         secondary,
         tertiary,
+        usage_rows: if usage_rows.is_empty() {
+            None
+        } else {
+            Some(usage_rows)
+        },
         provider_cost: None,
         cursor_requests: None,
-        updated_at: Utc::now(),
+        updated_at: now,
         identity: Some(ProviderIdentitySnapshot {
             account_email,
             account_organization: None,
@@ -647,6 +775,7 @@ fn normalize_model(quota: ModelQuota) -> NormalizedModel {
 
     let selection_priority = match family {
         ModelFamily::Claude => Some(0),
+        ModelFamily::Gpt => Some(1),
         ModelFamily::GeminiPro if is_low_priority_gemini_pro && is_selectable => Some(0),
         ModelFamily::GeminiPro if is_selectable => Some(1),
         ModelFamily::GeminiFlash if is_selectable => Some(0),
@@ -679,11 +808,15 @@ fn family_for_model(model_id: &str, label: &str) -> ModelFamily {
 }
 
 fn family_from_text(text: &str) -> ModelFamily {
-    if text.contains("claude") {
+    if text.contains("claude") || text.contains("opus") || text.contains("sonnet") {
         ModelFamily::Claude
+    } else if text.contains("gpt") {
+        ModelFamily::Gpt
     } else if text.contains("gemini") && text.contains("pro") {
         ModelFamily::GeminiPro
     } else if text.contains("gemini") && text.contains("flash") {
+        ModelFamily::GeminiFlash
+    } else if text.contains("gemini") {
         ModelFamily::GeminiFlash
     } else {
         ModelFamily::Unknown
@@ -695,6 +828,126 @@ fn remaining_percent(quota: &ModelQuota) -> f64 {
         .remaining_fraction
         .map(|fraction| clamp_percent(fraction * 100.0))
         .unwrap_or(0.0)
+}
+
+fn grouped_usage_rows(models: &[NormalizedModel], now: DateTime<Utc>) -> Vec<UsageRowSnapshot> {
+    [
+        (
+            ModelGroup::Gemini,
+            QuotaWindow::FiveHour,
+            "gemini-five-hour",
+            "Gemini five-hour limit",
+        ),
+        (
+            ModelGroup::Gemini,
+            QuotaWindow::Weekly,
+            "gemini-weekly",
+            "Gemini weekly limit",
+        ),
+        (
+            ModelGroup::ClaudeGpt,
+            QuotaWindow::FiveHour,
+            "claude-gpt-five-hour",
+            "Claude/GPT five-hour limit",
+        ),
+        (
+            ModelGroup::ClaudeGpt,
+            QuotaWindow::Weekly,
+            "claude-gpt-weekly",
+            "Claude/GPT weekly limit",
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(group, window, id, title)| {
+        grouped_usage_row(models, group, window, id, title, now)
+    })
+    .collect()
+}
+
+fn grouped_usage_row(
+    models: &[NormalizedModel],
+    group: ModelGroup,
+    window: QuotaWindow,
+    id: &str,
+    title: &str,
+    now: DateTime<Utc>,
+) -> Option<UsageRowSnapshot> {
+    let model = models
+        .iter()
+        .filter(|model| quota_group(model) == group)
+        .filter(|model| quota_window(&model.quota, now) == window)
+        .min_by(|left, right| compare_group_candidates(left, right))?;
+
+    Some(UsageRowSnapshot {
+        id: id.to_string(),
+        title: title.to_string(),
+        percent_left: remaining_percent(&model.quota),
+        resets_at: model.quota.reset_time,
+    })
+}
+
+fn quota_group(model: &NormalizedModel) -> ModelGroup {
+    match model.family {
+        ModelFamily::GeminiPro | ModelFamily::GeminiFlash => ModelGroup::Gemini,
+        ModelFamily::Claude | ModelFamily::Gpt => ModelGroup::ClaudeGpt,
+        ModelFamily::Unknown => ModelGroup::Unknown,
+    }
+}
+
+fn quota_window(quota: &ModelQuota, now: DateTime<Utc>) -> QuotaWindow {
+    let text = format!("{} {}", quota.model_id, quota.label).to_ascii_lowercase();
+    if contains_weekly_marker(&text) {
+        return QuotaWindow::Weekly;
+    }
+    if contains_five_hour_marker(&text) {
+        return QuotaWindow::FiveHour;
+    }
+
+    let Some(reset_time) = quota.reset_time else {
+        return QuotaWindow::Unknown;
+    };
+    let reset_minutes = reset_time.signed_duration_since(now).num_minutes();
+    if reset_minutes <= 0 {
+        QuotaWindow::Unknown
+    } else if reset_minutes <= 12 * 60 {
+        QuotaWindow::FiveHour
+    } else {
+        QuotaWindow::Weekly
+    }
+}
+
+fn contains_weekly_marker(text: &str) -> bool {
+    text.contains("weekly") || text.contains("week")
+}
+
+fn contains_five_hour_marker(text: &str) -> bool {
+    text.contains("five hour")
+        || text.contains("five-hour")
+        || text.contains("five_hour")
+        || text.contains("5 hour")
+        || text.contains("5-hour")
+        || text.contains("5_hour")
+        || text.contains("5h")
+}
+
+fn compare_group_candidates(left: &NormalizedModel, right: &NormalizedModel) -> std::cmp::Ordering {
+    remaining_percent(&left.quota)
+        .partial_cmp(&remaining_percent(&right.quota))
+        .unwrap_or(std::cmp::Ordering::Equal)
+        .then_with(|| compare_reset_times(left.quota.reset_time, right.quota.reset_time))
+        .then_with(|| left.quota.label.cmp(&right.quota.label))
+}
+
+fn compare_reset_times(
+    left: Option<DateTime<Utc>>,
+    right: Option<DateTime<Utc>>,
+) -> std::cmp::Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
 }
 
 fn representative(family: ModelFamily, models: &[NormalizedModel]) -> Option<ModelQuota> {
@@ -821,6 +1074,169 @@ mod tests {
                 .as_ref()
                 .and_then(|identity| identity.account_email.clone()),
             Some("user@example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn parses_antigravity_grouped_weekly_and_five_hour_limits() {
+        let weekly_reset = (Utc::now() + chrono::Duration::hours(168)).to_rfc3339();
+        let five_hour_reset = (Utc::now() + chrono::Duration::hours(5)).to_rfc3339();
+        let response = serde_json::json!({
+            "userStatus": {
+                "email": "user@example.com",
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "label": "Gemini Flash weekly",
+                            "modelOrAlias": { "model": "MODEL_GEMINI_FLASH" },
+                            "quotaInfo": { "remainingFraction": 0.999, "resetTime": weekly_reset }
+                        },
+                        {
+                            "label": "Gemini Pro five-hour",
+                            "modelOrAlias": { "model": "MODEL_GEMINI_PRO" },
+                            "quotaInfo": { "remainingFraction": 0.9938, "resetTime": five_hour_reset }
+                        },
+                        {
+                            "label": "Claude Sonnet weekly",
+                            "modelOrAlias": { "model": "MODEL_CLAUDE_SONNET" },
+                            "quotaInfo": { "remainingFraction": 0.6587, "resetTime": weekly_reset }
+                        },
+                        {
+                            "label": "GPT-OSS weekly",
+                            "modelOrAlias": { "model": "MODEL_GPT_OSS" },
+                            "quotaInfo": { "remainingFraction": 0.66, "resetTime": weekly_reset }
+                        },
+                        {
+                            "label": "Claude Opus five-hour",
+                            "modelOrAlias": { "model": "MODEL_CLAUDE_OPUS" },
+                            "quotaInfo": { "remainingFraction": 0.0, "resetTime": five_hour_reset }
+                        }
+                    ]
+                }
+            }
+        })
+        .to_string();
+
+        let snapshot = parse_user_status_response(&response).expect("user status should parse");
+        let rows = snapshot
+            .usage_rows
+            .as_ref()
+            .expect("Antigravity should expose grouped quota rows");
+
+        assert_eq!(rows.len(), 4);
+        assert_usage_row(&rows[0], "gemini-five-hour", 99.38);
+        assert_usage_row(&rows[1], "gemini-weekly", 99.9);
+        assert_usage_row(&rows[2], "claude-gpt-five-hour", 0.0);
+        assert_usage_row(&rows[3], "claude-gpt-weekly", 65.87);
+        assert!(rows.iter().all(|row| row.resets_at.is_some()));
+    }
+
+    #[test]
+    fn parses_quota_summary_into_grouped_rows() {
+        let weekly_reset = (Utc::now() + chrono::Duration::hours(168)).to_rfc3339();
+        let five_hour_reset = (Utc::now() + chrono::Duration::hours(5)).to_rfc3339();
+        let response = serde_json::json!({
+            "response": {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            {
+                                "bucketId": "gemini-weekly",
+                                "displayName": "Weekly Limit",
+                                "window": "weekly",
+                                "remainingFraction": 0.8951932,
+                                "resetTime": weekly_reset
+                            },
+                            {
+                                "bucketId": "gemini-5h",
+                                "displayName": "Five Hour Limit",
+                                "window": "5h",
+                                "remainingFraction": 0.949465,
+                                "resetTime": five_hour_reset
+                            }
+                        ]
+                    },
+                    {
+                        "displayName": "Claude and GPT models",
+                        "buckets": [
+                            {
+                                "bucketId": "3p-weekly",
+                                "displayName": "Weekly Limit",
+                                "window": "weekly",
+                                "remainingFraction": 0.45907852,
+                                "resetTime": weekly_reset
+                            },
+                            {
+                                "bucketId": "3p-5h",
+                                "displayName": "Five Hour Limit",
+                                "window": "5h",
+                                "remainingFraction": 0.4010748,
+                                "resetTime": five_hour_reset
+                            }
+                        ]
+                    }
+                ]
+            }
+        })
+        .to_string();
+
+        let rows = parse_quota_summary_response(&response).expect("quota summary should parse");
+
+        assert_eq!(rows.len(), 4);
+        assert_usage_row(&rows[0], "gemini-five-hour", 94.95);
+        assert_usage_row(&rows[1], "gemini-weekly", 89.52);
+        assert_usage_row(&rows[2], "claude-gpt-five-hour", 40.11);
+        assert_usage_row(&rows[3], "claude-gpt-weekly", 45.91);
+        assert!(rows.iter().all(|row| row.resets_at.is_some()));
+    }
+
+    #[test]
+    fn keeps_zero_remaining_rows_when_antigravity_omits_fraction() {
+        let five_hour_reset = (Utc::now() + chrono::Duration::hours(5)).to_rfc3339();
+        let response = serde_json::json!({
+            "userStatus": {
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "label": "Gemini 3.5 Flash (Medium)",
+                            "modelOrAlias": { "model": "MODEL_PLACEHOLDER_M20" },
+                            "quotaInfo": { "remainingFraction": 0.98, "resetTime": five_hour_reset }
+                        },
+                        {
+                            "label": "Claude Sonnet 4.6 (Thinking)",
+                            "modelOrAlias": { "model": "MODEL_PLACEHOLDER_M35" },
+                            "quotaInfo": { "resetTime": five_hour_reset }
+                        },
+                        {
+                            "label": "GPT-OSS 120B (Medium)",
+                            "modelOrAlias": { "model": "MODEL_OPENAI_GPT_OSS_120B_MEDIUM" },
+                            "quotaInfo": { "resetTime": five_hour_reset }
+                        }
+                    ]
+                }
+            }
+        })
+        .to_string();
+
+        let snapshot = parse_user_status_response(&response).expect("user status should parse");
+        let rows = snapshot
+            .usage_rows
+            .as_ref()
+            .expect("Antigravity should expose grouped quota rows");
+
+        assert_eq!(rows.len(), 2);
+        assert_usage_row(&rows[0], "gemini-five-hour", 98.0);
+        assert_usage_row(&rows[1], "claude-gpt-five-hour", 0.0);
+    }
+
+    fn assert_usage_row(row: &UsageRowSnapshot, id: &str, percent_left: f64) {
+        assert_eq!(row.id, id);
+        assert!(
+            (row.percent_left - percent_left).abs() < 0.01,
+            "{} percent left was {}",
+            row.id,
+            row.percent_left
         );
     }
 }

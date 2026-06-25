@@ -52,6 +52,7 @@ fn fetch_inner(http: &HttpClient, include_status: bool) -> Result<ProviderPayloa
             primary: Some(usage.primary),
             secondary: usage.secondary,
             tertiary: usage.tertiary,
+            usage_rows: None,
             provider_cost: usage.provider_cost,
             cursor_requests: usage.cursor_requests,
             updated_at: Utc::now(),

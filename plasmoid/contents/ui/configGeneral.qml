@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QtControls
 import QtQuick.Layouts
+import QtQuick.Dialogs as QtDialogs
 import org.kde.kirigami as Kirigami
 import QtQml.Models
 
@@ -206,6 +207,8 @@ Kirigami.ScrollablePage {
                             readonly property bool showInCompactAll: delegateRoot.showInCompactAll
                             readonly property string compactColor: delegateRoot.compactColor
                             readonly property string apiKey: delegateRoot.apiKey
+
+                            property bool colorPickerOpen: false
 
                             property int visualIndex: delegateRoot.visualIndex
 
@@ -429,27 +432,139 @@ Kirigami.ScrollablePage {
                                         }
 
                                         Rectangle {
+                                            id: compactColorSwatch
                                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
                                             radius: 3
-                                            color: providerDelegate.compactColor.length > 0 ? providerDelegate.compactColor : page.defaultProviderColor(providerDelegate.provider)
+                                            color: page.normalizeColor(compactColorInput.text).length > 0
+                                                   ? page.normalizeColor(compactColorInput.text)
+                                                   : (providerDelegate.compactColor.length > 0 ? providerDelegate.compactColor : page.defaultProviderColor(providerDelegate.provider))
                                             border.width: 1
-                                            border.color: Kirigami.Theme.disabledTextColor
+                                            border.color: page.normalizeColor(compactColorInput.text).length > 0
+                                                          ? Kirigami.Theme.highlightColor
+                                                          : Kirigami.Theme.disabledTextColor
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: providerDelegate.colorPickerOpen = !providerDelegate.colorPickerOpen
+                                            }
                                         }
 
                                         QtControls.TextField {
+                                            id: compactColorInput
                                             Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                                             text: providerDelegate.compactColor
                                             placeholderText: page.defaultProviderColor(providerDelegate.provider)
                                             inputMask: "\\#HHHHHH;_"
-                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "compactColor", page.normalizeColor(text))
+                                            onEditingFinished: {
+                                                const normalized = page.normalizeColor(text);
+                                                // Keep the visible value in sync with stored config.
+                                                text = normalized;
+                                                page.setProviderProperty(providerDelegate.index, "compactColor", normalized);
+                                            }
                                         }
 
                                         QtControls.ToolButton {
                                             icon.name: "edit-clear"
                                             text: i18n("Reset color")
                                             display: QtControls.AbstractButton.IconOnly
+                                            enabled: providerDelegate.compactColor.length > 0
                                             onClicked: page.setProviderProperty(providerDelegate.index, "compactColor", "")
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: providerDelegate.colorPickerOpen
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            QtControls.Label {
+                                                text: i18n("Color presets")
+                                                color: Kirigami.Theme.disabledTextColor
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            QtControls.ToolButton {
+                                                text: i18n("Close")
+                                                onClicked: providerDelegate.colorPickerOpen = false
+                                            }
+                                        }
+
+                                        GridLayout {
+                                            Layout.fillWidth: true
+                                            columns: 8
+                                            rowSpacing: Kirigami.Units.smallSpacing
+                                            columnSpacing: Kirigami.Units.smallSpacing
+
+                                            Rectangle {
+                                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                                radius: 3
+                                                color: page.defaultProviderColor(providerDelegate.provider)
+                                                border.width: 1
+                                                border.color: providerDelegate.compactColor.length === 0
+                                                                 ? Kirigami.Theme.highlightColor
+                                                                 : Kirigami.Theme.disabledTextColor
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        page.setProviderProperty(providerDelegate.index, "compactColor", "")
+                                                        providerDelegate.colorPickerOpen = false
+                                                    }
+                                                }
+                                            }
+
+                                            Repeater {
+                                                model: page.providerColorPresets()
+                                                delegate: Rectangle {
+                                                    readonly property string preset: modelData
+
+                                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                                    radius: 3
+                                                    color: preset
+
+                                                    border.width: 1
+                                                    border.color: providerDelegate.compactColor === preset
+                                                                   ? Kirigami.Theme.highlightColor
+                                                                   : Kirigami.Theme.disabledTextColor
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            page.setProviderProperty(providerDelegate.index, "compactColor", preset)
+                                                            providerDelegate.colorPickerOpen = false
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: Kirigami.Units.smallSpacing
+
+                                            QtControls.Button {
+                                                text: i18n("Custom color…")
+                                                icon.name: "color-picker"
+                                                onClicked: {
+                                                    colorDialog.currentColor = page.defaultProviderColor(providerDelegate.provider);
+                                                    colorDialog.open();
+                                                }
+                                            }
+
+                                            QtControls.Label {
+                                                Layout.fillWidth: true
+                                                text: i18n("Use a custom accent if presets don't fit.")
+                                                color: Kirigami.Theme.disabledTextColor
+                                                wrapMode: Text.Wrap
+                                            }
                                         }
                                     }
                                 }
@@ -809,8 +924,42 @@ Kirigami.ScrollablePage {
         return colors[aliases[normalized] || normalized] || "#49a3b0";
     }
 
+    function providerColorPresets() {
+        // Curated, UX-friendly palette for provider accents.
+        // Grouped by hue and contrast so bars look pleasant in both light/dark themes.
+        return [
+            // Blues / cyans
+            "#3b82f6", "#2563eb", "#0ea5e9", "#06b6d4",
+            // Greens / teals
+            "#10b981", "#059669", "#22c55e", "#16a34a",
+            // Purples
+            "#8b5cf6", "#6366f1", "#a855f7", "#7c3aed",
+            // Oranges / ambers
+            "#f97316", "#ea580c", "#f59e0b", "#d97706",
+            // Reds / pinks
+            "#ef4444", "#dc2626", "#ec4899", "#db2777",
+            // Neutrals / accents
+            "#0f172a", "#111827", "#4b5563", "#9ca3af"
+        ];
+    }
+
     function normalizeColor(value) {
         const text = String(value || "").trim();
         return /^#[0-9a-fA-F]{6}$/.test(text) ? text : "";
+    }
+
+    QtDialogs.ColorDialog {
+        id: colorDialog
+        title: i18n("Pick provider color")
+        modality: Qt.ApplicationModal
+        onAccepted: {
+            // Convert selected color to #RRGGBB and apply to the currently selected provider row.
+            const hex = "#" + Qt.rgba(color.r, color.g, color.b, 1.0).toString().slice(1, 7);
+            const normalized = normalizeColor(hex);
+            if (normalized.length > 0 && providersListView.currentIndex >= 0 && providersListView.currentIndex < providerModel.count) {
+                providerModel.setProperty(providersListView.currentIndex, "compactColor", normalized);
+                syncConfig();
+            }
+        }
     }
 }

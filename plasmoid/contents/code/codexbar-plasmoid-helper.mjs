@@ -460,6 +460,7 @@ function usageRows(providerId, usage, source) {
       id: String(row.id || row.title || "usage"),
       title: String(row.title || "Usage"),
       percentLeft: numberOrNull(row.percentLeft),
+      resetsAt: row.resetsAt || null,
     })).filter((row) => row.percentLeft !== null);
   }
 

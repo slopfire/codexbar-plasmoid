@@ -1,9 +1,7 @@
-use anyhow::{Context, Result};
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
 struct RootConfig {
@@ -152,9 +150,4 @@ pub fn normalize_workspace_id(raw: &str) -> Option<String> {
         .ok()?
         .find(trimmed)
         .map(|m| m.as_str().to_string())
-}
-
-pub fn read_json_config(path: &Path) -> Result<HashMap<String, serde_json::Value>> {
-    let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(serde_json::from_str(&raw)?)
 }

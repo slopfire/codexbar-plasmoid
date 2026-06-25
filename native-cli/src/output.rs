@@ -34,12 +34,24 @@ pub struct UsageSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tertiary: Option<RateWindow>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_rows: Option<Vec<UsageRowSnapshot>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_cost: Option<ProviderCostSnapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor_requests: Option<CursorRequestUsage>,
     pub updated_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity: Option<ProviderIdentitySnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageRowSnapshot {
+    pub id: String,
+    pub title: String,
+    pub percent_left: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -27,6 +27,7 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
             primary: Some(snapshot.primary),
             secondary: Some(snapshot.secondary),
             tertiary: None,
+            usage_rows: None,
             provider_cost: None,
             cursor_requests: None,
             updated_at: snapshot.updated_at,

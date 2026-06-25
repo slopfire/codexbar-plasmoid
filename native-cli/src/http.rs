@@ -8,7 +8,6 @@ const USER_AGENT_VALUE: &str =
 
 pub struct HttpClient {
     client: Client,
-    timeout: Duration,
 }
 
 impl HttpClient {
@@ -28,7 +27,7 @@ impl HttpClient {
             builder = builder.danger_accept_invalid_certs(true);
         }
         let client = builder.build().context("build HTTP client")?;
-        Ok(Self { client, timeout })
+        Ok(Self { client })
     }
 
     pub fn fetch_text(&self, url: &str, headers: &HeaderMap) -> Result<String> {
@@ -84,10 +83,6 @@ impl HttpClient {
             .with_context(|| format!("POST {url} status"))?
             .text()
             .with_context(|| format!("read body from {url}"))
-    }
-
-    pub fn timeout(&self) -> Duration {
-        self.timeout
     }
 }
 
