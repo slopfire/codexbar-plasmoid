@@ -411,11 +411,20 @@ Kirigami.ScrollablePage {
                                         visible: false
                                         spacing: Kirigami.Units.smallSpacing
 
-                                        Kirigami.InlineMessage {
+                                        Rectangle {
                                             Layout.fillWidth: true
-                                            type: Kirigami.MessageType.Information
-                                            text: i18n("Sign in to Devin, open DevTools (F12) → Console, paste the snippet below, and copy the token into the Bearer token field.")
-                                            visible: true
+                                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12)
+                                            radius: Kirigami.Units.cornerRadius
+                                            implicitHeight: infoLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
+
+                                            QtControls.Label {
+                                                id: infoLabel
+                                                anchors.fill: parent
+                                                anchors.margins: Kirigami.Units.smallSpacing
+                                                text: i18n("Sign in to Devin, open DevTools (F12) → Console, paste the snippet below, and copy the token into the Bearer token field.")
+                                                color: Kirigami.Theme.textColor
+                                                wrapMode: Text.Wrap
+                                            }
                                         }
 
                                         QtControls.Label {
@@ -1021,7 +1030,7 @@ Kirigami.ScrollablePage {
     }
 
     // Hidden TextEdit for clipboard operations (Devin token snippet copy)
-    QtControls.TextEdit {
+    TextEdit {
         id: devinSnippetClipboard
         visible: false
         width: 0
