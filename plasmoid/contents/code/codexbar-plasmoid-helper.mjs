@@ -262,18 +262,20 @@ function runUsageForConfig(config) {
   if (!showCredits) {
     commandArgs.push("--no-credits");
   }
-  if (config.allAccounts === true) {
-    commandArgs.push("--all-accounts");
-  } else if (clean(config.account)) {
-    commandArgs.push("--account", clean(config.account));
-  } else if (Number(config.accountIndex || 0) > 0) {
-    commandArgs.push("--account-index", String(Number(config.accountIndex)));
+  const isDevin = normalizeProviderId(config.provider) === "devin";
+  if (!isDevin) {
+    if (config.allAccounts === true) {
+      commandArgs.push("--all-accounts");
+    } else if (clean(config.account)) {
+      commandArgs.push("--account", clean(config.account));
+    } else if (Number(config.accountIndex || 0) > 0) {
+      commandArgs.push("--account-index", String(Number(config.accountIndex)));
+    }
   }
-
 
   const command = commandForConfig(config);
   try {
-    return runJSON(command, commandArgs, config.provider, config.apiKey);
+    return runJSON(command, commandArgs, config.provider, config.apiKey, clean(config.account));
   } catch (error) {
     return [{
       provider: normalizeProviderId(config.provider),
@@ -327,13 +329,13 @@ function effectiveProviderConfigs() {
   return [];
 }
 
-function runJSON(command, commandArgs, providerId = "", apiKey = "") {
+function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "") {
   const invocation = resolveCommandInvocation(command);
   let stdout = "";
   try {
     stdout = execFileSync(invocation.command, [...invocation.prefix, ...commandArgs], {
       encoding: "utf8",
-      env: cliEnvForProvider(providerId, apiKey),
+      env: cliEnvForProvider(providerId, apiKey, account),
       stdio: ["ignore", "pipe", "pipe"],
       timeout: timeoutMs,
       windowsHide: true,
@@ -623,12 +625,16 @@ function resolveNativeCliPath() {
   return "codexbar-plasmoid";
 }
 
-function cliEnvForProvider(providerId, apiKey) {
+function cliEnvForProvider(providerId, apiKey, account = "") {
   const env = { ...process.env };
+  const normalized = normalizeProviderId(providerId);
   const envName = providerApiKeyEnvName(providerId);
   const resolvedApiKey = clean(apiKey) || providerApiKey(providerId);
   if (envName && resolvedApiKey && !clean(env[envName])) {
     env[envName] = resolvedApiKey;
+  }
+  if (normalized === "devin" && clean(account) && !clean(env.DEVIN_ORGANIZATION) && !clean(env.DEVIN_ORG)) {
+    env.DEVIN_ORGANIZATION = clean(account);
   }
   return env;
 }

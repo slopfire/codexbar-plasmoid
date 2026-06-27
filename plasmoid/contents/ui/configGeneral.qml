@@ -377,9 +377,74 @@ Kirigami.ScrollablePage {
                                         }
                                     }
 
+                                    // Devin: organization field + get-token helper
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: providerDelegate.provider === "devin"
+
+                                        QtControls.Label {
+                                            text: i18n("Organization:")
+                                        }
+
+                                        QtControls.TextField {
+                                            Layout.fillWidth: true
+                                            text: providerDelegate.account
+                                            placeholderText: i18n("org slug, org_... ID, or app.devin.ai/org/<slug> URL")
+                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "account", text)
+                                        }
+
+                                        QtControls.Button {
+                                            text: i18n("Get token")
+                                            icon.name: "internet-web-browser"
+                                            display: QtControls.AbstractButton.TextBesideIcon
+                                            onClicked: {
+                                                Qt.openUrlExternally("https://app.devin.ai/settings/usage");
+                                                devinTokenHelp.visible = !devinTokenHelp.visible;
+                                            }
+                                        }
+                                    }
+
+                                    // Devin: collapsible console snippet for token extraction
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        id: devinTokenHelp
+                                        visible: false
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        Kirigami.InlineMessage {
+                                            Layout.fillWidth: true
+                                            type: Kirigami.MessageType.Information
+                                            text: i18n("Sign in to Devin, open DevTools (F12) → Console, paste the snippet below, and copy the token into the Bearer token field.")
+                                            visible: true
+                                        }
+
+                                        QtControls.Label {
+                                            Layout.fillWidth: true
+                                            text: "JSON.parse(Object.entries(localStorage).find(([k]) => k.includes('auth1_session'))?.[1] || '{}').token"
+                                            font.family: "monospace"
+                                            color: Kirigami.Theme.textColor
+                                            background: Rectangle { color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08); radius: Kirigami.Units.cornerRadius }
+                                            wrapMode: Text.Wrap
+                                            padding: Kirigami.Units.smallSpacing
+                                        }
+
+                                        QtControls.Button {
+                                            text: i18n("Copy snippet")
+                                            icon.name: "edit-copy"
+                                            display: QtControls.AbstractButton.TextBesideIcon
+                                            onClicked: {
+                                                devinSnippetClipboard.text = "JSON.parse(Object.entries(localStorage).find(([k]) => k.includes('auth1_session'))?.[1] || '{}').token";
+                                                devinSnippetClipboard.selectAll();
+                                                devinSnippetClipboard.copy();
+                                            }
+                                        }
+                                    }
+
+                                    // Other providers: account filter toggle
                                     QtControls.Button {
                                         id: accountToggle
                                         Layout.fillWidth: true
+                                        visible: providerDelegate.provider !== "devin"
                                         checkable: true
                                         checked: providerDelegate.account.length > 0 || providerDelegate.accountIndex > 0 || providerDelegate.allAccounts
                                         text: checked ? i18n("Account filter enabled") : i18n("Account filter")
@@ -395,7 +460,7 @@ Kirigami.ScrollablePage {
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        visible: accountToggle.checked
+                                        visible: providerDelegate.provider !== "devin" && accountToggle.checked
 
                                         QtControls.TextField {
                                             Layout.fillWidth: true
@@ -953,6 +1018,14 @@ Kirigami.ScrollablePage {
     function normalizeColor(value) {
         const text = String(value || "").trim();
         return /^#[0-9a-fA-F]{6}$/.test(text) ? text : "";
+    }
+
+    // Hidden TextEdit for clipboard operations (Devin token snippet copy)
+    QtControls.TextEdit {
+        id: devinSnippetClipboard
+        visible: false
+        width: 0
+        height: 0
     }
 
     QtDialogs.ColorDialog {
