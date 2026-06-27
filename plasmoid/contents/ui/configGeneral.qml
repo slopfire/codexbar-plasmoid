@@ -91,7 +91,7 @@ Kirigami.ScrollablePage {
         { id: "t3chat", name: "T3 Chat", sources: ["auto", "web"], linuxDefault: "web" },
         { id: "vertexai", name: "Vertex AI", sources: ["auto", "oauth"], linuxDefault: "oauth" },
         { id: "windsurf", name: "Windsurf", sources: ["auto", "cli", "web"], linuxDefault: "cli" },
-        { id: "devin", name: "Devin", sources: ["auto", "web"], linuxDefault: "web" }
+        { id: "devin", name: "Devin", sources: ["auto", "native", "web"], linuxDefault: "native" }
     ]
 
     Component.onCompleted: loadProviders()
@@ -349,9 +349,12 @@ Kirigami.ScrollablePage {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         visible: providerDelegate.source === "api"
+                                               || (providerDelegate.provider === "devin"
+                                                   && (providerDelegate.source === "native"
+                                                       || providerDelegate.source === "auto"))
 
                                         QtControls.Label {
-                                            text: i18n("API Key:")
+                                            text: providerDelegate.provider === "devin" ? i18n("Bearer token:") : i18n("API Key:")
                                         }
 
                                         QtControls.TextField {
@@ -359,7 +362,9 @@ Kirigami.ScrollablePage {
                                             Layout.fillWidth: true
                                             text: providerDelegate.apiKey
                                             echoMode: showKeyButton.checked ? TextInput.Normal : TextInput.Password
-                                            placeholderText: i18n("API key (optional if set in env)")
+                                            placeholderText: providerDelegate.provider === "devin"
+                                                ? i18n("Bearer token (or set DEVIN_BEARER_TOKEN)")
+                                                : i18n("API key (optional if set in env)")
                                             onEditingFinished: page.setProviderProperty(providerDelegate.index, "apiKey", text)
                                         }
 

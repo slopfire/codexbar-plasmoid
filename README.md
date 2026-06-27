@@ -82,10 +82,10 @@ Provider rows are saved as a JSON list in the `providerConfigs` Plasma setting. 
 ```
 
 `source` can be `auto`, `cli`, `oauth`, `api`, `web`, or `native`, depending on the provider. On Linux, `auto` maps
-native-capable providers to the bundled native fetcher where appropriate: Antigravity, Cursor, OpenCode, and OpenCode Go
+native-capable providers to the bundled native fetcher where appropriate: Antigravity, Cursor, Devin, OpenCode, and OpenCode Go
 use `native`; Codex, Claude, Augment, Factory, JetBrains, Kiro, Windsurf, and similar local-agent providers use `cli`;
 API providers such as Gemini, OpenAI, Groq, DeepSeek, and OpenRouter use `api`; Vertex AI uses `oauth`;
-Devin, Manus, Amp, T3 Chat, and similar browser-session providers use `web`.
+Manus, Amp, T3 Chat, and similar browser-session providers use `web`.
 
 The account fields map to the CodexBar CLI account flags:
 
@@ -179,10 +179,11 @@ as `costError` but does not discard successful usage data.
 
 ## Native Linux CLI
 
-Antigravity, Cursor, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
+Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
 or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity uses a
-local HTTPS probe against a running `agy` or Antigravity IDE language server.
+local HTTPS probe against a running `agy` or Antigravity IDE language server. Devin calls the
+`app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
 
 Build and bundle it:
 
@@ -199,7 +200,7 @@ Run it directly:
 plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider cursor --source native
 ```
 
-In widget settings, choose **Native** as the source for Antigravity, Cursor, OpenCode, or OpenCode Go. Linux auto mode
+In widget settings, choose **Native** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
 already prefers Native for those providers.
 
 Authentication options:
@@ -209,6 +210,7 @@ Authentication options:
 - `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
 - Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)
 - OpenCode Go local usage from `~/.local/share/opencode/opencode.db` when web cookies are unavailable
+- Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
 
 Native cookie configuration uses a provider list:
 
@@ -223,6 +225,11 @@ Native cookie configuration uses a provider list:
     {
       "id": "cursor",
       "cookie_header": "WorkosCursorSessionToken=..."
+    },
+    {
+      "id": "devin",
+      "cookie_header": "eyJhbGci...",
+      "workspace_id": "org/my-team"
     }
   ]
 }
@@ -230,7 +237,8 @@ Native cookie configuration uses a provider list:
 
 Set `CODEXBAR_CONFIG=/path/to/config.json` to use a different native-fetcher config file. For OpenCode and OpenCode Go,
 `workspace_id` can also come from `CODEXBAR_OPENCODE_WORKSPACE_ID` or `CODEXBAR_OPENCODEGO_WORKSPACE_ID`; the value may
-be a raw `wrk_...` id or a URL containing one.
+be a raw `wrk_...` id or a URL containing one. For Devin, `workspace_id` holds the organization slug, internal `org_...` ID,
+or full `app.devin.ai/org/<slug>` URL; it can also come from `DEVIN_ORGANIZATION` or `DEVIN_ORG`.
 
 Successful Antigravity native fetches are cached under the user cache directory. If Antigravity is not running later, the
 widget shows the last fetched Antigravity usage with a status note instead of replacing it with an error-only card.

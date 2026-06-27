@@ -131,7 +131,7 @@ const showCredits = args.credits !== "false";
 const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
 const kdeProviderConfig = loadKdeProviderConfig();
 
-const nativeProviders = new Set(["antigravity", "cursor", "opencode", "opencodego"]);
+const nativeProviders = new Set(["antigravity", "cursor", "devin", "opencode", "opencodego"]);
 
 const linuxAutoFallbacks = {
   codex: "cli",
@@ -140,6 +140,7 @@ const linuxAutoFallbacks = {
   opencode: "native",
   opencodego: "native",
   antigravity: "native",
+  devin: "native",
   augment: "cli",
   factory: "cli",
   grok: "cli",

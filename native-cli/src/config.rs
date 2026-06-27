@@ -151,3 +151,15 @@ pub fn normalize_workspace_id(raw: &str) -> Option<String> {
         .find(trimmed)
         .map(|m| m.as_str().to_string())
 }
+
+pub fn devin_organization() -> Option<String> {
+    if let Some(settings) = provider_settings("devin") {
+        if let Some(id) = settings.workspace_id.as_deref() {
+            let trimmed = id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
