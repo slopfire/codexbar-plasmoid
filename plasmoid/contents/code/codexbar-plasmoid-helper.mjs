@@ -538,6 +538,8 @@ function providerLabels(providerId) {
       return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Extra" };
     case "opencodego":
       return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Monthly Usage" };
+    case "devin":
+      return { session: "Daily", weekly: "Weekly", tertiary: "Extra" };
     default:
       return { session: "Session", weekly: "Weekly", tertiary: "Extra" };
   }
@@ -674,6 +676,8 @@ function providerApiKeyEnvName(providerId) {
       return "VENICE_API_KEY";
     case "zai":
       return "ZAI_API_KEY";
+    case "devin":
+      return "DEVIN_BEARER_TOKEN";
     default:
       return "";
   }

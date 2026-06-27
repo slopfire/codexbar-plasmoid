@@ -133,7 +133,8 @@ PlasmoidItem {
                 grok: "Grok",
                 groq: "Groq",
                 llmproxy: "LLM Proxy",
-                deepgram: "Deepgram"
+                deepgram: "Deepgram",
+                devin: "Devin"
             };
             return names[provider] || String(provider || "CodexBar");
         }
@@ -169,7 +170,8 @@ PlasmoidItem {
                 deepseek: "#527df0",
                 grok: "#10a37f",
                 groq: "#f56844",
-                llmproxy: "#24b47e"
+                llmproxy: "#24b47e",
+                devin: "#4f46e5"
             };
             return colors[provider] || Kirigami.Theme.highlightColor;
         }

@@ -157,7 +157,8 @@ Item {
             minimax: "MiniMax",
             grok: "Grok",
             groq: "GroqCloud",
-            openrouter: "OpenRouter"
+            openrouter: "OpenRouter",
+            devin: "Devin"
         };
         return names[provider] || String(provider || "");
     }
@@ -173,7 +174,8 @@ Item {
             minimax: "#fe603c",
             grok: "#10a37f",
             groq: "#f56844",
-            openrouter: "#3da3d9"
+            openrouter: "#3da3d9",
+            devin: "#4f46e5"
         };
         return colors[provider] || Kirigami.Theme.highlightColor;
     }

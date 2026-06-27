@@ -84,7 +84,8 @@ Provider rows are saved as a JSON list in the `providerConfigs` Plasma setting. 
 `source` can be `auto`, `cli`, `oauth`, `api`, `web`, or `native`, depending on the provider. On Linux, `auto` maps
 native-capable providers to the bundled native fetcher where appropriate: Antigravity, Cursor, OpenCode, and OpenCode Go
 use `native`; Codex, Claude, Augment, Factory, JetBrains, Kiro, Windsurf, and similar local-agent providers use `cli`;
-API providers such as Gemini, OpenAI, Groq, DeepSeek, and OpenRouter use `api`; Vertex AI uses `oauth`.
+API providers such as Gemini, OpenAI, Groq, DeepSeek, and OpenRouter use `api`; Vertex AI uses `oauth`;
+Devin, Manus, Amp, T3 Chat, and similar browser-session providers use `web`.
 
 The account fields map to the CodexBar CLI account flags:
 
@@ -127,6 +128,8 @@ PATH=/run/current-system/sw/bin:/etc/profiles/per-user/<user>/bin:/home/<user>/.
 NIX_LD_LIBRARY_PATH=/run/current-system/sw/share/nix-ld/lib
 DEEPSEEK_API_KEY=sk-...
 OPENROUTER_API_KEY=sk-or-v1-...
+DEVIN_BEARER_TOKEN=devin-token...
+DEVIN_ORGANIZATION=org_slug
 ```
 
 Then log out and back in (or `systemctl --user import-environment`) so `systemd --user` picks up the new file.
@@ -155,8 +158,8 @@ The inline widget settings configuration wins when both exist. When using `~/.co
 The helper converts `apiKey` into the environment variable expected by the CodexBar CLI when that variable is not already
 set. Supported mappings include `GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`,
 `DEEPSEEK_API_KEY`, `DOUBAO_API_KEY`, `MINIMAX_API_KEY`, `MOONSHOT_API_KEY`, `KILO_API_KEY`, `LLMPROXY_API_KEY`,
-`SYNTHETIC_API_KEY`, `VENICE_API_KEY`, `ZAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ALIBABA_API_KEY`, and `GITHUB_TOKEN` for
-Copilot.
+`SYNTHETIC_API_KEY`, `VENICE_API_KEY`, `ZAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ALIBABA_API_KEY`, `GITHUB_TOKEN` for
+Copilot, and `DEVIN_BEARER_TOKEN` for Devin (manual token auth; pair with `DEVIN_ORGANIZATION`).
 
 The Plasma package ID is `org.slopfire.codexbar-plasmoid`.
 

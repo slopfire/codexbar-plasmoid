@@ -90,7 +90,8 @@ Kirigami.ScrollablePage {
         { id: "stepfun", name: "StepFun", sources: ["auto", "web"], linuxDefault: "web" },
         { id: "t3chat", name: "T3 Chat", sources: ["auto", "web"], linuxDefault: "web" },
         { id: "vertexai", name: "Vertex AI", sources: ["auto", "oauth"], linuxDefault: "oauth" },
-        { id: "windsurf", name: "Windsurf", sources: ["auto", "cli", "web"], linuxDefault: "cli" }
+        { id: "windsurf", name: "Windsurf", sources: ["auto", "cli", "web"], linuxDefault: "cli" },
+        { id: "devin", name: "Devin", sources: ["auto", "web"], linuxDefault: "web" }
     ]
 
     Component.onCompleted: loadProviders()
@@ -913,7 +914,8 @@ Kirigami.ScrollablePage {
             deepseek: "#527df0",
             grok: "#10a37f",
             groq: "#f56844",
-            llmproxy: "#24b47e"
+            llmproxy: "#24b47e",
+            devin: "#4f46e5"
         };
         const normalized = String(providerId || "").toLowerCase().replace(/[-_]/g, "");
         const aliases = {
