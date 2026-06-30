@@ -96,11 +96,51 @@ pub fn fetch_usage_page(
 
 /// Best-effort extraction of the signed-in account email from an OpenCode Go
 /// page response. The workspace/go HTML and server-action responses may embed
-/// the user's email as a JSON field (`"email":"…"`, `"accountEmail":"…"`) or,
-/// less reliably, as a bare address. Prefer quoted JSON fields and fall back to
-/// a scoped bare-address scan so support/noreply addresses are avoided.
+/// the user's email in the signed-in user menu, as a SolidJS `userEmail`
+/// resource, as a JSON field (`"accountEmail":"…"`, `"email":"…"`), or less
+/// reliably as a bare address. Try the most specific sources first and avoid
+/// invitation/referral emails.
 pub fn extract_account_email(text: &str) -> Option<String> {
-    let quoted_keys = ["email", "accountEmail", "userEmail", "primaryEmail"];
+    // Highest confidence: the email rendered in the user-menu dropdown. This is
+    // the actual DOM text for the signed-in user, so it beats any embedded data.
+    let user_menu_email = Regex::new(
+        r#"(?s)<div\s+data-component="user-menu"[^>]*>.*?<span[^>]*>([^<]+@[^<]+)</span>"#,
+    )
+    .ok()?;
+    if let Some(capture) = user_menu_email.captures(text) {
+        if let Some(matched) = capture.get(1) {
+            let email = matched.as_str().trim().to_string();
+            if is_account_email(&email) {
+                return Some(email);
+            }
+        }
+    }
+
+    // Very high confidence: the SolidJS `userEmail[workspaceId]` resource value.
+    // Look for the resource declaration, then take the first email assigned to
+    // one of its promise slots shortly after.
+    if let Some(email) = extract_user_email_resource(text) {
+        return Some(email);
+    }
+
+    // An email inside a user/currentUser/account object avoids workspace members,
+    // owners, or invitees that may appear under a generic `"email"` key.
+    let user_object_email = Regex::new(
+        r#""(?:user|currentUser|account)"\s*:\s*\{[^{}]*?"email"\s*:\s*"([^"]+@[^"]+)""#,
+    )
+    .ok()?;
+    for capture in user_object_email.captures_iter(text) {
+        if let Some(matched) = capture.get(1) {
+            let email = matched.as_str().trim().to_string();
+            if is_account_email(&email) {
+                return Some(email);
+            }
+        }
+    }
+
+    // Account-specific keys are more likely to identify the signed-in user than
+    // a generic `"email"` key.
+    let quoted_keys = ["accountEmail", "userEmail", "primaryEmail"];
     for key in quoted_keys {
         let pattern = format!(r#""{key}"\s*:\s*"([^"]+@[^"]+)""#);
         if let Some(capture) = Regex::new(&pattern).ok()?.captures(text) {
@@ -109,6 +149,24 @@ pub fn extract_account_email(text: &str) -> Option<String> {
                 if is_account_email(&email) {
                     return Some(email);
                 }
+            }
+        }
+    }
+
+    // Generic `"email"` keys: skip matches that live inside invitations or
+    // referral blocks, because those are usually other people.
+    let email_regex = Regex::new(r#""email"\s*:\s*"([^"]+@[^"]+)""#).ok()?;
+    let other_person_context = Regex::new(r#"(?i)"(invitations|referrals|rewards)"\s*:"#).ok()?;
+    for capture in email_regex.captures_iter(text) {
+        if let Some(matched) = capture.get(1) {
+            let email = matched.as_str().trim().to_string();
+            if !is_account_email(&email) {
+                continue;
+            }
+            let start = matched.start();
+            let window_start = start.saturating_sub(400);
+            if !other_person_context.is_match(&text[window_start..start]) {
+                return Some(email);
             }
         }
     }
@@ -127,6 +185,26 @@ pub fn extract_account_email(text: &str) -> Option<String> {
             let window_start = start.saturating_sub(120);
             let window_end = (start + 120).min(text.len());
             if context.is_match(&text[window_start..window_end]) {
+                return Some(email);
+            }
+        }
+    }
+    None
+}
+
+/// Extract the value resolved by a SolidJS `userEmail[workspaceId]` resource.
+/// The page declares `_$HY.r["userEmail[\"...\"]"]=$R[0]=...` and later
+/// resolves it with `$R[N]($R[M],"email@example.com");`.
+fn extract_user_email_resource(text: &str) -> Option<String> {
+    let resource = Regex::new(r#""userEmail\[[^\]]+\]""#).ok()?;
+    let resource_match = resource.find(text)?;
+    let search_start = resource_match.end();
+    let search_end = (search_start + 4000).min(text.len());
+    let assignment = Regex::new(r#"\$R\[\d+\]\(\$R\[\d+\],"([^"]+@[^"]+)"\);"#).ok()?;
+    for capture in assignment.captures_iter(&text[search_start..search_end]) {
+        if let Some(matched) = capture.get(1) {
+            let email = matched.as_str().trim().to_string();
+            if is_account_email(&email) {
                 return Some(email);
             }
         }
@@ -435,6 +513,39 @@ mod email_tests {
     }
 
     #[test]
+    fn prefers_account_email_over_generic_email() {
+        let page = r#"{"email":"workspace@owner.com","accountEmail":"signedin@user.com"}"#;
+        assert_eq!(extract_account_email(page).as_deref(), Some("signedin@user.com"));
+    }
+
+    #[test]
+    fn prefers_user_object_email_over_invitation_email() {
+        let page = r#"{"invitations":[{"email":"niktofe@example.com"}],"user":{"email":"huxidisawo77@gmail.com"},"rollingUsage":{}}"#;
+        assert_eq!(
+            extract_account_email(page).as_deref(),
+            Some("huxidisawo77@gmail.com")
+        );
+    }
+
+    #[test]
+    fn skips_email_inside_invitations_block() {
+        let page = r#"{"invitations":[{"email":"niktofe@example.com"}],"email":"huxidisawo77@gmail.com"}"#;
+        assert_eq!(
+            extract_account_email(page).as_deref(),
+            Some("huxidisawo77@gmail.com")
+        );
+    }
+
+    #[test]
+    fn prefers_account_object_email() {
+        let page = r#"{"account":{"email":"huxidisawo77@gmail.com"},"members":[{"email":"niktofe@example.com"}]}"#;
+        assert_eq!(
+            extract_account_email(page).as_deref(),
+            Some("huxidisawo77@gmail.com")
+        );
+    }
+
+    #[test]
     fn skips_service_addresses_in_quoted_field() {
         let page = r#"{"email":"support@opencode.ai","accountEmail":"real@user.com"}"#;
         assert_eq!(extract_account_email(page).as_deref(), Some("real@user.com"));
@@ -450,6 +561,24 @@ mod email_tests {
     fn bare_address_without_context_is_skipped() {
         let page = "Contact huxidi@gmail.com for help. rollingUsage usagePercent: 11";
         assert_eq!(extract_account_email(page), None);
+    }
+
+    #[test]
+    fn extracts_email_from_user_menu_dropdown() {
+        let page = r#"<div data-component="user-menu"><div data-component="dropdown"><button data-slot="trigger" type="button"><span data-hk="abc">huxidisawo77@gmail.com</span></button></div></div><td data-slot="referral-source">Invited by niktofe1@gmail.com</td>"#;
+        assert_eq!(
+            extract_account_email(page).as_deref(),
+            Some("huxidisawo77@gmail.com")
+        );
+    }
+
+    #[test]
+    fn extracts_user_email_resource_over_referral_emails() {
+        let page = r#"_$HY.r["userEmail[\"wrk_01KVD2SMEBW7FMXK51HWNSV3QB\"]"]=$R[0]=($R[2]=r=>(r.p=new Promise((s,f)=>{r.s=s,r.f=f})))($R[1]={p:0,s:0,f:0});($R[28]=(r,d)=>{r.s(d),r.p.s=1,r.p.v=d})($R[1],"huxidisawo77@gmail.com");($R[28]($R[14],$R[38]={rewards:[$R[40]={email:"niktofe1@gmail.com"}]});"#;
+        assert_eq!(
+            extract_account_email(page).as_deref(),
+            Some("huxidisawo77@gmail.com")
+        );
     }
 
     #[test]
