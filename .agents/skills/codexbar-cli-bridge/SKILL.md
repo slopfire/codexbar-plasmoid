@@ -35,11 +35,11 @@ codexbar cost --format json --json-only --provider <provider>
 
 For Linux-native providers (`antigravity`, `cursor`, `devin`, `opencode`, `opencodego`) with `source=native` or
 `source=native-auth`, the helper calls the bundled Rust binary at `plasmoid/contents/code/codexbar-plasmoid`
-instead of `codexbar`. Antigravity `native-auth` uses user tokens from `antigravity-usage login`
-(`~/.config/antigravity-usage`); plain `native` probes the local IDE and falls back to those tokens when idle.
-Token refresh requires local OAuth *app* credentials (`ANTIGRAVITY_OAUTH_CLIENT_ID` /
-`ANTIGRAVITY_OAUTH_CLIENT_SECRET`, or `oauth_client_*` on the antigravity entry in
-`~/.codexbar/config.json`) — never commit those.
+instead of `codexbar`. Antigravity `native-auth` uses user tokens under `~/.config/antigravity-usage` from
+`codexbar-plasmoid login --provider antigravity` (browser OAuth) or `antigravity-usage login`; plain `native`
+probes the local IDE and falls back to those tokens when idle. Login and token refresh use the desktop
+OAuth *app* client extracted at runtime from the local `agy` binary (optional env/config override) — never
+commit those credentials.
 
 Optional usage flags are driven by settings:
 

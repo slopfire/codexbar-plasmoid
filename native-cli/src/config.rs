@@ -174,28 +174,44 @@ pub fn devin_organization() -> Option<String> {
     None
 }
 
-/// Antigravity Cloud Code OAuth app client id (for token refresh only).
-/// Order: `ANTIGRAVITY_OAUTH_CLIENT_ID` env, then antigravity provider
-/// `oauth_client_id` in `~/.codexbar/config.json`. No compiled-in default.
+/// Antigravity Cloud Code OAuth app client id (for browser login + token refresh).
+///
+/// Order:
+/// 1. `ANTIGRAVITY_OAUTH_CLIENT_ID` env
+/// 2. `oauth_client_id` on the antigravity entry in `~/.codexbar/config.json`
+/// 3. Extracted from a local Antigravity/`agy` binary (never compiled in)
 pub fn antigravity_oauth_client_id() -> Option<String> {
-    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_ID").or_else(|| {
-        provider_settings("antigravity")
-            .and_then(|s| s.oauth_client_id)
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-    })
+    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_ID")
+        .or_else(|| {
+            provider_settings("antigravity")
+                .and_then(|s| s.oauth_client_id)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+        .or_else(|| {
+            crate::antigravity_oauth_discover::discover_oauth_app_credentials()
+                .map(|creds| creds.client_id)
+        })
 }
 
-/// Antigravity Cloud Code OAuth app client secret (for token refresh only).
-/// Order: `ANTIGRAVITY_OAUTH_CLIENT_SECRET` env, then antigravity provider
-/// `oauth_client_secret` in `~/.codexbar/config.json`. No compiled-in default.
+/// Antigravity Cloud Code OAuth app client secret (for browser login + token refresh).
+///
+/// Order:
+/// 1. `ANTIGRAVITY_OAUTH_CLIENT_SECRET` env
+/// 2. `oauth_client_secret` on the antigravity entry in `~/.codexbar/config.json`
+/// 3. Extracted from a local Antigravity/`agy` binary (never compiled in)
 pub fn antigravity_oauth_client_secret() -> Option<String> {
-    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_SECRET").or_else(|| {
-        provider_settings("antigravity")
-            .and_then(|s| s.oauth_client_secret)
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-    })
+    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_SECRET")
+        .or_else(|| {
+            provider_settings("antigravity")
+                .and_then(|s| s.oauth_client_secret)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+        .or_else(|| {
+            crate::antigravity_oauth_discover::discover_oauth_app_credentials()
+                .map(|creds| creds.client_secret)
+        })
 }
 
 fn non_empty_env(name: &str) -> Option<String> {

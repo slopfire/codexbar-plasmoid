@@ -182,8 +182,9 @@ as `costError` but does not discard successful usage data.
 Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
 or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity can either
-probe a running `agy`/IDE language server locally, or use **Native Auth** (Google OAuth tokens from
-`antigravity-usage login`, stored under `~/.config/antigravity-usage`) to call the Cloud Code API without the IDE.
+probe a running `agy`/IDE language server locally, or use **Native Auth** (browser Google OAuth via
+`codexbar-plasmoid login --provider antigravity`, or tokens from `antigravity-usage login`, stored under
+`~/.config/antigravity-usage`) to call the Cloud Code API without the IDE.
 Devin calls the `app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
 
 Build and bundle it:
@@ -202,13 +203,21 @@ plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provi
 ```
 
 In widget settings, choose **Native** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
-already prefers Native for those providers. For Antigravity without a running IDE, choose **Native Auth** after logging in
-with [`antigravity-usage`](https://www.npmjs.com/package/antigravity-usage):
+already prefers Native for those providers. For Antigravity without a running IDE, choose **Native Auth** after browser login:
 
 ```sh
-npx antigravity-usage login
+# Desktop OAuth app client is read from the local `agy` binary (not shipped in this repo).
+# Optional override: ANTIGRAVITY_OAUTH_CLIENT_ID / ANTIGRAVITY_OAUTH_CLIENT_SECRET
+plasmoid/contents/code/codexbar-plasmoid login --provider antigravity
 plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider antigravity --source native-auth
 ```
+
+`login` opens Google in your browser, captures the localhost redirect, and stores tokens under
+`~/.config/antigravity-usage` (same layout as [`antigravity-usage`](https://www.npmjs.com/package/antigravity-usage)).
+The OAuth *app* client id/secret are extracted from a local Antigravity `agy` install (PATH,
+`~/.local/bin/agy`, or `CODEXBAR_ANTIGRAVITY_BINARY`) so they never need to live in this repository.
+Use `--manual` to paste the redirect URL if the automatic callback fails. `logout --provider antigravity` removes stored
+tokens (`--all` clears every account).
 
 With Antigravity source set to **Native** (or Linux auto), the fetcher tries the local IDE first and falls back to Native
 Auth tokens when the IDE is not running.
@@ -216,7 +225,10 @@ Auth tokens when the IDE is not running.
 Authentication options:
 
 - Antigravity **Native**: a running `agy` process or Antigravity IDE language server
-- Antigravity **Native Auth**: user tokens from `antigravity-usage login` in `~/.config/antigravity-usage` (Cloud Code API; no IDE required). Token **refresh** also needs the Google OAuth *app* client id/secret supplied locally (not shipped in this repo): `ANTIGRAVITY_OAUTH_CLIENT_ID` / `ANTIGRAVITY_OAUTH_CLIENT_SECRET`, or `oauth_client_id` / `oauth_client_secret` on the antigravity entry in `~/.codexbar/config.json`
+- Antigravity **Native Auth**: browser OAuth via `codexbar-plasmoid login --provider antigravity` (or existing
+  `antigravity-usage login` tokens) in `~/.config/antigravity-usage` (Cloud Code API; no IDE required). Login and token
+  **refresh** use the Google OAuth *app* client extracted from the local `agy` binary (optional override:
+  `ANTIGRAVITY_OAUTH_CLIENT_ID` / `ANTIGRAVITY_OAUTH_CLIENT_SECRET`, or `oauth_client_*` in `~/.codexbar/config.json`)
 - `~/.codexbar/config.json` provider `cookie_header`
 - `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
 - Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)

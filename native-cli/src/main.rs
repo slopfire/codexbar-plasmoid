@@ -1,3 +1,5 @@
+mod antigravity_auth;
+mod antigravity_oauth_discover;
 mod config;
 mod cookies;
 mod http;
@@ -14,7 +16,21 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 fn main() -> ExitCode {
-    match run() {
+    let args: Vec<String> = env::args().collect();
+    let command = args.get(1).map(String::as_str).unwrap_or("help");
+
+    // Interactive auth commands print human-readable text (not usage JSON).
+    if matches!(command, "login" | "logout") {
+        return match run_auth_command(command, &args[2..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("error: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    match run_usage(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let payload = vec![ProviderPayload::error("cli", error.to_string())];
@@ -24,8 +40,56 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> anyhow::Result<()> {
-    let args: Vec<String> = env::args().collect();
+fn run_auth_command(command: &str, args: &[String]) -> anyhow::Result<()> {
+    let parsed = parse_args(args);
+    let provider = parsed
+        .get("provider")
+        .map(|value| normalize_provider_id(value))
+        .unwrap_or_else(|| "antigravity".to_string());
+    if provider != "antigravity" {
+        anyhow::bail!(
+            "Browser OAuth login is only implemented for --provider antigravity (got {provider})."
+        );
+    }
+
+    match command {
+        "login" => {
+            let timeout_secs = parsed
+                .get("timeout")
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(300)
+                .clamp(30, 900);
+            let options = antigravity_auth::LoginOptions {
+                manual: parsed.contains_key("manual"),
+                no_browser: parsed.contains_key("no-browser"),
+                port: parsed
+                    .get("port")
+                    .and_then(|value| value.parse::<u16>().ok())
+                    .filter(|port| *port > 0),
+                timeout: Duration::from_secs(timeout_secs),
+            };
+            // Token exchange is quick; the long wait is the localhost callback.
+            let http = HttpClient::new(Duration::from_secs(45))?;
+            let email = antigravity_auth::login(&http, options)?;
+            match email {
+                Some(email) => println!("Logged in as {email}."),
+                None => println!("Logged in (email unknown)."),
+            }
+            println!("Native Auth will use tokens under ~/.config/antigravity-usage.");
+            Ok(())
+        }
+        "logout" => {
+            let all = parsed.contains_key("all");
+            let email = parsed.get("account").map(String::as_str);
+            let message = antigravity_auth::logout(email, all)?;
+            println!("{message}");
+            Ok(())
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn run_usage(args: &[String]) -> anyhow::Result<()> {
     if args.len() < 2 || matches!(args[1].as_str(), "--help" | "-h" | "help") {
         print_help();
         return Ok(());
@@ -121,15 +185,20 @@ fn print_help() {
 
 Usage:
   codexbar-plasmoid usage --format json --json-only --provider <id> --source native|native-auth [--status] [--web-timeout <seconds>]
+  codexbar-plasmoid login --provider antigravity [--manual] [--no-browser] [--port <n>] [--timeout <seconds>]
+  codexbar-plasmoid logout --provider antigravity [--account <email>] [--all]
 
 Providers:
-  antigravity, cursor, opencode, opencodego, all
+  antigravity, cursor, devin, grok, opencode, opencodego, all
 
 Authentication:
   - Antigravity (--source native): running agy/IDE first, then Cloud Code OAuth fallback
-  - Antigravity (--source native-auth): user tokens from `antigravity-usage login`
-    in ~/.config/antigravity-usage; token refresh needs ANTIGRAVITY_OAUTH_CLIENT_ID
-    and ANTIGRAVITY_OAUTH_CLIENT_SECRET (or oauth_client_* in ~/.codexbar/config.json)
+  - Antigravity (--source native-auth): Cloud Code API using tokens under
+    ~/.config/antigravity-usage from browser OAuth:
+      codexbar-plasmoid login --provider antigravity
+    (compatible with tokens from `antigravity-usage login`)
+  - Browser login and token refresh use the desktop OAuth *app* client from the
+    local `agy` binary (override: ANTIGRAVITY_OAUTH_CLIENT_ID/SECRET or oauth_client_*)
   - ~/.codexbar/config.json provider cookieHeader / oauth_client_*
   - CODEXBAR_PLASMOID_CURSOR_COOKIE / CODEXBAR_PLASMOID_OPENCODE_COOKIE / CODEXBAR_PLASMOID_OPENCODEGO_COOKIE (or older SPLAZMA_* fallback)
   - Chrome/Chromium/Helium/Firefox/Zen cookie import (secret-tool required for encrypted Chromium cookies)

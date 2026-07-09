@@ -3,6 +3,7 @@ import QtQuick.Controls as QtControls
 import QtQuick.Layouts
 import QtQuick.Dialogs as QtDialogs
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasma5support as Plasma5Support
 import QtQml.Models
 
 Kirigami.ScrollablePage {
@@ -28,6 +29,8 @@ Kirigami.ScrollablePage {
     property alias cfg_compactShowMetric: compactShowMetric.checked
     property alias cfg_compactDisplay: compactDisplay.currentValue
     property alias cfg_compactBarsProviders: compactBarsProviders.currentValue
+    property string antigravityAuthStatus: ""
+    property bool antigravityAuthBusy: false
     property alias cfg_compactBarsTint: compactBarsTint.currentValue
     property alias cfg_compactProviderBarWidth: compactProviderBarWidth.value
 
@@ -47,7 +50,7 @@ Kirigami.ScrollablePage {
         api: i18n("API credentials"),
         web: i18n("Browser/web session"),
         native: i18n("Plasmoid fetcher"),
-        "native-auth": i18n("Google OAuth tokens from antigravity-usage login")
+        "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)")
     })
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },
@@ -351,6 +354,39 @@ Kirigami.ScrollablePage {
                                             text: page.sourceNotes[providerDelegate.source] || ""
                                             color: Kirigami.Theme.disabledTextColor
                                             elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    // Antigravity Native Auth: browser Google OAuth
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        visible: providerDelegate.provider === "antigravity"
+                                               && (providerDelegate.source === "native-auth"
+                                                   || providerDelegate.source === "native"
+                                                   || providerDelegate.source === "auto")
+
+                                        QtControls.Button {
+                                            text: i18n("Log in with browser")
+                                            icon.name: "internet-web-browser"
+                                            display: QtControls.AbstractButton.TextBesideIcon
+                                            enabled: !page.antigravityAuthBusy
+                                            onClicked: page.runAntigravityLogin()
+                                        }
+
+                                        QtControls.Button {
+                                            text: i18n("Log out")
+                                            icon.name: "system-log-out"
+                                            display: QtControls.AbstractButton.TextBesideIcon
+                                            enabled: !page.antigravityAuthBusy
+                                            onClicked: page.runAntigravityLogout()
+                                        }
+
+                                        QtControls.Label {
+                                            Layout.fillWidth: true
+                                            text: page.antigravityAuthStatus
+                                            color: Kirigami.Theme.disabledTextColor
+                                            elide: Text.ElideRight
+                                            wrapMode: Text.WordWrap
                                         }
                                     }
 
@@ -1111,12 +1147,75 @@ Kirigami.ScrollablePage {
         return /^#[0-9a-fA-F]{6}$/.test(text) ? text : "";
     }
 
+    function resolveNativeCliPath() {
+        let path = Qt.resolvedUrl("../code/codexbar-plasmoid").toString();
+        if (path.startsWith("file://")) {
+            path = decodeURIComponent(path.slice("file://".length));
+            // file:///home/... → /home/...
+            if (/^\/[A-Za-z]:\//.test(path)) {
+                // Windows-style file URL; keep as-is.
+            } else if (path.startsWith("//")) {
+                path = path.slice(1);
+            }
+        }
+        return path;
+    }
+
+    function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\\''") + "'";
+    }
+
+    function runAntigravityLogin() {
+        if (page.antigravityAuthBusy) {
+            return;
+        }
+        const cli = resolveNativeCliPath();
+        page.antigravityAuthBusy = true;
+        page.antigravityAuthStatus = i18n("Waiting for browser login…");
+        antigravityAuthRunner.connectSource(
+            shellQuote(cli) + " login --provider antigravity --timeout 300"
+        );
+    }
+
+    function runAntigravityLogout() {
+        if (page.antigravityAuthBusy) {
+            return;
+        }
+        const cli = resolveNativeCliPath();
+        page.antigravityAuthBusy = true;
+        page.antigravityAuthStatus = i18n("Logging out…");
+        antigravityAuthRunner.connectSource(
+            shellQuote(cli) + " logout --provider antigravity --all"
+        );
+    }
+
     // Hidden TextEdit for clipboard operations (Devin token snippet copy)
     TextEdit {
         id: devinSnippetClipboard
         visible: false
         width: 0
         height: 0
+    }
+
+    Plasma5Support.DataSource {
+        id: antigravityAuthRunner
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            const exitCode = Number(data["exit code"] ?? data.exitCode ?? 1);
+            const stdout = String(data.stdout || "").trim();
+            const stderr = String(data.stderr || "").trim();
+            if (exitCode === 0) {
+                page.antigravityAuthStatus = stdout.length > 0
+                    ? stdout.split("\n")[0]
+                    : i18n("Done.");
+            } else {
+                const detail = stderr || stdout || i18n("Login command failed");
+                page.antigravityAuthStatus = detail.split("\n")[0];
+            }
+            page.antigravityAuthBusy = false;
+            disconnectSource(sourceName);
+        }
     }
 
     QtDialogs.ColorDialog {

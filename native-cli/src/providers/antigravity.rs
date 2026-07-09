@@ -36,8 +36,8 @@ pub enum AntigravityMethod {
     /// Only probe the local IDE language server.
     #[allow(dead_code)]
     Local,
-    /// Only use the Google Cloud Code API with OAuth tokens stored by
-    /// `antigravity-usage login` (no IDE required).
+    /// Only use the Google Cloud Code API with OAuth tokens from browser
+    /// login (`codexbar-plasmoid login`) or `antigravity-usage login`.
     Cloud,
 }
 
@@ -1103,16 +1103,16 @@ fn parse_iso_date(value: &str) -> Option<DateTime<Utc>> {
 // ===========================================================================
 
 /// OAuth *app* client id/secret are intentionally not shipped in this repo.
-/// Supply them locally (env or `~/.codexbar/config.json`) so token refresh can
-/// call Google's token endpoint. User access/refresh tokens still come from
-/// `antigravity-usage login` under `~/.config/antigravity-usage`.
+/// They are resolved from env / `~/.codexbar/config.json` / the local `agy`
+/// binary so token refresh can call Google's token endpoint. User access/refresh
+/// tokens come from browser OAuth (`codexbar-plasmoid login --provider antigravity`)
+/// or `antigravity-usage login`, stored under `~/.config/antigravity-usage`.
 fn oauth_client_id() -> Result<String> {
     crate::config::antigravity_oauth_client_id().ok_or_else(|| {
         anyhow!(
-            "Missing Antigravity OAuth client id. Set ANTIGRAVITY_OAUTH_CLIENT_ID \
-             (or oauth_client_id on the antigravity entry in ~/.codexbar/config.json). \
-             These are the Google Cloud OAuth app credentials used by antigravity-usage \
-             for token refresh — not your personal tokens."
+            "Missing Antigravity OAuth client id. Install the local `agy` CLI \
+             (desktop OAuth client is read from that binary), or set \
+             ANTIGRAVITY_OAUTH_CLIENT_ID / oauth_client_id in ~/.codexbar/config.json."
         )
     })
 }
@@ -1120,10 +1120,9 @@ fn oauth_client_id() -> Result<String> {
 fn oauth_client_secret() -> Result<String> {
     crate::config::antigravity_oauth_client_secret().ok_or_else(|| {
         anyhow!(
-            "Missing Antigravity OAuth client secret. Set ANTIGRAVITY_OAUTH_CLIENT_SECRET \
-             (or oauth_client_secret on the antigravity entry in ~/.codexbar/config.json). \
-             These are the Google Cloud OAuth app credentials used by antigravity-usage \
-             for token refresh — not your personal tokens."
+            "Missing Antigravity OAuth client secret. Install the local `agy` CLI \
+             (desktop OAuth client is read from that binary), or set \
+             ANTIGRAVITY_OAUTH_CLIENT_SECRET / oauth_client_secret in ~/.codexbar/config.json."
         )
     })
 }
@@ -1139,8 +1138,8 @@ const FETCH_AVAILABLE_MODELS_PATH: &str = "/v1internal:fetchAvailableModels";
 const RETRIEVE_USER_QUOTA_SUMMARY_CLOUD_PATH: &str = "/v1internal:retrieveUserQuotaSummary";
 const TOKEN_EXPIRY_BUFFER_MS: i64 = 5 * 60 * 1000;
 
-/// Tokens stored by `antigravity-usage login`. Field names match the on-disk
-/// camelCase JSON so we can read and refresh them in place.
+/// Tokens stored by browser OAuth login / `antigravity-usage`. Field names match
+/// the on-disk camelCase JSON so we can read and refresh them in place.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredTokens {
@@ -1297,7 +1296,10 @@ fn load_tokens() -> Result<(StoredTokens, PathBuf)> {
 
     let legacy_path = config_dir.join("tokens.json");
     let raw = fs::read_to_string(&legacy_path)
-        .context("No antigravity-usage login found. Run `antigravity-usage login` first.")?;
+        .context(
+            "No Antigravity native-auth login found. Run \
+             `codexbar-plasmoid login --provider antigravity` (or `antigravity-usage login`) first.",
+        )?;
     let tokens: StoredTokens = serde_json::from_str(&raw)
         .context("Parse antigravity-usage tokens.json failed")?;
     Ok((tokens, legacy_path))
@@ -1341,7 +1343,9 @@ fn ensure_valid_access_token(
         return Ok(tokens.access_token.clone());
     }
     if tokens.refresh_token.is_empty() {
-        anyhow::bail!("No refresh token available. Run `antigravity-usage login` again.");
+        anyhow::bail!(
+            "No refresh token available. Run `codexbar-plasmoid login --provider antigravity` again."
+        );
     }
 
     let body = format!(
@@ -1420,7 +1424,7 @@ fn load_code_assist(http: &HttpClient, access_token: &str) -> Result<LoadCodeAss
 
     if status == 401 || status == 403 {
         anyhow::bail!(
-            "Cloud Code authentication failed (HTTP {status}). Run `antigravity-usage login` again."
+            "Cloud Code authentication failed (HTTP {status}). Run `codexbar-plasmoid login --provider antigravity` again."
         );
     }
     if status >= 400 {
@@ -1470,7 +1474,7 @@ fn fetch_available_models(
 
     if status == 401 || status == 403 {
         anyhow::bail!(
-            "Cloud Code authentication failed (HTTP {status}). Run `antigravity-usage login` again."
+            "Cloud Code authentication failed (HTTP {status}). Run `codexbar-plasmoid login --provider antigravity` again."
         );
     }
     if status >= 400 {
@@ -1512,8 +1516,8 @@ fn quotas_from_models(models: serde_json::Map<String, serde_json::Value>) -> Vec
     quotas
 }
 
-/// Fetch usage via the Google Cloud Code API using OAuth tokens stored by
-/// `antigravity-usage login`. No running IDE is required.
+/// Fetch usage via the Google Cloud Code API using OAuth tokens from browser
+/// login or `antigravity-usage`. No running IDE is required.
 fn fetch_cloud(http: &HttpClient, _timeout: Duration) -> Result<ProviderPayload> {
     let (mut tokens, path) = load_tokens()?;
     let access_token = ensure_valid_access_token(http, &mut tokens, &path)?;
@@ -1591,7 +1595,7 @@ fn fetch_cloud_quota_summary_rows(
 
     if status == 401 || status == 403 {
         anyhow::bail!(
-            "Cloud Code authentication failed (HTTP {status}). Run `antigravity-usage login` again."
+            "Cloud Code authentication failed (HTTP {status}). Run `codexbar-plasmoid login --provider antigravity` again."
         );
     }
     if status >= 400 {
