@@ -37,7 +37,8 @@ Kirigami.ScrollablePage {
         oauth: i18n("OAuth"),
         api: i18n("API"),
         web: i18n("Web"),
-        native: i18n("Native")
+        native: i18n("Native"),
+        "native-auth": i18n("Native Auth")
     })
     readonly property var sourceNotes: ({
         auto: i18n("Provider default"),
@@ -45,7 +46,8 @@ Kirigami.ScrollablePage {
         oauth: i18n("Signed-in account"),
         api: i18n("API credentials"),
         web: i18n("Browser/web session"),
-        native: i18n("Plasmoid fetcher")
+        native: i18n("Plasmoid fetcher"),
+        "native-auth": i18n("Google OAuth tokens from antigravity-usage login")
     })
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },
@@ -55,13 +57,13 @@ Kirigami.ScrollablePage {
         { id: "copilot", name: "Copilot", sources: ["auto", "api"], linuxDefault: "api" },
         { id: "openai", name: "OpenAI API", sources: ["auto", "api"], linuxDefault: "api" },
         { id: "azure-openai", name: "Azure OpenAI", sources: ["auto", "api"], linuxDefault: "api" },
-        { id: "antigravity", name: "Antigravity", sources: ["auto", "native", "cli", "oauth"], linuxDefault: "native" },
+        { id: "antigravity", name: "Antigravity", sources: ["auto", "native", "native-auth", "cli", "oauth"], linuxDefault: "native" },
         { id: "augment", name: "Augment", sources: ["auto", "cli"], linuxDefault: "cli" },
         { id: "factory", name: "Factory", sources: ["auto", "cli"], linuxDefault: "cli" },
         { id: "jetbrains", name: "JetBrains", sources: ["auto", "cli"], linuxDefault: "cli" },
         { id: "kilo", name: "Kilo", sources: ["auto", "api", "cli"], linuxDefault: "api" },
         { id: "kiro", name: "Kiro", sources: ["auto", "cli"], linuxDefault: "cli" },
-        { id: "grok", name: "Grok", sources: ["auto", "cli", "web"], linuxDefault: "cli" },
+        { id: "grok", name: "Grok", sources: ["auto", "native", "cli", "web"], linuxDefault: "native" },
         { id: "ollama", name: "Ollama", sources: ["auto", "api", "web"], linuxDefault: "api" },
         { id: "minimax", name: "MiniMax", sources: ["auto", "api", "web"], linuxDefault: "api" },
         { id: "alibaba-coding-plan", name: "Alibaba Coding", sources: ["auto", "api", "web"], linuxDefault: "api" },
@@ -176,6 +178,9 @@ Kirigami.ScrollablePage {
                         required property int accountIndex
                         required property bool allAccounts
                         required property bool showInCompactAll
+                        required property bool compactBarPrimary
+                        required property bool compactBarSecondary
+                        required property bool compactBarTertiary
                         required property string compactColor
                         required property string apiKey
 
@@ -206,6 +211,9 @@ Kirigami.ScrollablePage {
                             readonly property int accountIndex: delegateRoot.accountIndex
                             readonly property bool allAccounts: delegateRoot.allAccounts
                             readonly property bool showInCompactAll: delegateRoot.showInCompactAll
+                            readonly property bool compactBarPrimary: delegateRoot.compactBarPrimary
+                            readonly property bool compactBarSecondary: delegateRoot.compactBarSecondary
+                            readonly property bool compactBarTertiary: delegateRoot.compactBarTertiary
                             readonly property string compactColor: delegateRoot.compactColor
                             readonly property string apiKey: delegateRoot.apiKey
 
@@ -554,6 +562,34 @@ Kirigami.ScrollablePage {
                                         }
                                     }
 
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        QtControls.Label {
+                                            text: i18n("Tray bars:")
+                                            color: Kirigami.Theme.disabledTextColor
+                                        }
+
+                                        QtControls.CheckBox {
+                                            text: page.barSlotLabel(providerDelegate.provider, "primary")
+                                            checked: providerDelegate.compactBarPrimary
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarPrimary", checked)
+                                        }
+
+                                        QtControls.CheckBox {
+                                            text: page.barSlotLabel(providerDelegate.provider, "secondary")
+                                            checked: providerDelegate.compactBarSecondary
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarSecondary", checked)
+                                        }
+
+                                        QtControls.CheckBox {
+                                            text: page.barSlotLabel(providerDelegate.provider, "tertiary")
+                                            checked: providerDelegate.compactBarTertiary
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarTertiary", checked)
+                                        }
+                                    }
+
                                     ColumnLayout {
                                         Layout.fillWidth: true
                                         visible: providerDelegate.colorPickerOpen
@@ -670,6 +706,9 @@ Kirigami.ScrollablePage {
                                 accountIndex: 0,
                                 allAccounts: false,
                                 showInCompactAll: true,
+                                compactBarPrimary: true,
+                                compactBarSecondary: true,
+                                compactBarTertiary: true,
                                 compactColor: "",
                                 apiKey: ""
                             });
@@ -879,6 +918,9 @@ Kirigami.ScrollablePage {
                 accountIndex: Math.max(0, Number(item.accountIndex || 0)),
                 allAccounts: item.allAccounts === true,
                 showInCompactAll: item.showInCompactAll !== false,
+                compactBarPrimary: item.compactBarPrimary !== false,
+                compactBarSecondary: item.compactBarSecondary !== false,
+                compactBarTertiary: item.compactBarTertiary !== false,
                 compactColor: normalizeColor(item.compactColor || ""),
                 apiKey: String(item.apiKey || "")
             };
@@ -897,11 +939,51 @@ Kirigami.ScrollablePage {
                 accountIndex: item.accountIndex,
                 allAccounts: item.allAccounts,
                 showInCompactAll: item.showInCompactAll,
+                compactBarPrimary: item.compactBarPrimary,
+                compactBarSecondary: item.compactBarSecondary,
+                compactBarTertiary: item.compactBarTertiary,
                 compactColor: item.compactColor,
                 apiKey: item.apiKey
             });
         }
         return JSON.stringify(items);
+    }
+
+    function barSlotLabel(providerId, slot) {
+        const labels = barSlotLabels(providerId);
+        if (slot === "primary") {
+            return labels.primary;
+        }
+        if (slot === "secondary") {
+            return labels.secondary;
+        }
+        return labels.tertiary;
+    }
+
+    function barSlotLabels(providerId) {
+        const normalized = catalogFor(providerId).id;
+        switch (normalized) {
+            case "claude":
+                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Opus") };
+            case "codex":
+                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Long") };
+            case "kilo":
+                return { primary: i18n("Credits"), secondary: i18n("Monthly"), tertiary: i18n("Extra") };
+            case "cursor":
+                return { primary: i18n("Total"), secondary: i18n("Auto"), tertiary: i18n("API") };
+            case "antigravity":
+                return { primary: i18n("Claude"), secondary: i18n("Gemini Pro"), tertiary: i18n("Flash") };
+            case "opencode":
+                return { primary: i18n("Rolling"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
+            case "opencodego":
+                return { primary: i18n("Rolling"), secondary: i18n("Weekly"), tertiary: i18n("Monthly") };
+            case "devin":
+                return { primary: i18n("Daily"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
+            case "grok":
+                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
+            default:
+                return { primary: i18n("Bar 1"), secondary: i18n("Bar 2"), tertiary: i18n("Bar 3") };
+        }
     }
 
     function enabledProviders() {

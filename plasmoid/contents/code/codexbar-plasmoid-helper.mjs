@@ -131,7 +131,7 @@ const showCredits = args.credits !== "false";
 const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
 const kdeProviderConfig = loadKdeProviderConfig();
 
-const nativeProviders = new Set(["antigravity", "cursor", "devin", "opencode", "opencodego"]);
+const nativeProviders = new Set(["antigravity", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
 const linuxAutoFallbacks = {
   codex: "cli",
@@ -143,7 +143,10 @@ const linuxAutoFallbacks = {
   devin: "native",
   augment: "cli",
   factory: "cli",
-  grok: "cli",
+  // Grok agent-stdio billing RPC is broken (-32601). The native fetcher reads
+  // every session: ~/.grok/auth.json (grok login) plus browser sso cookies
+  // (Chrome/Zen/Firefox) so multi-account SuperGrok usage shows up.
+  grok: "native",
   jetbrains: "cli",
   kilo: "api",
   kiro: "cli",
@@ -543,6 +546,8 @@ function providerLabels(providerId) {
       return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Monthly Usage" };
     case "devin":
       return { session: "Daily", weekly: "Weekly", tertiary: "Extra" };
+    case "grok":
+      return { session: "Credits", weekly: "Weekly", tertiary: "Extra" };
     default:
       return { session: "Session", weekly: "Weekly", tertiary: "Extra" };
   }
@@ -581,7 +586,10 @@ function resolveSource(providerId, requestedSource) {
 
 function usesNativeCli(providerId, requestedSource) {
   const resolved = resolveSource(providerId, requestedSource);
-  return resolved === "native" && nativeProviders.has(normalizeProviderId(providerId));
+  return (
+    (resolved === "native" || resolved === "native-auth") &&
+    nativeProviders.has(normalizeProviderId(providerId))
+  );
 }
 
 function commandForConfig(config) {

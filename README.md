@@ -181,9 +181,10 @@ as `costError` but does not discard successful usage data.
 
 Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
-or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity uses a
-local HTTPS probe against a running `agy` or Antigravity IDE language server. Devin calls the
-`app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
+or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity can either
+probe a running `agy`/IDE language server locally, or use **Native Auth** (Google OAuth tokens from
+`antigravity-usage login`, stored under `~/.config/antigravity-usage`) to call the Cloud Code API without the IDE.
+Devin calls the `app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
 
 Build and bundle it:
 
@@ -201,18 +202,28 @@ plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provi
 ```
 
 In widget settings, choose **Native** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
-already prefers Native for those providers.
+already prefers Native for those providers. For Antigravity without a running IDE, choose **Native Auth** after logging in
+with [`antigravity-usage`](https://www.npmjs.com/package/antigravity-usage):
+
+```sh
+npx antigravity-usage login
+plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider antigravity --source native-auth
+```
+
+With Antigravity source set to **Native** (or Linux auto), the fetcher tries the local IDE first and falls back to Native
+Auth tokens when the IDE is not running.
 
 Authentication options:
 
-- Antigravity: a running `agy` process or Antigravity IDE language server
+- Antigravity **Native**: a running `agy` process or Antigravity IDE language server
+- Antigravity **Native Auth**: user tokens from `antigravity-usage login` in `~/.config/antigravity-usage` (Cloud Code API; no IDE required). Token **refresh** also needs the Google OAuth *app* client id/secret supplied locally (not shipped in this repo): `ANTIGRAVITY_OAUTH_CLIENT_ID` / `ANTIGRAVITY_OAUTH_CLIENT_SECRET`, or `oauth_client_id` / `oauth_client_secret` on the antigravity entry in `~/.codexbar/config.json`
 - `~/.codexbar/config.json` provider `cookie_header`
 - `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
 - Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)
 - OpenCode Go local usage from `~/.local/share/opencode/opencode.db` when web cookies are unavailable
 - Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
 
-Native cookie configuration uses a provider list:
+Native cookie / auth configuration uses a provider list (local only — do not commit real secrets):
 
 ```json
 {
@@ -230,6 +241,11 @@ Native cookie configuration uses a provider list:
       "id": "devin",
       "cookie_header": "eyJhbGci...",
       "workspace_id": "org/my-team"
+    },
+    {
+      "id": "antigravity",
+      "oauth_client_id": "<your-google-oauth-client-id>",
+      "oauth_client_secret": "<your-google-oauth-client-secret>"
     }
   ]
 }

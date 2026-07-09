@@ -18,6 +18,16 @@ struct ProviderConfig {
     cookie_source: Option<String>,
     #[serde(default)]
     workspace_id: Option<String>,
+    /// Google OAuth *app* client id for Antigravity Cloud Code token refresh.
+    /// Local-only — never commit real values. Prefer env
+    /// `ANTIGRAVITY_OAUTH_CLIENT_ID` when possible.
+    #[serde(default)]
+    oauth_client_id: Option<String>,
+    /// Google OAuth *app* client secret for Antigravity Cloud Code token refresh.
+    /// Local-only — never commit real values. Prefer env
+    /// `ANTIGRAVITY_OAUTH_CLIENT_SECRET` when possible.
+    #[serde(default)]
+    oauth_client_secret: Option<String>,
 }
 
 pub fn normalize_provider_id(provider_id: &str) -> String {
@@ -162,4 +172,35 @@ pub fn devin_organization() -> Option<String> {
         }
     }
     None
+}
+
+/// Antigravity Cloud Code OAuth app client id (for token refresh only).
+/// Order: `ANTIGRAVITY_OAUTH_CLIENT_ID` env, then antigravity provider
+/// `oauth_client_id` in `~/.codexbar/config.json`. No compiled-in default.
+pub fn antigravity_oauth_client_id() -> Option<String> {
+    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_ID").or_else(|| {
+        provider_settings("antigravity")
+            .and_then(|s| s.oauth_client_id)
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    })
+}
+
+/// Antigravity Cloud Code OAuth app client secret (for token refresh only).
+/// Order: `ANTIGRAVITY_OAUTH_CLIENT_SECRET` env, then antigravity provider
+/// `oauth_client_secret` in `~/.codexbar/config.json`. No compiled-in default.
+pub fn antigravity_oauth_client_secret() -> Option<String> {
+    non_empty_env("ANTIGRAVITY_OAUTH_CLIENT_SECRET").or_else(|| {
+        provider_settings("antigravity")
+            .and_then(|s| s.oauth_client_secret)
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    })
+}
+
+fn non_empty_env(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }

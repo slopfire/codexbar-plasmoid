@@ -344,26 +344,63 @@ PlasmoidItem {
             return rows.length > 0 ? Number(rows[0].percentLeft) : 0;
         }
 
+        function compactBarSlotIds(config) {
+            const slots = [];
+            if (!config || config.compactBarPrimary !== false) {
+                slots.push("primary");
+            }
+            if (!config || config.compactBarSecondary !== false) {
+                slots.push("secondary");
+            }
+            if (!config || config.compactBarTertiary !== false) {
+                slots.push("tertiary");
+            }
+            // If every slot is unchecked, fall back to all three so the tray
+            // never goes blank purely from a misclick.
+            return slots.length > 0 ? slots : ["primary", "secondary", "tertiary"];
+        }
+
+        function compactBarRowAllowed(row, index, allowedSlots) {
+            const id = String(row.id || "").toLowerCase();
+            if (id === "primary" || id === "secondary" || id === "tertiary") {
+                return allowedSlots.indexOf(id) !== -1;
+            }
+            // Rows without a slot id map positionally: 0→primary, 1→secondary, 2→tertiary.
+            const positional = ["primary", "secondary", "tertiary"][index];
+            return positional ? allowedSlots.indexOf(positional) !== -1 : false;
+        }
+
         function compactBarRows(entry) {
             const output = [];
             const rows = entry && entry.rows ? entry.rows : [];
-            const maxRows = Math.min(rows.length, 2);
+            const config = entry ? providerConfig(entry.provider) : null;
+            const allowedSlots = compactBarSlotIds(config);
+            const maxRows = Math.min(rows.length, 3);
+            let allowedCount = 0;
             for (let index = 0; index < maxRows; index += 1) {
                 const row = rows[index];
+                if (!compactBarRowAllowed(row, index, allowedSlots)) {
+                    continue;
+                }
+                allowedCount += 1;
                 const percentLeft = Number(row.percentLeft);
                 if (!Number.isFinite(percentLeft)) {
                     continue;
                 }
                 output.push({
+                    id: String(row.id || ["primary", "secondary", "tertiary"][index] || ""),
                     title: String(row.title || ""),
                     percentLeft: Math.max(0, Math.min(100, percentLeft)),
                     color: compactBarColor(entry.provider, percentLeft)
                 });
             }
-            if (output.length === 0 && rows.length > 0) {
+            // Only metric-fallback when the user allowed slots but none had a
+            // usable percent (not when every matching bar was unchecked).
+            if (output.length === 0 && allowedCount > 0) {
                 const percentLeft = compactBarPercent(entry);
                 if (Number.isFinite(percentLeft)) {
                     output.push({
+                        id: "primary",
                         title: providerName(entry.provider),
                         percentLeft: Math.max(0, Math.min(100, percentLeft)),
                         color: compactBarColor(entry.provider, percentLeft)

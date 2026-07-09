@@ -62,6 +62,28 @@ impl HttpClient {
             .with_context(|| format!("read body from {url}"))
     }
 
+    /// POST raw bytes and return the response body as bytes (no UTF-8 assumption).
+    /// Used for gRPC-web protobuf frames that are not valid text.
+    pub fn post_bytes(&self, url: &str, headers: &HeaderMap, body: &[u8]) -> Result<Vec<u8>> {
+        let response = self
+            .client
+            .post(url)
+            .headers(headers.clone())
+            .header(USER_AGENT, USER_AGENT_VALUE)
+            .body(body.to_vec())
+            .send()
+            .with_context(|| format!("POST {url}"))?;
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .with_context(|| format!("read body from {url}"))?
+            .to_vec();
+        if !status.is_success() {
+            anyhow::bail!("POST {url} status {status}");
+        }
+        Ok(bytes)
+    }
+
     pub fn post_connect_json(
         &self,
         url: &str,
@@ -83,6 +105,53 @@ impl HttpClient {
             .with_context(|| format!("POST {url} status"))?
             .text()
             .with_context(|| format!("read body from {url}"))
+    }
+
+    /// POST a form-encoded body and return the response text.
+    /// Used for OAuth token refresh exchanges.
+    pub fn post_form(&self, url: &str, body: &str) -> Result<String> {
+        self.client
+            .post(url)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .header(USER_AGENT, USER_AGENT_VALUE)
+            .body(body.to_string())
+            .send()
+            .with_context(|| format!("POST {url}"))?
+            .error_for_status()
+            .with_context(|| format!("POST {url} status"))?
+            .text()
+            .with_context(|| format!("read body from {url}"))
+    }
+
+    /// POST a JSON body with a Bearer token and custom User-Agent, returning
+    /// the HTTP status code and response text without asserting success. This
+    /// lets callers branch on 401/403/etc. for the Cloud Code API.
+    pub fn post_bearer_text(
+        &self,
+        url: &str,
+        bearer: &str,
+        user_agent: &str,
+        body: &serde_json::Value,
+    ) -> Result<(u16, String)> {
+        let payload = serde_json::to_vec(body).context("encode JSON body")?;
+        let response = self
+            .client
+            .post(url)
+            .header(
+                "Authorization",
+                HeaderValue::from_str(&format!("Bearer {bearer}"))
+                    .context("invalid bearer token header")?,
+            )
+            .header("Content-Type", "application/json")
+            .header(USER_AGENT, HeaderValue::from_str(user_agent).unwrap_or_else(|_| HeaderValue::from_static("antigravity")))
+            .body(payload)
+            .send()
+            .with_context(|| format!("POST {url}"))?;
+        let status = response.status().as_u16();
+        let text = response
+            .text()
+            .with_context(|| format!("read body from {url}"))?;
+        Ok((status, text))
     }
 }
 

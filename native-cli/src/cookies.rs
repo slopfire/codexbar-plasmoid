@@ -27,6 +27,8 @@ const CURSOR_COOKIE_NAMES: &[&str] = &[
 ];
 const OPENCODE_DOMAINS: &[&str] = &["opencode.ai", "app.opencode.ai"];
 const OPENCODE_COOKIE_NAMES: &[&str] = &["auth", "__Host-auth"];
+const GROK_DOMAINS: &[&str] = &["grok.com", "www.grok.com", "x.ai", "accounts.x.ai"];
+const GROK_COOKIE_NAMES: &[&str] = &["sso", "sso-rw"];
 
 pub struct CookieResolution {
     pub header: String,
@@ -112,7 +114,8 @@ pub fn resolve_all_cookie_headers(provider_id: &str) -> Vec<CookieResolution> {
 }
 
 pub fn filter_provider_cookies(header: &str, provider_id: &str) -> String {
-    if normalize_provider_id(provider_id) == "cursor" {
+    let names = names_for(provider_id);
+    if normalize_provider_id(provider_id) == "cursor" || names.is_empty() {
         return header.to_string();
     }
     header
@@ -120,7 +123,7 @@ pub fn filter_provider_cookies(header: &str, provider_id: &str) -> String {
         .map(str::trim)
         .filter_map(|part| {
             let (name, value) = part.split_once('=')?;
-            if OPENCODE_COOKIE_NAMES.contains(&name.trim()) {
+            if names.contains(&name.trim()) {
                 Some(format!("{}={}", name.trim(), value.trim()))
             } else {
                 None
@@ -135,6 +138,7 @@ fn missing_cookie_message(provider_id: &str) -> String {
         "cursor" => "No Cursor session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_CURSOR_COOKIE, or log in to cursor.com in Chrome/Chromium.".to_string(),
         "opencode" => "No OpenCode session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODE_COOKIE, or log in to opencode.ai in Chrome/Chromium.".to_string(),
         "opencodego" => "No OpenCode Go session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODEGO_COOKIE, log in to opencode.ai, or use OpenCode Go locally.".to_string(),
+        "grok" => "No Grok session found. Run `grok login`, or sign in to grok.com in Chrome/Zen, or paste a Cookie header into ~/.codexbar/config.json.".to_string(),
         _ => "No session cookie found.".to_string(),
     }
 }
@@ -329,18 +333,18 @@ fn read_cookie_header_from_store(
 }
 
 fn domains_for(provider_id: &str) -> &'static [&'static str] {
-    if normalize_provider_id(provider_id) == "cursor" {
-        CURSOR_DOMAINS
-    } else {
-        OPENCODE_DOMAINS
+    match normalize_provider_id(provider_id).as_str() {
+        "cursor" => CURSOR_DOMAINS,
+        "grok" => GROK_DOMAINS,
+        _ => OPENCODE_DOMAINS,
     }
 }
 
 fn names_for(provider_id: &str) -> &'static [&'static str] {
-    if normalize_provider_id(provider_id) == "cursor" {
-        CURSOR_COOKIE_NAMES
-    } else {
-        OPENCODE_COOKIE_NAMES
+    match normalize_provider_id(provider_id).as_str() {
+        "cursor" => CURSOR_COOKIE_NAMES,
+        "grok" => GROK_COOKIE_NAMES,
+        _ => OPENCODE_COOKIE_NAMES,
     }
 }
 

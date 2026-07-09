@@ -40,6 +40,11 @@ Item {
     implicitWidth: Kirigami.Units.iconSizes.smallMedium
     implicitHeight: Kirigami.Units.iconSizes.smallMedium
 
+    // Compact tray groups support up to three stacked usage lanes (primary /
+    // secondary / tertiary). A lone bar is drawn at half-height and centered so
+    // it does not stretch into a thick pill.
+    readonly property int maxBarRows: 3
+
     function normalizedBars() {
         const output = [];
         const items = bars.barItems || [];
@@ -47,7 +52,7 @@ Item {
             const item = items[index];
             const rows = [];
             const itemRows = item.rows || [];
-            const maxRows = Math.min(itemRows.length, 2);
+            const maxRows = Math.min(itemRows.length, bars.maxBarRows);
             for (let rowIndex = 0; rowIndex < maxRows; rowIndex += 1) {
                 const row = itemRows[rowIndex];
                 if (row.kind === "credits") {
@@ -96,7 +101,7 @@ Item {
 
         const rows = bars.usageRows || [];
         const fallbackRows = [];
-        const maxRows = Math.min(rows.length, 2);
+        const maxRows = Math.min(rows.length, bars.maxBarRows);
         for (let index = 0; index < maxRows; index += 1) {
             const row = rows[index];
             const value = Number(row.percentLeft);
@@ -147,13 +152,30 @@ Item {
 
                 Rectangle {
                     visible: modelData.kind !== "credits"
-                    readonly property int laneCount: Math.max(1, groupRows.length)
-                    readonly property real availableHeight: Math.max(0, parent.height - (laneCount - 1) * bars.laneGap)
+                    // Count only real usage lanes (skip credits placeholders).
+                    readonly property int laneCount: {
+                        let count = 0;
+                        for (let i = 0; i < groupRows.length; i += 1) {
+                            if (groupRows[i].kind !== "credits") {
+                                count += 1;
+                            }
+                        }
+                        return Math.max(1, count);
+                    }
+                    // Single-lane groups use the same height as one lane of a
+                    // two-bar stack so Grok (etc.) does not fill the tray.
+                    readonly property int layoutLanes: Math.max(laneCount, 2)
+                    readonly property real availableHeight: Math.max(
+                        0, parent.height - (layoutLanes - 1) * bars.laneGap)
+                    readonly property real laneHeight: Math.max(3, availableHeight / layoutLanes)
+                    readonly property real stackHeight: laneCount * laneHeight
+                        + (laneCount - 1) * bars.laneGap
+                    readonly property real stackTop: Math.max(0, (parent.height - stackHeight) / 2)
 
                     x: 0
-                    y: index * (height + bars.laneGap)
+                    y: stackTop + index * (laneHeight + bars.laneGap)
                     width: parent.width
-                    height: Math.max(3, availableHeight / laneCount)
+                    height: laneHeight
                     radius: height / 2
                     color: bars.trackColor
                     border.width: 1

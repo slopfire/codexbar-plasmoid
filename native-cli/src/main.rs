@@ -41,8 +41,12 @@ fn run() -> anyhow::Result<()> {
     }
 
     let parsed = parse_args(&args[2..]);
-    if parsed.get("source").map(String::as_str) != Some("native") {
-        anyhow::bail!("--source must be native for codexbar-plasmoid.");
+    let source = parsed
+        .get("source")
+        .map(String::as_str)
+        .unwrap_or("native");
+    if source != "native" && source != "native-auth" {
+        anyhow::bail!("--source must be native or native-auth for codexbar-plasmoid.");
     }
 
     let timeout_secs = parsed
@@ -69,10 +73,12 @@ fn run() -> anyhow::Result<()> {
     let mut payloads: Vec<ProviderPayload> = if provider == "all" {
         NATIVE_PROVIDERS
             .iter()
-            .flat_map(|provider_id| fetch_provider(provider_id, &http, &home, include_status, timeout))
+            .flat_map(|provider_id| {
+                fetch_provider(provider_id, &http, &home, include_status, timeout, source)
+            })
             .collect::<Vec<_>>()
     } else if NATIVE_PROVIDERS.contains(&provider.as_str()) {
-        fetch_provider(&provider, &http, &home, include_status, timeout)
+        fetch_provider(&provider, &http, &home, include_status, timeout, source)
     } else {
         anyhow::bail!("Provider not supported by codexbar-plasmoid: {provider}");
     };
@@ -111,17 +117,20 @@ fn parse_args(args: &[String]) -> std::collections::HashMap<String, String> {
 
 fn print_help() {
     println!(
-        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Cursor, OpenCode, and OpenCode Go
+        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Cursor, Devin, Grok, OpenCode, and OpenCode Go
 
 Usage:
-  codexbar-plasmoid usage --format json --json-only --provider <id> --source native [--status] [--web-timeout <seconds>]
+  codexbar-plasmoid usage --format json --json-only --provider <id> --source native|native-auth [--status] [--web-timeout <seconds>]
 
 Providers:
   antigravity, cursor, opencode, opencodego, all
 
 Authentication:
-  - Antigravity: running agy or Antigravity IDE language server (local HTTPS probe)
-  - ~/.codexbar/config.json provider cookieHeader
+  - Antigravity (--source native): running agy/IDE first, then Cloud Code OAuth fallback
+  - Antigravity (--source native-auth): user tokens from `antigravity-usage login`
+    in ~/.config/antigravity-usage; token refresh needs ANTIGRAVITY_OAUTH_CLIENT_ID
+    and ANTIGRAVITY_OAUTH_CLIENT_SECRET (or oauth_client_* in ~/.codexbar/config.json)
+  - ~/.codexbar/config.json provider cookieHeader / oauth_client_*
   - CODEXBAR_PLASMOID_CURSOR_COOKIE / CODEXBAR_PLASMOID_OPENCODE_COOKIE / CODEXBAR_PLASMOID_OPENCODEGO_COOKIE (or older SPLAZMA_* fallback)
   - Chrome/Chromium/Helium/Firefox/Zen cookie import (secret-tool required for encrypted Chromium cookies)
   - OpenCode Go local usage from ~/.local/share/opencode/opencode.db"
