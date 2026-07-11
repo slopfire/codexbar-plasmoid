@@ -17,6 +17,7 @@ PlasmoidItem {
     property string lastError: ""
     // An empty selection means "show every provider". Keep this as an array
     // rather than a single id so provider chips can be combined as filters.
+    // Restored from plasmoid.configuration.selectedEntryIds on startup.
     property var selectedEntryIds: []
     property bool multiProviderSelectionEnabled: plasmoid.configuration.allowMultiProviderSelection === true
     property string activeCommand: ""
@@ -45,8 +46,15 @@ PlasmoidItem {
         }
     ]
 
-    Component.onCompleted: refreshNow()
+    Component.onCompleted: {
+        selectedEntryIds = loadSelectedEntryIds();
+        if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
+            selectedEntryIds = selectedEntryIds.slice(0, 1);
+        }
+        refreshNow();
+    }
     onRefreshIntervalChanged: refreshTimer.restart()
+    onSelectedEntryIdsChanged: persistSelectedEntryIds()
     onMultiProviderSelectionEnabledChanged: {
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
@@ -514,11 +522,15 @@ PlasmoidItem {
                 if (parsed.cliUpdate && (parsed.cliUpdate.updated || parsed.cliUpdate.error)) {
                     root.cliUpdateInfo = parsed.cliUpdate;
                 }
+                // Drop stale ids only when we have a real entry list. An empty
+                // or failed refresh must not wipe the remembered selection.
                 if (root.selectedEntryIds.length > 0) {
                     const availableIds = (parsed.entries || []).map(function(entry) { return entry.id; });
-                    root.selectedEntryIds = root.selectedEntryIds.filter(function(entryId) {
-                        return availableIds.indexOf(entryId) !== -1;
-                    });
+                    if (availableIds.length > 0) {
+                        root.selectedEntryIds = root.selectedEntryIds.filter(function(entryId) {
+                            return availableIds.indexOf(entryId) !== -1;
+                        });
+                    }
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
@@ -556,6 +568,27 @@ PlasmoidItem {
         loading = true;
         lastError = "";
         executable.connectSource(command);
+    }
+
+    function loadSelectedEntryIds() {
+        try {
+            const parsed = JSON.parse(String(plasmoid.configuration.selectedEntryIds || "[]"));
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed.map(function(entryId) { return String(entryId); }).filter(function(entryId) {
+                return entryId.length > 0;
+            });
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function persistSelectedEntryIds() {
+        const serialized = JSON.stringify(selectedEntryIds || []);
+        if (serialized !== String(plasmoid.configuration.selectedEntryIds || "[]")) {
+            plasmoid.configuration.selectedEntryIds = serialized;
+        }
     }
 
     function toggleEntrySelection(entryId) {
