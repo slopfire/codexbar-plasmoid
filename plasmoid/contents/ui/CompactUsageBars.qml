@@ -40,10 +40,10 @@ Item {
     implicitWidth: Kirigami.Units.iconSizes.smallMedium
     implicitHeight: Kirigami.Units.iconSizes.smallMedium
 
-    // Compact tray groups support up to three stacked usage lanes (primary /
-    // secondary / tertiary). A lone bar is drawn at half-height and centered so
+    // Providers decide how many ordered usage rows they expose. A lone bar is
+    // drawn at half-height and centered so
     // it does not stretch into a thick pill.
-    readonly property int maxBarRows: 3
+    readonly property int maxBarRows: 4
 
     function normalizedBars() {
         const output = [];

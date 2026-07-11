@@ -28,6 +28,10 @@
       <label>Provider configuration list</label>
       <default>[{"provider":"codex","source":"cli","enabled":true,"showInCompactAll":true,"compactColor":""},{"provider":"gemini","source":"api","enabled":true,"showInCompactAll":true,"compactColor":""}]</default>
     </entry>
+    <entry name="compactBarCatalog" type="String">
+      <label>Last discovered provider usage rows for tray configuration</label>
+      <default>{}</default>
+    </entry>
     <entry name="account" type="String">
       <label>Provider account label</label>
       <default></default>

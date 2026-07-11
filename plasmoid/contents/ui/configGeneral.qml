@@ -181,9 +181,8 @@ Kirigami.ScrollablePage {
                         required property int accountIndex
                         required property bool allAccounts
                         required property bool showInCompactAll
-                        required property bool compactBarPrimary
-                        required property bool compactBarSecondary
-                        required property bool compactBarTertiary
+                        required property int compactBarLimit
+                        required property string compactBarIds
                         required property string compactColor
                         required property string apiKey
 
@@ -214,9 +213,8 @@ Kirigami.ScrollablePage {
                             readonly property int accountIndex: delegateRoot.accountIndex
                             readonly property bool allAccounts: delegateRoot.allAccounts
                             readonly property bool showInCompactAll: delegateRoot.showInCompactAll
-                            readonly property bool compactBarPrimary: delegateRoot.compactBarPrimary
-                            readonly property bool compactBarSecondary: delegateRoot.compactBarSecondary
-                            readonly property bool compactBarTertiary: delegateRoot.compactBarTertiary
+                            readonly property int compactBarLimit: delegateRoot.compactBarLimit
+                            readonly property string compactBarIds: delegateRoot.compactBarIds
                             readonly property string compactColor: delegateRoot.compactColor
                             readonly property string apiKey: delegateRoot.apiKey
 
@@ -601,28 +599,52 @@ Kirigami.ScrollablePage {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         spacing: Kirigami.Units.smallSpacing
+                                        visible: page.barChoices(providerDelegate.provider).length === 0
+
+                                        QtControls.Label {
+                                            text: i18n("Maximum tray bars:")
+                                            color: Kirigami.Theme.disabledTextColor
+                                        }
+
+                                        QtControls.SpinBox {
+                                            from: 1
+                                            to: 4
+                                            value: providerDelegate.compactBarLimit
+                                            onValueModified: page.setProviderProperty(providerDelegate.index, "compactBarLimit", value)
+                                        }
+
+                                        QtControls.Label {
+                                            Layout.fillWidth: true
+                                            text: i18n("Uses the limits and order reported by the provider")
+                                            color: Kirigami.Theme.disabledTextColor
+                                            wrapMode: Text.WordWrap
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        visible: page.barChoices(providerDelegate.provider).length > 0
 
                                         QtControls.Label {
                                             text: i18n("Tray bars:")
                                             color: Kirigami.Theme.disabledTextColor
                                         }
 
-                                        QtControls.CheckBox {
-                                            text: page.barSlotLabel(providerDelegate.provider, "primary")
-                                            checked: providerDelegate.compactBarPrimary
-                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarPrimary", checked)
-                                        }
+                                        Repeater {
+                                            model: page.barChoices(providerDelegate.provider)
 
-                                        QtControls.CheckBox {
-                                            text: page.barSlotLabel(providerDelegate.provider, "secondary")
-                                            checked: providerDelegate.compactBarSecondary
-                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarSecondary", checked)
-                                        }
-
-                                        QtControls.CheckBox {
-                                            text: page.barSlotLabel(providerDelegate.provider, "tertiary")
-                                            checked: providerDelegate.compactBarTertiary
-                                            onToggled: page.setProviderProperty(providerDelegate.index, "compactBarTertiary", checked)
+                                            QtControls.CheckBox {
+                                                required property var modelData
+                                                text: modelData.title
+                                                checked: page.barIdSelected(providerDelegate.compactBarIds, modelData.id)
+                                                enabled: !checked || page.selectedBarIds(providerDelegate.compactBarIds).length > 1
+                                                onToggled: page.setBarIdSelected(
+                                                    providerDelegate.index,
+                                                    providerDelegate.compactBarIds,
+                                                    modelData.id,
+                                                    checked)
+                                            }
                                         }
                                     }
 
@@ -742,9 +764,8 @@ Kirigami.ScrollablePage {
                                 accountIndex: 0,
                                 allAccounts: false,
                                 showInCompactAll: true,
-                                compactBarPrimary: true,
-                                compactBarSecondary: true,
-                                compactBarTertiary: true,
+                                compactBarLimit: 4,
+                                compactBarIds: page.defaultBarIds(provider.id),
                                 compactColor: "",
                                 apiKey: ""
                             });
@@ -954,9 +975,8 @@ Kirigami.ScrollablePage {
                 accountIndex: Math.max(0, Number(item.accountIndex || 0)),
                 allAccounts: item.allAccounts === true,
                 showInCompactAll: item.showInCompactAll !== false,
-                compactBarPrimary: item.compactBarPrimary !== false,
-                compactBarSecondary: item.compactBarSecondary !== false,
-                compactBarTertiary: item.compactBarTertiary !== false,
+                compactBarLimit: compactBarLimitFor(item),
+                compactBarIds: compactBarIdsFor(item, provider.id),
                 compactColor: normalizeColor(item.compactColor || ""),
                 apiKey: String(item.apiKey || "")
             };
@@ -975,9 +995,8 @@ Kirigami.ScrollablePage {
                 accountIndex: item.accountIndex,
                 allAccounts: item.allAccounts,
                 showInCompactAll: item.showInCompactAll,
-                compactBarPrimary: item.compactBarPrimary,
-                compactBarSecondary: item.compactBarSecondary,
-                compactBarTertiary: item.compactBarTertiary,
+                compactBarLimit: item.compactBarLimit,
+                compactBarIds: item.compactBarIds,
                 compactColor: item.compactColor,
                 apiKey: item.apiKey
             });
@@ -985,41 +1004,85 @@ Kirigami.ScrollablePage {
         return JSON.stringify(items);
     }
 
-    function barSlotLabel(providerId, slot) {
-        const labels = barSlotLabels(providerId);
-        if (slot === "primary") {
-            return labels.primary;
+    function compactBarLimitFor(item) {
+        const configured = Number(item.compactBarLimit);
+        if (Number.isFinite(configured) && configured >= 1) {
+            return Math.max(1, Math.min(4, Math.round(configured)));
         }
-        if (slot === "secondary") {
-            return labels.secondary;
-        }
-        return labels.tertiary;
+        // Migrate the old primary/secondary/tertiary switches without keeping
+        // their provider-specific labels. At least one bar remains visible.
+        let legacyCount = 0;
+        legacyCount += item.compactBarPrimary !== false ? 1 : 0;
+        legacyCount += item.compactBarSecondary !== false ? 1 : 0;
+        legacyCount += item.compactBarTertiary !== false ? 1 : 0;
+        // The old default enabled all three guessed slots. Treat that as
+        // "show all" so providers with four or more real rows are not clipped.
+        return legacyCount === 3 ? 4 : Math.max(1, legacyCount);
     }
 
-    function barSlotLabels(providerId) {
-        const normalized = catalogFor(providerId).id;
-        switch (normalized) {
-            case "claude":
-                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Opus") };
-            case "codex":
-                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Long") };
-            case "kilo":
-                return { primary: i18n("Credits"), secondary: i18n("Monthly"), tertiary: i18n("Extra") };
-            case "cursor":
-                return { primary: i18n("Total"), secondary: i18n("Auto"), tertiary: i18n("API") };
-            case "antigravity":
-                return { primary: i18n("Claude"), secondary: i18n("Gemini Pro"), tertiary: i18n("Flash") };
-            case "opencode":
-                return { primary: i18n("Rolling"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
-            case "opencodego":
-                return { primary: i18n("Rolling"), secondary: i18n("Weekly"), tertiary: i18n("Monthly") };
-            case "devin":
-                return { primary: i18n("Daily"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
-            case "grok":
-                return { primary: i18n("Session"), secondary: i18n("Weekly"), tertiary: i18n("Extra") };
-            default:
-                return { primary: i18n("Bar 1"), secondary: i18n("Bar 2"), tertiary: i18n("Bar 3") };
+    function barChoices(providerId) {
+        try {
+            const catalog = JSON.parse(String(plasmoid.configuration.compactBarCatalog || "{}"));
+            const rows = catalog[normalizedProviderId(providerId)];
+            if (Array.isArray(rows)) {
+                return rows.filter(function(row) {
+                    return row && String(row.id || "").length > 0;
+                }).map(function(row) {
+                    const id = String(row.id);
+                    return { id: id, title: String(row.title || id) };
+                });
+            }
+        } catch (error) {
+            // A malformed cache should not prevent opening configuration.
         }
+        return [];
+    }
+
+    function normalizedProviderId(providerId) {
+        const normalized = String(providerId || "").toLowerCase().replace(/[-_]/g, "");
+        const aliases = {
+            abacusai: "abacus",
+            alibabacodingplan: "alibaba",
+            groqcloud: "groq"
+        };
+        return aliases[normalized] || normalized;
+    }
+
+    function defaultBarIds(providerId) {
+        return JSON.stringify(barChoices(providerId).map(function(choice) { return choice.id; }));
+    }
+
+    function selectedBarIds(raw) {
+        try {
+            const parsed = JSON.parse(String(raw || "[]"));
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function compactBarIdsFor(item, providerId) {
+        const choices = barChoices(providerId);
+        if (choices.length === 0) {
+            return "[]";
+        }
+        const selected = selectedBarIds(item.compactBarIds);
+        return selected.length > 0 ? JSON.stringify(selected) : defaultBarIds(providerId);
+    }
+
+    function barIdSelected(raw, id) {
+        return selectedBarIds(raw).indexOf(id) !== -1;
+    }
+
+    function setBarIdSelected(index, raw, id, selected) {
+        const ids = selectedBarIds(raw);
+        const position = ids.indexOf(id);
+        if (selected && position === -1) {
+            ids.push(id);
+        } else if (!selected && position !== -1 && ids.length > 1) {
+            ids.splice(position, 1);
+        }
+        setProviderProperty(index, "compactBarIds", JSON.stringify(ids));
     }
 
     function enabledProviders() {

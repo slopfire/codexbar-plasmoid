@@ -539,7 +539,9 @@ function providerLabels(providerId) {
     case "cursor":
       return { session: "Total", weekly: "Auto + Composer", tertiary: "API" };
     case "antigravity":
-      return { session: "Claude", weekly: "Gemini Pro", tertiary: "Gemini Flash" };
+      // Current native responses provide titled usageRows. Older generic CLI
+      // windows do not identify models, so avoid inventing model names here.
+      return { session: "Limit 1", weekly: "Limit 2", tertiary: "Limit 3" };
     case "opencode":
       return { session: "Rolling Usage", weekly: "Weekly Usage", tertiary: "Extra" };
     case "opencodego":
