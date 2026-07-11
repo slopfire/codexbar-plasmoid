@@ -934,7 +934,9 @@ Kirigami.ScrollablePage {
                 providerModel.append(fallback[index]);
             }
         }
-        syncConfig();
+        // Keep an empty providerConfigs value in automatic-discovery mode.
+        // The visible Codex row is the fallback and is persisted only after
+        // the user edits provider settings.
     }
 
     function setProviderProperty(index, key, value) {
@@ -1149,33 +1151,34 @@ Kirigami.ScrollablePage {
 
     function defaultProviderColor(providerId) {
         const colors = {
-            codex: "#49a3b0",
-            openai: "#0f826e",
-            azureopenai: "#0078d4",
-            claude: "#cc7c5e",
-            gemini: "#ab87ea",
-            antigravity: "#60ba7e",
-            cursor: "#00bfa5",
-            opencode: "#3b82f6",
-            opencodego: "#3b82f6",
-            alibaba: "#ff6a00",
-            alibabatokenplan: "#ff6a00",
-            zai: "#e85a6a",
-            factory: "#ff6b35",
-            copilot: "#a855f7",
-            minimax: "#fe603c",
-            vertexai: "#4285f4",
-            kilo: "#f27027",
-            kiro: "#ff9900",
-            augment: "#6366f1",
-            jetbrains: "#ff3399",
-            moonshot: "#205deb",
-            perplexity: "#20b2aa",
-            deepseek: "#527df0",
-            grok: "#10a37f",
-            groq: "#f56844",
-            llmproxy: "#24b47e",
-            devin: "#4f46e5"
+            codex: "#4b929b",
+            openai: "#398979",
+            azureopenai: "#397fb7",
+            claude: "#b57861",
+            gemini: "#8972b5",
+            antigravity: "#55976b",
+            cursor: "#3c9487",
+            opencode: "#477fc2",
+            opencodego: "#477fc2",
+            alibaba: "#bd7434",
+            alibabatokenplan: "#bd7434",
+            zai: "#b96170",
+            factory: "#bd6e4c",
+            copilot: "#8c68b7",
+            minimax: "#bd684e",
+            vertexai: "#4c7fb8",
+            kilo: "#b87243",
+            kiro: "#b57b32",
+            augment: "#666db0",
+            jetbrains: "#ae628a",
+            moonshot: "#4b72b4",
+            perplexity: "#438f8b",
+            deepseek: "#5879b8",
+            grok: "#3d8d76",
+            groq: "#b86c55",
+            openrouter: "#4d88ad",
+            llmproxy: "#4a9173",
+            devin: "#6769ad"
         };
         const normalized = String(providerId || "").toLowerCase().replace(/[-_]/g, "");
         const aliases = {
@@ -1183,25 +1186,25 @@ Kirigami.ScrollablePage {
             abacusai: "abacus",
             groqcloud: "groq"
         };
-        return colors[aliases[normalized] || normalized] || "#49a3b0";
+        return colors[aliases[normalized] || normalized] || "#4b929b";
     }
 
     function providerColorPresets() {
-        // Curated, UX-friendly palette for provider accents.
-        // Grouped by hue and contrast so bars look pleasant in both light/dark themes.
+        // Mid-tone accents retain contrast without glowing against dark themes
+        // or becoming too heavy against light themes.
         return [
             // Blues / cyans
-            "#3b82f6", "#2563eb", "#0ea5e9", "#06b6d4",
+            "#477fc2", "#5879b8", "#4d88ad", "#4b929b",
             // Greens / teals
-            "#10b981", "#059669", "#22c55e", "#16a34a",
+            "#398979", "#3d8d76", "#4a9173", "#55976b",
             // Purples
-            "#8b5cf6", "#6366f1", "#a855f7", "#7c3aed",
+            "#8972b5", "#666db0", "#8c68b7", "#756ca8",
             // Oranges / ambers
-            "#f97316", "#ea580c", "#f59e0b", "#d97706",
+            "#bd7434", "#b87243", "#b57b32", "#a77c48",
             // Reds / pinks
-            "#ef4444", "#dc2626", "#ec4899", "#db2777",
-            // Neutrals / accents
-            "#0f172a", "#111827", "#4b5563", "#9ca3af"
+            "#b96170", "#bd684e", "#ae628a", "#a76572",
+            // Warm / cool low-chroma accents
+            "#b57861", "#8b766e", "#667f91", "#72877a"
         ];
     }
 

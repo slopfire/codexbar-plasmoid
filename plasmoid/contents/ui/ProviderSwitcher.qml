@@ -10,6 +10,7 @@ Item {
 
     property var entries: []
     property string selectedEntryId: ""
+    property var colorForProvider: null
 
     implicitHeight: grid.implicitHeight
     height: grid.implicitHeight
@@ -56,11 +57,14 @@ Item {
 
                 background: Rectangle {
                     radius: Kirigami.Units.cornerRadius
+                    readonly property color accent: switcher.providerColor(button.modelData.provider)
                     color: button.checked
-                        ? Kirigami.Theme.highlightColor
-                        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.hovered ? 0.10 : 0.04)
-                    border.width: button.checked ? 0 : 1
-                    border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.10)
+                        ? Qt.rgba(accent.r, accent.g, accent.b, 0.16)
+                        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.hovered ? 0.07 : 0.025)
+                    border.width: 1
+                    border.color: button.checked
+                        ? Qt.rgba(accent.r, accent.g, accent.b, 0.62)
+                        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.10)
                 }
 
                 contentItem: ColumnLayout {
@@ -72,7 +76,7 @@ Item {
                         id: title
                         Layout.fillWidth: true
                         text: switcher.providerName(button.modelData.provider)
-                        color: button.checked ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        color: Kirigami.Theme.textColor
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         font.bold: button.checked
@@ -83,7 +87,7 @@ Item {
                         Layout.preferredHeight: Kirigami.Units.smallSpacing
                         visible: !switcher.hasBalance(button.modelData)
                         radius: height / 2
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, button.checked ? 0.18 : 0.12)
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.11)
 
                         Rectangle {
                             anchors.left: parent.left
@@ -91,7 +95,7 @@ Item {
                             anchors.bottom: parent.bottom
                             width: parent.width * switcher.primaryPercent(button.modelData) / 100
                             radius: parent.radius
-                            color: button.checked ? Kirigami.Theme.highlightedTextColor : switcher.providerColor(button.modelData.provider)
+                            color: switcher.providerColor(button.modelData.provider)
                         }
                     }
 
@@ -99,7 +103,7 @@ Item {
                         Layout.fillWidth: true
                         visible: switcher.hasBalance(button.modelData)
                         text: switcher.balanceText(button.modelData)
-                        color: button.checked ? Kirigami.Theme.highlightedTextColor : switcher.providerColor(button.modelData.provider)
+                        color: switcher.providerColor(button.modelData.provider)
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         font.bold: true
@@ -109,9 +113,7 @@ Item {
                     QtControls.Label {
                         Layout.fillWidth: true
                         text: button.modelData.account || button.modelData.source || ""
-                        color: button.checked
-                            ? Qt.rgba(Kirigami.Theme.highlightedTextColor.r, Kirigami.Theme.highlightedTextColor.g, Kirigami.Theme.highlightedTextColor.b, 0.78)
-                            : Kirigami.Theme.disabledTextColor
+                        color: Kirigami.Theme.disabledTextColor
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         font: Kirigami.Theme.smallFont
@@ -164,18 +166,21 @@ Item {
     }
 
     function providerColor(provider) {
+        if (typeof switcher.colorForProvider === "function") {
+            return switcher.colorForProvider(provider);
+        }
         const colors = {
-            codex: "#49a3b0",
-            claude: "#cc7c5e",
-            cursor: "#00bfa5",
-            gemini: "#ab87ea",
-            copilot: "#a855f7",
-            openai: "#0f826e",
-            minimax: "#fe603c",
-            grok: "#10a37f",
-            groq: "#f56844",
-            openrouter: "#3da3d9",
-            devin: "#4f46e5"
+            codex: "#4b929b",
+            claude: "#b57861",
+            cursor: "#3c9487",
+            gemini: "#8972b5",
+            copilot: "#8c68b7",
+            openai: "#398979",
+            minimax: "#bd684e",
+            grok: "#3d8d76",
+            groq: "#b86c55",
+            openrouter: "#4d88ad",
+            devin: "#6769ad"
         };
         return colors[provider] || Kirigami.Theme.highlightColor;
     }

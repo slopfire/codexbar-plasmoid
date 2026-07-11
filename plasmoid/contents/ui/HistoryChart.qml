@@ -34,7 +34,7 @@ Item {
                     height: chart.maxValue > 0 ? parent.height * Math.max(0.04, modelData / chart.maxValue) : 0
                     radius: Math.max(1, width / 2)
                     color: chart.accentColor
-                    opacity: 0.85
+                    opacity: 0.72
                 }
             }
         }

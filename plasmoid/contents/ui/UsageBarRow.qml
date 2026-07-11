@@ -73,7 +73,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: Kirigami.Units.smallSpacing
         radius: height / 2
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.09)
 
         Rectangle {
             anchors.left: parent.left

@@ -124,12 +124,12 @@ Item {
         Kirigami.Theme.textColor.r,
         Kirigami.Theme.textColor.g,
         Kirigami.Theme.textColor.b,
-        bars.stale ? 0.30 : 0.45)
+        bars.stale ? 0.16 : 0.22)
     readonly property color strokeColor: Qt.rgba(
         Kirigami.Theme.textColor.r,
         Kirigami.Theme.textColor.g,
         Kirigami.Theme.textColor.b,
-        bars.stale ? 0.45 : 0.65)
+        bars.stale ? 0.25 : 0.34)
 
     function textColorForBg(bg) {
         const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;

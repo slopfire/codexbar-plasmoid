@@ -145,33 +145,34 @@ PlasmoidItem {
                 return settings.compactColor;
             }
             const colors = {
-                codex: "#49a3b0",
-                openai: "#0f826e",
-                azureopenai: "#0078d4",
-                claude: "#cc7c5e",
-                gemini: "#ab87ea",
-                antigravity: "#60ba7e",
-                cursor: "#00bfa5",
-                opencode: "#3b82f6",
-                opencodego: "#3b82f6",
-                alibaba: "#ff6a00",
-                alibabatokenplan: "#ff6a00",
-                zai: "#e85a6a",
-                factory: "#ff6b35",
-                copilot: "#a855f7",
-                minimax: "#fe603c",
-                vertexai: "#4285f4",
-                kilo: "#f27027",
-                kiro: "#ff9900",
-                augment: "#6366f1",
-                jetbrains: "#ff3399",
-                moonshot: "#205deb",
-                perplexity: "#20b2aa",
-                deepseek: "#527df0",
-                grok: "#10a37f",
-                groq: "#f56844",
-                llmproxy: "#24b47e",
-                devin: "#4f46e5"
+                codex: "#4b929b",
+                openai: "#398979",
+                azureopenai: "#397fb7",
+                claude: "#b57861",
+                gemini: "#8972b5",
+                antigravity: "#55976b",
+                cursor: "#3c9487",
+                opencode: "#477fc2",
+                opencodego: "#477fc2",
+                alibaba: "#bd7434",
+                alibabatokenplan: "#bd7434",
+                zai: "#b96170",
+                factory: "#bd6e4c",
+                copilot: "#8c68b7",
+                minimax: "#bd684e",
+                vertexai: "#4c7fb8",
+                kilo: "#b87243",
+                kiro: "#b57b32",
+                augment: "#666db0",
+                jetbrains: "#ae628a",
+                moonshot: "#4b72b4",
+                perplexity: "#438f8b",
+                deepseek: "#5879b8",
+                grok: "#3d8d76",
+                groq: "#b86c55",
+                openrouter: "#4d88ad",
+                llmproxy: "#4a9173",
+                devin: "#6769ad"
             };
             return colors[provider] || Kirigami.Theme.highlightColor;
         }
@@ -653,6 +654,7 @@ PlasmoidItem {
                 Layout.rightMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
                 selectedEntryId: root.selectedEntryId
+                colorForProvider: function(provider) { return codexBar.color(provider); }
                 onEntrySelected: function(entryId) {
                     root.selectedEntryId = root.selectedEntryId === entryId ? "" : entryId;
                 }

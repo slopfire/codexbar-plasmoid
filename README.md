@@ -64,9 +64,10 @@ Open the widget configuration from Plasma and adjust:
 - status, credits, cost, and history visibility
 - compact representation metric
 
-The default Linux provider set is Codex through the CLI source and Gemini through the API source. More providers can be
-added from the widget settings. Source selection is stored per provider because the CodexBar CLI does not support every
-source for every provider, and some web-backed sources are macOS-only.
+With no explicit provider list, the plasmoid discovers installed local agents from their executables and standard config
+directories. If none are found, it falls back to Codex only. Providers can also be added manually from the widget settings.
+Source selection is stored per provider because the CodexBar CLI does not support every source for every provider, and some
+web-backed sources are macOS-only.
 
 Provider rows are saved as a JSON list in the `providerConfigs` Plasma setting. Each row contains:
 
@@ -96,6 +97,7 @@ The account fields map to the CodexBar CLI account flags:
 The refresh interval is clamped to 30 seconds through 24 hours. The request timeout is clamped to 5 through 300 seconds.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
 provider, or all providers, and can be tinted by provider color, remaining-limit threshold, or theme text color.
+New widget instances default to all-provider usage bars with theme-text tinting and no metric text.
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the
 widget may display full account addresses.

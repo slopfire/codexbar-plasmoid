@@ -323,13 +323,52 @@ function effectiveProviderConfigs() {
   if (providerConfigs.length > 0) {
     return providerConfigs;
   }
-  if (process.platform !== "darwin" && provider === "all" && source === "auto") {
-    return [
-      { provider: "codex", source: "cli", account: "", accountIndex: 0, allAccounts: false },
-      { provider: "gemini", source: "api", account: "", accountIndex: 0, allAccounts: false },
-    ];
+  if (provider === "all" && source === "auto") {
+    return discoverInstalledAgents();
   }
   return [];
+}
+
+function discoverInstalledAgents() {
+  const home = os.homedir();
+  const configHome = clean(process.env.XDG_CONFIG_HOME) || path.join(home, ".config");
+  const candidates = [
+    { provider: "codex", commands: ["codex"], paths: [path.join(home, ".codex")] },
+    { provider: "claude", commands: ["claude"], paths: [path.join(home, ".claude")] },
+    { provider: "cursor", commands: ["cursor"], paths: [path.join(configHome, "Cursor"), path.join(home, ".cursor")] },
+    { provider: "antigravity", commands: ["antigravity", "agy"], paths: [path.join(configHome, "Antigravity"), path.join(configHome, "antigravity"), path.join(configHome, "antigravity-usage")] },
+    { provider: "augment", commands: ["augment"], paths: [path.join(home, ".augment")] },
+    { provider: "factory", commands: ["droid"], paths: [path.join(home, ".factory")] },
+    { provider: "jetbrains", commands: [], paths: [path.join(configHome, "JetBrains")] },
+    { provider: "kiro", commands: ["kiro"], paths: [path.join(home, ".kiro"), path.join(configHome, "Kiro")] },
+    { provider: "grok", commands: ["grok"], paths: [path.join(home, ".grok")] },
+    { provider: "opencode", commands: ["opencode"], paths: [path.join(configHome, "opencode")] },
+    { provider: "windsurf", commands: ["windsurf"], paths: [path.join(home, ".codeium", "windsurf"), path.join(configHome, "Windsurf")] },
+  ];
+  const discovered = candidates.filter((candidate) =>
+    candidate.commands.some(commandExists) || candidate.paths.some((candidatePath) => fs.existsSync(candidatePath))
+  );
+  const agents = discovered.length > 0 ? discovered : [candidates[0]];
+  return agents.map((candidate) => ({
+    provider: candidate.provider,
+    source: "auto",
+    account: "",
+    accountIndex: 0,
+    allAccounts: false,
+  }));
+}
+
+function commandExists(command) {
+  const pathEntries = clean(process.env.PATH).split(path.delimiter).filter(Boolean);
+  return pathEntries.some((directory) => {
+    const candidate = path.join(directory, command);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "") {

@@ -26,7 +26,7 @@
     </entry>
     <entry name="providerConfigs" type="String">
       <label>Provider configuration list</label>
-      <default>[{"provider":"codex","source":"cli","enabled":true,"showInCompactAll":true,"compactColor":""},{"provider":"gemini","source":"api","enabled":true,"showInCompactAll":true,"compactColor":""}]</default>
+      <default>[]</default>
     </entry>
     <entry name="compactBarCatalog" type="String">
       <label>Last discovered provider usage rows for tray configuration</label>
@@ -78,7 +78,7 @@
     </entry>
     <entry name="compactShowMetric" type="Bool">
       <label>Show compact metric text</label>
-      <default>true</default>
+      <default>false</default>
     </entry>
     <entry name="compactDisplay" type="String">
       <label>Tray display</label>
@@ -86,11 +86,11 @@
     </entry>
     <entry name="compactBarsProviders" type="String">
       <label>Tray usage bar providers</label>
-      <default>default</default>
+      <default>all</default>
     </entry>
     <entry name="compactBarsTint" type="String">
       <label>Tray usage bar tinting</label>
-      <default>provider</default>
+      <default>theme</default>
     </entry>
     <entry name="compactProviderBarWidth" type="Int">
       <label>Tray provider bar width</label>
