@@ -127,7 +127,6 @@ struct AuthCredential {
     bearer: String,
     email: Option<String>,
     team_id: Option<String>,
-    auth_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,11 +169,12 @@ fn load_auth_credentials() -> Vec<AuthCredential> {
         // briefly after the local expiry stamp, and a 401 from the API is a
         // clearer signal to re-run `grok login` than silently dropping the account.
         let _ = entry.expires_at;
+        // auth_mode is login transport only; plan is SuperGrok product name.
+        let _ = entry.auth_mode;
         out.push(AuthCredential {
             bearer,
             email: entry.email.filter(|e| !e.is_empty()),
             team_id: entry.team_id.filter(|t| !t.is_empty()),
-            auth_mode: entry.auth_mode.filter(|m| !m.is_empty()),
         });
     }
     out
@@ -198,17 +198,15 @@ fn fetch_bearer(http: &HttpClient, auth: &AuthCredential) -> Result<ProviderPayl
         }
     }
 
-    let login_method = match auth.auth_mode.as_deref() {
-        Some("oidc") | Some("OIDC") => Some("SuperGrok".to_string()),
-        Some(other) => Some(other.to_string()),
-        None => Some("SuperGrok".to_string()),
-    };
+    // Product plan for Grok Build / grok.com paid weekly limit (UI: "Weekly SuperGrok Limit").
+    // auth_mode is the login transport (oidc/…), not a plan name — do not surface it as Plan.
+    let plan = Some("SuperGrok".to_string());
 
     Ok(build_payload(
         billing,
         email,
         team_id,
-        login_method,
+        plan,
         "native-auth",
     ))
 }
@@ -224,13 +222,14 @@ fn fetch_cookie(http: &HttpClient, cookie_header: &str, source_label: &str) -> R
     let session = fetch_web_session(http, cookie_header).ok();
     let email = session.as_ref().and_then(|s| s.email.clone());
     let user_id = session.as_ref().and_then(|s| s.user_id.clone());
-    let login_method = Some("Grok web".to_string());
+    // Same weekly SuperGrok limit product as native-auth; browser vs CLI is `source`, not Plan.
+    let plan = Some("SuperGrok".to_string());
 
     Ok(build_payload(
         billing,
         email.or(user_id),
         session.and_then(|s| s.organization_id).filter(|s| !s.is_empty()),
-        login_method,
+        plan,
         source_label,
     ))
 }
@@ -239,7 +238,8 @@ fn build_payload(
     billing: BillingSnapshot,
     email: Option<String>,
     organization: Option<String>,
-    login_method: Option<String>,
+    // Product plan name (shown as Plan: …). Not login transport.
+    plan: Option<String>,
     source: &str,
 ) -> ProviderPayload {
     let window_minutes = billing
@@ -262,7 +262,8 @@ fn build_payload(
             identity: Some(ProviderIdentitySnapshot {
                 account_email: email.clone(),
                 account_organization: organization,
-                login_method,
+                // login_method field is mapped to Plan in the plasmoid helper.
+                login_method: plan,
             }),
         },
         email,

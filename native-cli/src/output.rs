@@ -174,16 +174,34 @@ pub fn clamp_percent(value: f64) -> f64 {
 impl ProviderPayload {
     pub fn anonymize_emails(&mut self) {
         if let Some(ref email) = self.account {
-            self.account = Some(anonymize_email_str(email));
+            self.account = Some(anonymize_identity_str(email));
         }
         if let Some(ref mut usage) = self.usage {
             if let Some(ref mut identity) = usage.identity {
                 if let Some(ref email) = identity.account_email {
-                    identity.account_email = Some(anonymize_email_str(email));
+                    identity.account_email = Some(anonymize_identity_str(email));
+                }
+                if let Some(ref org) = identity.account_organization {
+                    identity.account_organization = Some(anonymize_identity_str(org));
                 }
             }
         }
     }
+}
+
+/// Mask emails and opaque ids (UUIDs, long hex tokens) for UI display.
+pub fn anonymize_identity_str(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return value.to_string();
+    }
+    if trimmed.contains('@') {
+        return anonymize_email_str(trimmed);
+    }
+    if looks_like_opaque_id(trimmed) {
+        return anonymize_opaque_id(trimmed);
+    }
+    value.to_string()
 }
 
 pub fn anonymize_email_str(email: &str) -> String {
@@ -207,6 +225,56 @@ pub fn anonymize_email_str(email: &str) -> String {
     }
 }
 
+fn looks_like_opaque_id(value: &str) -> bool {
+    // UUID: 8-4-4-4-12 hex
+    if is_uuid_like(value) {
+        return true;
+    }
+    // Long hex / base64-ish tokens (team ids, org ids, user ids without @).
+    let alnum: String = value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    alnum.len() >= 16
+        && alnum
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || matches!(c, 'A'..='Z' | 'a'..='z' | '0'..='9'))
+        && alnum.chars().filter(|c| c.is_ascii_hexdigit()).count() * 2 >= alnum.len()
+}
+
+fn is_uuid_like(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('-').collect();
+    if parts.len() != 5 {
+        return false;
+    }
+    let expected = [8, 4, 4, 4, 12];
+    parts.iter().zip(expected).all(|(part, len)| {
+        part.len() == len && part.chars().all(|c| c.is_ascii_hexdigit())
+    })
+}
+
+fn anonymize_opaque_id(value: &str) -> String {
+    if is_uuid_like(value) {
+        // 8f3b78b6-3140-4f03-917d-0c96638112db → 8f3b****-****-****-****-********12db
+        let parts: Vec<&str> = value.split('-').collect();
+        return format!(
+            "{}****-****-****-****-********{}",
+            &parts[0][..4],
+            &parts[4][parts[4].len().saturating_sub(4)..]
+        );
+    }
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() <= 8 {
+        let keep = 1.min(chars.len());
+        let stars = "*".repeat(chars.len().saturating_sub(keep));
+        return format!("{}{}", chars.iter().take(keep).collect::<String>(), stars);
+    }
+    let head: String = chars.iter().take(4).collect();
+    let tail: String = chars.iter().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    let stars = "*".repeat(chars.len().saturating_sub(8));
+    format!("{head}{stars}{tail}")
+}
+
 #[cfg(test)]
 mod anonymize_tests {
     use super::*;
@@ -219,5 +287,19 @@ mod anonymize_tests {
         assert_eq!(anonymize_email_str("user@example.com"), "u**r@example.com");
         assert_eq!(anonymize_email_str("username@example.com"), "u******e@example.com");
         assert_eq!(anonymize_email_str("not_an_email"), "not_an_email");
+    }
+
+    #[test]
+    fn test_anonymize_uuid_and_identity() {
+        assert_eq!(
+            anonymize_identity_str("8f3b78b6-3140-4f03-917d-0c96638112db"),
+            "8f3b****-****-****-****-********12db"
+        );
+        assert_eq!(
+            anonymize_identity_str("user@example.com"),
+            "u**r@example.com"
+        );
+        // Human-readable org names stay readable.
+        assert_eq!(anonymize_identity_str("Acme Corp"), "Acme Corp");
     }
 }

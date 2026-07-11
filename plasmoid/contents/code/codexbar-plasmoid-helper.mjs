@@ -466,7 +466,9 @@ function normalizeProvider(item, cost) {
   const rows = usageRows(providerId, usage, source);
   const dailyUsage = dailyUsagePoints(dashboard, cost);
   const rawAccount = item.account || usage.accountEmail || identity.accountEmail || null;
-  const account = anonymizeEmails ? anonymizeEmailAddress(rawAccount) : rawAccount;
+  const account = anonymizeEmails ? anonymizeIdentity(rawAccount) : rawAccount;
+  const rawOrganization = usage.accountOrganization || identity.accountOrganization || null;
+  const organization = anonymizeEmails ? anonymizeIdentity(rawOrganization) : rawOrganization;
 
   let creditsRemaining = numberOrNull(item.credits?.remaining ?? usage.openRouterUsage?.balance);
   if (creditsRemaining === null && source === "api" && usage.primary?.resetDescription) {
@@ -476,7 +478,7 @@ function normalizeProvider(item, cost) {
   return {
     provider: providerId,
     account,
-    organization: usage.accountOrganization || identity.accountOrganization || null,
+    organization,
     plan: usage.loginMethod || identity.loginMethod || null,
     source,
     version: item.version || null,
@@ -588,7 +590,8 @@ function providerLabels(providerId) {
     case "devin":
       return { session: "Daily", weekly: "Weekly", tertiary: "Extra" };
     case "grok":
-      return { session: "Credits", weekly: "Weekly", tertiary: "Extra" };
+      // xAI UI labels this "Weekly SuperGrok Limit"; primary window is the weekly pool.
+      return { session: "Weekly", weekly: "Weekly", tertiary: "Extra" };
     default:
       return { session: "Session", weekly: "Weekly", tertiary: "Extra" };
   }
@@ -820,6 +823,23 @@ function shortError(error, command = currentCliPath()) {
   return error?.message || String(error);
 }
 
+function anonymizeIdentity(value) {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+  if (trimmed.includes("@")) {
+    return anonymizeEmailAddress(trimmed);
+  }
+  if (looksLikeOpaqueId(trimmed)) {
+    return anonymizeOpaqueId(trimmed);
+  }
+  return value;
+}
+
 function anonymizeEmailAddress(email) {
   if (typeof email !== "string" || !email.includes("@")) {
     return email;
@@ -834,4 +854,38 @@ function anonymizeEmailAddress(email) {
     return `${local[0]}*@${domain}`;
   }
   return `${local[0]}${"*".repeat(local.length - 2)}${local[local.length - 1]}@${domain}`;
+}
+
+function looksLikeOpaqueId(value) {
+  if (isUuidLike(value)) {
+    return true;
+  }
+  const alnum = value.replace(/[^A-Za-z0-9]/g, "");
+  if (alnum.length < 16) {
+    return false;
+  }
+  const hexCount = (alnum.match(/[0-9A-Fa-f]/g) || []).length;
+  return hexCount * 2 >= alnum.length;
+}
+
+function isUuidLike(value) {
+  const parts = value.split("-");
+  if (parts.length !== 5) {
+    return false;
+  }
+  const expected = [8, 4, 4, 4, 12];
+  return parts.every((part, index) =>
+    part.length === expected[index] && /^[0-9A-Fa-f]+$/.test(part)
+  );
+}
+
+function anonymizeOpaqueId(value) {
+  if (isUuidLike(value)) {
+    const parts = value.split("-");
+    return `${parts[0].slice(0, 4)}****-****-****-****-********${parts[4].slice(-4)}`;
+  }
+  if (value.length <= 8) {
+    return `${value.slice(0, 1)}${"*".repeat(Math.max(0, value.length - 1))}`;
+  }
+  return `${value.slice(0, 4)}${"*".repeat(value.length - 8)}${value.slice(-4)}`;
 }
