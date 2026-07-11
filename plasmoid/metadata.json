@@ -7,6 +7,7 @@
         "Name": "slopfire"
       }
     ],
+    "BugReportUrl": "https://github.com/slopfire/codexbar-plasmoid/issues",
     "Category": "System Information",
     "Description": "KDE Plasma widget for CodexBar usage, credits, costs, provider status, and recent history.",
     "Icon": "utilities-system-monitor",
@@ -14,7 +15,7 @@
     "License": "MIT",
     "Name": "CodexBar",
     "Version": "0.1.0",
-    "Website": "https://github.com/slopfire/codexbar-plasmoid.git"
+    "Website": "https://github.com/slopfire/codexbar-plasmoid"
   },
   "X-Plasma-API-Minimum-Version": "6.0"
 }

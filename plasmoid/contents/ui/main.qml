@@ -579,12 +579,12 @@ PlasmoidItem {
 
     function checkCliUpdate() {
         const script = codexBar.localPath(Qt.resolvedUrl("../code/codexbar-cli-updater.mjs"));
-        updater.connectSource(quote(script) + " --action check --tag " + quote(plasmoid.configuration.cliUpdateChannel || "latest"));
+        updater.connectSource(codexBar.quote(script) + " --action check --tag " + codexBar.quote(plasmoid.configuration.cliUpdateChannel || "latest"));
     }
 
     function updateCliNow() {
         const script = codexBar.localPath(Qt.resolvedUrl("../code/codexbar-cli-updater.mjs"));
-        updater.connectSource(quote(script) + " --action update --tag " + quote(plasmoid.configuration.cliUpdateChannel || "latest"));
+        updater.connectSource(codexBar.quote(script) + " --action update --tag " + codexBar.quote(plasmoid.configuration.cliUpdateChannel || "latest"));
     }
 
     function cliUpdateLabel() {

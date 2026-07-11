@@ -2,23 +2,55 @@
 
 ![CodexBar Plasmoid Screenshot](assets/screenshot.png)
 
-This repository adds a Plasma 6 widget for the CodexBar CLI in `./codexbar`.
-The plasmoid shells out to the existing CLI instead of duplicating provider logic, then renders usage limits,
+This repository provides a Plasma 6 widget for the [CodexBar](https://github.com/steipete/CodexBar) CLI.
+The plasmoid shells out to the CLI instead of duplicating provider logic, then renders usage limits,
 credits, status, local token costs, and recent history with native Plasma/Kirigami controls.
+
+Package ID: `org.slopfire.codexbar-plasmoid` · License: MIT · Plasma: 6.0+
+
+## Requirements
+
+- KDE Plasma 6
+- Node.js on `PATH` (helper scripts use `#!/usr/bin/env node`)
+- CodexBar CLI on `PATH`, **or** enable **Auto-download from GitHub** in widget settings
+- Optional: `cargo` only if you rebuild the bundled Linux helper from source
 
 ## Install
 
-Build or install the CodexBar CLI first, then make sure `codexbar` is on `PATH`.
+From this repository:
 
 ```sh
 ./scripts/install-plasmoid.sh
 ```
+
+The install script builds the bundled Linux helper, removes older package IDs if present, then installs or upgrades the widget with `kpackagetool6`.
+
+From a release archive (`.plasmoid`):
+
+```sh
+kpackagetool6 --type Plasma/Applet --install codexbar-plasmoid-v0.1.0-plasma6.plasmoid
+# or upgrade:
+kpackagetool6 --type Plasma/Applet --upgrade codexbar-plasmoid-v0.1.0-plasma6.plasmoid
+```
+
+Then add **CodexBar** from the Plasma widget explorer (System Information).
 
 For local preview without installing:
 
 ```sh
 ./scripts/run-windowed.sh
 ```
+
+## Package for release
+
+Build a store-ready archive (includes the native helper, validates with `kpackagetool6`):
+
+```sh
+./scripts/package-plasmoid.sh
+```
+
+Output lands in `dist/codexbar-plasmoid-v<version>-plasma6.plasmoid`. Upload that file to
+[store.kde.org](https://store.kde.org) under Plasma 6 applets, with `assets/screenshot.png` as the listing screenshot.
 
 ## Automatic CLI Updates
 
@@ -163,7 +195,7 @@ set. Supported mappings include `GEMINI_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_
 `SYNTHETIC_API_KEY`, `VENICE_API_KEY`, `ZAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ALIBABA_API_KEY`, `GITHUB_TOKEN` for
 Copilot, and `DEVIN_BEARER_TOKEN` for Devin (manual token auth; pair with `DEVIN_ORGANIZATION`).
 
-The Plasma package ID is `org.slopfire.codexbar-plasmoid`.
+The Plasma package ID is `org.slopfire.codexbar-plasmoid`. The release archive ships a prebuilt Linux helper for **x86_64** only; rebuild with `./scripts/build-native-cli.sh` on other architectures.
 
 ## CLI Contract
 

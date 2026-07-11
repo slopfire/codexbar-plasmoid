@@ -1,3 +1,5 @@
 /native-cli/target/
 /plasmoid/contents/code/codexbar-plasmoid
+/dist/
+*.plasmoid
 .omo/
