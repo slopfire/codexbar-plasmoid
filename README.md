@@ -96,7 +96,7 @@ The account fields map to the CodexBar CLI account flags:
 
 The refresh interval is clamped to 30 seconds through 24 hours. The request timeout is clamped to 5 through 300 seconds.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
-provider, or all providers, and can be tinted by provider color, remaining-limit threshold, or theme text color.
+providers, or all providers, and can be tinted by provider color, remaining-limit threshold, or theme text color.
 New widget instances default to all-provider usage bars with theme-text tinting and no metric text.
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the
@@ -179,7 +179,7 @@ plasmoid settings and mapped to the corresponding CodexBar CLI flags. The helper
 configured provider so each provider can use its own source mode. Cost lookup is best effort: a cost failure is displayed
 as `costError` but does not discard successful usage data.
 
-## Native Linux CLI
+## Linux Helper
 
 Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
@@ -204,8 +204,8 @@ Run it directly:
 plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider cursor --source native
 ```
 
-In widget settings, choose **Native** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
-already prefers Native for those providers. For Antigravity without a running IDE, choose **Native Auth** after browser login:
+In widget settings, choose **Linux Helper** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
+already prefers Linux Helper for those providers. For Antigravity without a running IDE, choose **Native Auth** after browser login:
 
 ```sh
 # Desktop OAuth app client is read from the local `agy` binary (not shipped in this repo).
@@ -221,12 +221,12 @@ The OAuth *app* client id/secret are extracted from a local Antigravity `agy` in
 Use `--manual` to paste the redirect URL if the automatic callback fails. `logout --provider antigravity` removes stored
 tokens (`--all` clears every account).
 
-With Antigravity source set to **Native** (or Linux auto), the fetcher tries the local IDE first and falls back to Native
+With Antigravity source set to **Linux Helper** (or Linux auto), the fetcher tries the local IDE first and falls back to Native
 Auth tokens when the IDE is not running.
 
 Authentication options:
 
-- Antigravity **Native**: a running `agy` process or Antigravity IDE language server
+- Antigravity **Linux Helper**: a running `agy` process or Antigravity IDE language server
 - Antigravity **Native Auth**: browser OAuth via `codexbar-plasmoid login --provider antigravity` (or existing
   `antigravity-usage login` tokens) in `~/.config/antigravity-usage` (Cloud Code API; no IDE required). Login and token
   **refresh** use the Google OAuth *app* client extracted from the local `agy` binary (optional override:

@@ -41,7 +41,7 @@ Kirigami.ScrollablePage {
         oauth: i18n("OAuth"),
         api: i18n("API"),
         web: i18n("Web"),
-        native: i18n("Native"),
+        native: i18n("Linux Helper"),
         "native-auth": i18n("Native Auth")
     })
     readonly property var sourceNotes: ({
@@ -50,7 +50,7 @@ Kirigami.ScrollablePage {
         oauth: i18n("Signed-in account"),
         api: i18n("API credentials"),
         web: i18n("Browser/web session"),
-        native: i18n("Plasmoid fetcher"),
+        native: i18n("Bundled Linux helper"),
         "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)")
     })
     readonly property var providerCatalog: [
@@ -890,7 +890,7 @@ Kirigami.ScrollablePage {
                 valueRole: "value"
                 model: [
                     { text: i18n("Default provider"), value: "default" },
-                    { text: i18n("Selected provider"), value: "selected" },
+                    { text: i18n("Selected providers"), value: "selected" },
                     { text: i18n("All providers"), value: "all" }
                 ]
             }

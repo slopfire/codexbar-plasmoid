@@ -470,7 +470,7 @@ PlasmoidItem {
                 });
             }
             if (mode === "selected") {
-                return root.primaryEntry ? [root.primaryEntry] : [];
+                return root.effectiveSelectedEntryIds.length > 0 ? root.visibleEntries : [];
             }
             return root.defaultEntry ? [root.defaultEntry] : [];
         }
