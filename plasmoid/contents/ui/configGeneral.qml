@@ -13,6 +13,7 @@ Kirigami.ScrollablePage {
     property string cfg_provider: "codex"
     property string cfg_source: "auto"
     property string cfg_providerConfigs: ""
+    property alias cfg_allowMultiProviderSelection: allowMultiProviderSelection.checked
     property string cfg_account: ""
     property int cfg_accountIndex: 0
     property bool cfg_allAccounts: false
@@ -150,6 +151,12 @@ Kirigami.ScrollablePage {
                 Layout.fillWidth: true
                 level: 3
                 text: i18n("Providers")
+            }
+
+            QtControls.CheckBox {
+                id: allowMultiProviderSelection
+                Layout.fillWidth: true
+                text: i18n("Allow selecting multiple providers in the widget")
             }
 
             ListView {

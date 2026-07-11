@@ -28,6 +28,10 @@
       <label>Provider configuration list</label>
       <default>[]</default>
     </entry>
+    <entry name="allowMultiProviderSelection" type="Bool">
+      <label>Allow selecting multiple providers in the widget</label>
+      <default>false</default>
+    </entry>
     <entry name="compactBarCatalog" type="String">
       <label>Last discovered provider usage rows for tray configuration</label>
       <default>{}</default>

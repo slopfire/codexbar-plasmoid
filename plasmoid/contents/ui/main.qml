@@ -18,11 +18,15 @@ PlasmoidItem {
     // An empty selection means "show every provider". Keep this as an array
     // rather than a single id so provider chips can be combined as filters.
     property var selectedEntryIds: []
+    property bool multiProviderSelectionEnabled: plasmoid.configuration.allowMultiProviderSelection === true
     property string activeCommand: ""
     property string previousCommand: ""
     readonly property var entries: snapshot.entries || []
-    readonly property var visibleEntries: selectedEntryIds.length > 0
-        ? entries.filter(function(entry) { return selectedEntryIds.indexOf(entry.id) !== -1; })
+    readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
+        ? selectedEntryIds
+        : selectedEntryIds.slice(0, 1)
+    readonly property var visibleEntries: effectiveSelectedEntryIds.length > 0
+        ? entries.filter(function(entry) { return effectiveSelectedEntryIds.indexOf(entry.id) !== -1; })
         : entries
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
@@ -43,6 +47,11 @@ PlasmoidItem {
 
     Component.onCompleted: refreshNow()
     onRefreshIntervalChanged: refreshTimer.restart()
+    onMultiProviderSelectionEnabledChanged: {
+        if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
+            selectedEntryIds = selectedEntryIds.slice(0, 1);
+        }
+    }
 
     Timer {
         id: refreshTimer
@@ -550,6 +559,12 @@ PlasmoidItem {
     }
 
     function toggleEntrySelection(entryId) {
+        if (!multiProviderSelectionEnabled) {
+            selectedEntryIds = selectedEntryIds.length === 1 && selectedEntryIds[0] === entryId
+                ? []
+                : [entryId];
+            return;
+        }
         const selected = selectedEntryIds.slice();
         const index = selected.indexOf(entryId);
         if (index === -1) {
@@ -671,7 +686,7 @@ PlasmoidItem {
                 Layout.leftMargin: Kirigami.Units.smallSpacing
                 Layout.rightMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
-                selectedEntryIds: root.selectedEntryIds
+                selectedEntryIds: root.effectiveSelectedEntryIds
                 colorForProvider: function(provider) { return codexBar.color(provider); }
                 onEntrySelected: function(entryId) {
                     root.toggleEntrySelection(entryId);
