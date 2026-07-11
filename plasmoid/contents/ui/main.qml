@@ -15,12 +15,14 @@ PlasmoidItem {
     property var cliUpdateInfo: ({ ok: true, installedVersion: "", latestVersion: "", needsUpdate: false, updated: false, error: "" })
     property bool loading: false
     property string lastError: ""
-    property string selectedEntryId: ""
+    // An empty selection means "show every provider". Keep this as an array
+    // rather than a single id so provider chips can be combined as filters.
+    property var selectedEntryIds: []
     property string activeCommand: ""
     property string previousCommand: ""
     readonly property var entries: snapshot.entries || []
-    readonly property var visibleEntries: selectedEntryId.length > 0
-        ? entries.filter(function(entry) { return entry.id === selectedEntryId; })
+    readonly property var visibleEntries: selectedEntryIds.length > 0
+        ? entries.filter(function(entry) { return selectedEntryIds.indexOf(entry.id) !== -1; })
         : entries
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
@@ -503,8 +505,11 @@ PlasmoidItem {
                 if (parsed.cliUpdate && (parsed.cliUpdate.updated || parsed.cliUpdate.error)) {
                     root.cliUpdateInfo = parsed.cliUpdate;
                 }
-                if (root.selectedEntryId && parsed.entries && !parsed.entries.some(function(entry) { return entry.id === root.selectedEntryId; })) {
-                    root.selectedEntryId = "";
+                if (root.selectedEntryIds.length > 0) {
+                    const availableIds = (parsed.entries || []).map(function(entry) { return entry.id; });
+                    root.selectedEntryIds = root.selectedEntryIds.filter(function(entryId) {
+                        return availableIds.indexOf(entryId) !== -1;
+                    });
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
@@ -542,6 +547,19 @@ PlasmoidItem {
         loading = true;
         lastError = "";
         executable.connectSource(command);
+    }
+
+    function toggleEntrySelection(entryId) {
+        const selected = selectedEntryIds.slice();
+        const index = selected.indexOf(entryId);
+        if (index === -1) {
+            selected.push(entryId);
+        } else {
+            selected.splice(index, 1);
+        }
+        // Returning to an empty selection intentionally restores the
+        // unfiltered, all-provider view.
+        selectedEntryIds = selected;
     }
 
     function checkCliUpdate() {
@@ -653,10 +671,10 @@ PlasmoidItem {
                 Layout.leftMargin: Kirigami.Units.smallSpacing
                 Layout.rightMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
-                selectedEntryId: root.selectedEntryId
+                selectedEntryIds: root.selectedEntryIds
                 colorForProvider: function(provider) { return codexBar.color(provider); }
                 onEntrySelected: function(entryId) {
-                    root.selectedEntryId = root.selectedEntryId === entryId ? "" : entryId;
+                    root.toggleEntrySelection(entryId);
                 }
             }
 

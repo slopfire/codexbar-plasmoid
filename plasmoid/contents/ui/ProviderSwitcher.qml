@@ -9,7 +9,7 @@ Item {
     signal entrySelected(string entryId)
 
     property var entries: []
-    property string selectedEntryId: ""
+    property var selectedEntryIds: []
     property var colorForProvider: null
 
     implicitHeight: grid.implicitHeight
@@ -52,7 +52,7 @@ Item {
                 Layout.preferredWidth: switcher.buttonWidth
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3.4
                 checkable: true
-                checked: switcher.selectedEntryId === button.modelData.id
+                checked: switcher.selectedEntryIds.indexOf(button.modelData.id) !== -1
                 onClicked: switcher.entrySelected(button.modelData.id)
 
                 background: Rectangle {
