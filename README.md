@@ -63,8 +63,9 @@ helper installs a managed binary at:
 ~/.local/share/codexbar-plasmoid/bin/codexbar
 ```
 
-and checks for a newer release before each refresh. Updates are atomic: the new
-tarball is downloaded, its SHA-256 checksum is verified, the binary is tested
+and checks GitHub for a newer release at most once every 24 hours. Updates are
+atomic: the new tarball is downloaded, its SHA-256 checksum is verified, the
+binary is tested
 with `--version`, and only then is the managed copy replaced. If the download
 or test fails, the previous managed binary is preserved.
 
@@ -126,7 +127,7 @@ The account fields map to the CodexBar CLI account flags:
 - `accountIndex`: passes `--account-index <n>` when `account` is empty and the index is greater than `0`
 - `allAccounts`: passes `--all-accounts`
 
-The refresh interval is clamped to 30 seconds through 24 hours. The request timeout is clamped to 5 through 300 seconds.
+The refresh interval defaults to 5 minutes and is clamped to 1 minute through 24 hours. The request timeout is clamped to 5 through 300 seconds.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
 providers, or all providers, and can be tinted by provider color, remaining-limit threshold, or theme text color.
 New widget instances default to all-provider usage bars with theme-text tinting and no metric text.

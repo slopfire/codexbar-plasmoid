@@ -821,7 +821,7 @@ Kirigami.ScrollablePage {
             QtControls.SpinBox {
                 id: refreshInterval
                 Kirigami.FormData.label: i18n("Refresh:")
-                from: 30
+                from: 60
                 to: 86400
                 stepSize: 30
                 editable: true
@@ -833,7 +833,7 @@ Kirigami.ScrollablePage {
                 }
                 valueFromText: function(text) {
                     const parsed = parseInt(text, 10);
-                    return Number.isFinite(parsed) ? parsed : 120;
+                    return Number.isFinite(parsed) ? parsed : 300;
                 }
             }
 

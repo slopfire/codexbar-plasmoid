@@ -161,7 +161,7 @@ if (fs.existsSync(sqliteFile)) {
 const DEFAULT_REPO = "steipete/CodexBar";
 const RELEASE_API_LATEST = (repo) => `https://api.github.com/repos/${repo}/releases/latest`;
 const RELEASE_API_TAG = (repo, tag) => `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const HTTP_TIMEOUT_MS = 60 * 1000;
 const MAX_REDIRECTS = 5;
 
