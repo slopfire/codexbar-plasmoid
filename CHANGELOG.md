@@ -2,6 +2,14 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.1 — 2026-07-14
+
+### Improvements
+
+- Remember the last selected providers in the expanded view
+- Reduce automatic refresh frequency to avoid provider rate limits
+- Add configurable tray usage bar styles
+
 ## 0.1.0 — 2026-07-12
 
 Initial public release for Plasma 6.

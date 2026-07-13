@@ -28,9 +28,9 @@ The install script builds the bundled Linux helper, removes older package IDs if
 From a release archive (`.plasmoid`):
 
 ```sh
-kpackagetool6 --type Plasma/Applet --install codexbar-plasmoid-v0.1.0-plasma6.plasmoid
+kpackagetool6 --type Plasma/Applet --install codexbar-plasmoid-v0.1.1-plasma6.plasmoid
 # or upgrade:
-kpackagetool6 --type Plasma/Applet --upgrade codexbar-plasmoid-v0.1.0-plasma6.plasmoid
+kpackagetool6 --type Plasma/Applet --upgrade codexbar-plasmoid-v0.1.1-plasma6.plasmoid
 ```
 
 Then add **CodexBar** from the Plasma widget explorer (System Information).
@@ -47,6 +47,14 @@ Build a store-ready archive (includes the native helper, validates with `kpackag
 
 ```sh
 ./scripts/package-plasmoid.sh
+```
+
+To increment the patch version, synchronize the Plasma/Rust metadata, update the
+README and changelog, package and validate the archive, and create a scoped
+release commit, run this from a clean Git working tree:
+
+```sh
+./scripts/package-plasmoid.sh --bump
 ```
 
 Output lands in `dist/codexbar-plasmoid-v<version>-plasma6.plasmoid`. Upload that file to
