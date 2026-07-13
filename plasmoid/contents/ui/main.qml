@@ -226,19 +226,21 @@ PlasmoidItem {
             return aliases[normalized] || normalized;
         }
 
+        // Remaining-limit tint: white at 100% left, pure red at 0%, smooth RGB lerp.
+        function remainingLimitColor(percentLeft) {
+            const value = Number(percentLeft);
+            if (!Number.isFinite(value)) {
+                return Kirigami.Theme.negativeTextColor;
+            }
+            const t = Math.max(0, Math.min(100, value)) / 100;
+            // white (1,1,1) → red (1,0,0)
+            return Qt.rgba(1, t, t, 1);
+        }
+
         function compactBarColor(provider, percentLeft) {
             const tint = plasmoid.configuration.compactBarsTint || "provider";
             if (tint === "threshold") {
-                const value = Number(percentLeft);
-                if (Number.isFinite(value)) {
-                    if (value <= 15) {
-                        return Kirigami.Theme.negativeTextColor;
-                    }
-                    if (value <= 35) {
-                        return Kirigami.Theme.neutralTextColor;
-                    }
-                    return Kirigami.Theme.positiveTextColor;
-                }
+                return remainingLimitColor(percentLeft);
             }
             if (tint === "theme") {
                 return Kirigami.Theme.textColor;
@@ -661,7 +663,7 @@ PlasmoidItem {
         providerName: root.primaryEntry ? codexBar.providerName(root.primaryEntry.provider) : i18n("CodexBar")
         accentColor: root.primaryEntry ? codexBar.color(root.primaryEntry.provider) : Kirigami.Theme.highlightColor
         valueText: root.primaryEntry ? codexBar.compactValue(root.primaryEntry) : "—"
-        displayMode: plasmoid.configuration.compactDisplay || "bars"
+        displayMode: plasmoid.configuration.compactDisplay || "bars-first"
         showMetricText: plasmoid.configuration.compactShowMetric !== false
         usageRows: root.primaryEntry && root.primaryEntry.rows ? root.primaryEntry.rows : []
         barItems: codexBar.compactBarItems()

@@ -28,6 +28,22 @@ Control {
     property int providerBarWidth: 18
 
     readonly property bool showBars: compact.displayMode === "bars"
+        || compact.displayMode.indexOf("bars-") === 0
+    readonly property string barStyle: {
+        if (compact.displayMode === "bars-equal") {
+            return "equal";
+        }
+        if (compact.displayMode === "bars-descending") {
+            return "descending";
+        }
+        if (compact.displayMode === "bars-last") {
+            return "last";
+        }
+        if (compact.displayMode === "bars-alternating") {
+            return "alternating";
+        }
+        return "first";
+    }
     readonly property url providerIconSource: {
         const known = ["abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram", "deepseek", "devin", "doubao", "elevenlabs", "factory", "gemini", "grok", "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo", "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter", "perplexity", "stepfun", "synthetic", "t3chat", "venice", "vertexai", "warp", "windsurf", "zai"];
         const id = String(compact.providerId || "").toLowerCase().replace(/[-_]/g, "");
@@ -133,6 +149,7 @@ Control {
                 barItems: compact.barItems
                 accentColor: compact.accentColor
                 barGroupWidth: compact.barGroupWidth
+                barStyle: compact.barStyle
             }
 
             Kirigami.Icon {

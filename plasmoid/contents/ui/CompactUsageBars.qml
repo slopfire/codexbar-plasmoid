@@ -9,11 +9,49 @@ Item {
     property color accentColor: Kirigami.Theme.highlightColor
     property bool stale: false
     property real barGroupWidth: 18
+    property string barStyle: "first"
 
     readonly property var barsModel: normalizedBars()
     readonly property real groupGap: barsModel.length > 1 ? Kirigami.Units.smallSpacing : 0
     readonly property real laneGap: 2
     readonly property real defaultGroupWidth: Math.max(8, Number(bars.barGroupWidth || 18))
+
+    function laneWeight(laneIndex, laneCount) {
+        const style = String(bars.barStyle || "first");
+        if (style === "equal" || laneCount < 2) {
+            return 1;
+        }
+        if (style === "descending") {
+            return 1.8 - 0.8 * laneIndex / (laneCount - 1);
+        }
+        if (style === "last") {
+            return laneIndex === laneCount - 1 ? 1.6 : 1;
+        }
+        if (style === "alternating") {
+            return laneIndex % 2 === 0 ? 1.55 : 0.85;
+        }
+        return laneIndex === 0 ? 1.6 : 1;
+    }
+
+    function totalLaneWeight(laneCount) {
+        if (laneCount === 1) {
+            // Preserve the compact half-height treatment for single limits.
+            return 2;
+        }
+        let weight = 0;
+        for (let laneIndex = 0; laneIndex < laneCount; laneIndex += 1) {
+            weight += bars.laneWeight(laneIndex, laneCount);
+        }
+        return weight;
+    }
+
+    function laneOffset(laneIndex, laneCount, laneUnit) {
+        let offset = 0;
+        for (let previous = 0; previous < laneIndex; previous += 1) {
+            offset += laneUnit * bars.laneWeight(previous, laneCount) + bars.laneGap;
+        }
+        return offset;
+    }
 
     function groupWidthFor(rowIndex) {
         const item = bars.barsModel[rowIndex];
@@ -164,18 +202,21 @@ Item {
                     }
                     // Single-lane groups use the same height as one lane of a
                     // two-bar stack so Grok (etc.) does not fill the tray.
-                    readonly property int layoutLanes: Math.max(laneCount, 2)
+                    readonly property real layoutWeight: bars.totalLaneWeight(laneCount)
                     readonly property real availableHeight: Math.max(
-                        0, parent.height - (layoutLanes - 1) * bars.laneGap)
-                    readonly property real laneHeight: Math.max(3, availableHeight / layoutLanes)
-                    readonly property real stackHeight: laneCount * laneHeight
-                        + (laneCount - 1) * bars.laneGap
+                        0, parent.height - (laneCount - 1) * bars.laneGap)
+                    readonly property real laneUnit: Math.max(1, availableHeight / layoutWeight)
+                    readonly property real currentLaneHeight:
+                        laneUnit * bars.laneWeight(index, laneCount)
+                    readonly property real stackHeight: laneCount === 1
+                        ? currentLaneHeight
+                        : availableHeight + (laneCount - 1) * bars.laneGap
                     readonly property real stackTop: Math.max(0, (parent.height - stackHeight) / 2)
 
                     x: 0
-                    y: stackTop + index * (laneHeight + bars.laneGap)
+                    y: stackTop + bars.laneOffset(index, laneCount, laneUnit)
                     width: parent.width
-                    height: laneHeight
+                    height: currentLaneHeight
                     radius: height / 2
                     color: bars.trackColor
                     border.width: 1

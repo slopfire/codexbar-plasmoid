@@ -90,7 +90,7 @@
     </entry>
     <entry name="compactDisplay" type="String">
       <label>Tray display</label>
-      <default>bars</default>
+      <default>bars-first</default>
     </entry>
     <entry name="compactBarsProviders" type="String">
       <label>Tray usage bar providers</label>

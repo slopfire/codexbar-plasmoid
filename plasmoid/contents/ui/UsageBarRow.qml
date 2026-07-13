@@ -10,6 +10,15 @@ ColumnLayout {
     property real percentLeft: 0
     property string resetsAt: ""
     property color accentColor: Kirigami.Theme.highlightColor
+    // Fill color tracks remaining %: white when full, red when empty.
+    readonly property color remainingColor: {
+        const value = Number(percentLeft);
+        if (!Number.isFinite(value)) {
+            return accentColor;
+        }
+        const t = Math.max(0, Math.min(100, value)) / 100;
+        return Qt.rgba(1, t, t, 1);
+    }
 
     spacing: Kirigami.Units.smallSpacing / 2
 
@@ -81,7 +90,7 @@ ColumnLayout {
             anchors.bottom: parent.bottom
             width: parent.width * Math.max(0, Math.min(100, Number(row.percentLeft))) / 100
             radius: parent.radius
-            color: row.accentColor
+            color: row.remainingColor
         }
     }
 

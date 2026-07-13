@@ -129,8 +129,8 @@ The account fields map to the CodexBar CLI account flags:
 
 The refresh interval defaults to 5 minutes and is clamped to 1 minute through 24 hours. The request timeout is clamped to 5 through 300 seconds.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
-providers, or all providers, and can be tinted by provider color, remaining-limit threshold, or theme text color.
-New widget instances default to all-provider usage bars with theme-text tinting and no metric text.
+providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→red), or theme text color.
+New widget instances default to all-provider usage bars with the first bar emphasized, theme-text tinting, and no metric text.
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the
 widget may display full account addresses.

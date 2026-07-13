@@ -879,7 +879,11 @@ Kirigami.ScrollablePage {
                 valueRole: "value"
                 model: [
                     { text: i18n("Provider icon"), value: "icon" },
-                    { text: i18n("Usage bars"), value: "bars" }
+                    { text: i18n("Usage bars — first larger"), value: "bars-first" },
+                    { text: i18n("Usage bars — equal"), value: "bars-equal" },
+                    { text: i18n("Usage bars — descending"), value: "bars-descending" },
+                    { text: i18n("Usage bars — last larger"), value: "bars-last" },
+                    { text: i18n("Usage bars — alternating"), value: "bars-alternating" }
                 ]
             }
 
@@ -902,7 +906,7 @@ Kirigami.ScrollablePage {
                 valueRole: "value"
                 model: [
                     { text: i18n("Provider colors"), value: "provider" },
-                    { text: i18n("Remaining limit"), value: "threshold" },
+                    { text: i18n("Remaining limit (white→red)"), value: "threshold" },
                     { text: i18n("Theme text"), value: "theme" }
                 ]
             }
