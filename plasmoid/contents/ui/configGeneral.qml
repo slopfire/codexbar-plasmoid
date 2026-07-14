@@ -951,7 +951,7 @@ Kirigami.ScrollablePage {
                 valueRole: "value"
                 model: [
                     { text: i18n("Provider colors"), value: "provider" },
-                    { text: i18n("Remaining limit (white→red)"), value: "threshold" },
+                    { text: i18n("Remaining limit (white→yellow→red)"), value: "threshold" },
                     { text: i18n("Theme text"), value: "theme" }
                 ]
             }

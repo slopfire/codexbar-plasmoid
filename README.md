@@ -146,7 +146,7 @@ Enable **Sync providers between widgets** on each widget that should use the sha
 account selection, all-accounts mode, and API keys. The first enabled widget publishes its current providers; later widgets
 adopt the shared list. Provider colors, tray-bar choices, and selected provider chips remain local to each widget.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
-providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→red), or theme text color.
+providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→yellow→red), or theme text color.
 New widget instances default to all-provider usage bars with the first bar emphasized, theme-text tinting, and no metric text.
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the

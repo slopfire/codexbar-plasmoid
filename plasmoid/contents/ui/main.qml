@@ -229,15 +229,30 @@ PlasmoidItem {
             return aliases[normalized] || normalized;
         }
 
-        // Remaining-limit tint: white at 100% left, pure red at 0%, smooth RGB lerp.
+        // Remaining-limit tint: white when full, muted yellow mid, red when low.
+        // Stops lean high so the upper range stays pale and ~10% is already pure red.
         function remainingLimitColor(percentLeft) {
             const value = Number(percentLeft);
             if (!Number.isFinite(value)) {
                 return Kirigami.Theme.negativeTextColor;
             }
             const t = Math.max(0, Math.min(100, value)) / 100;
-            // white (1,1,1) → red (1,0,0)
-            return Qt.rgba(1, t, t, 1);
+            // muted yellow around 55% remaining; pure red by 10%
+            const yellowAt = 0.55;
+            const redAt = 0.10;
+            // soft butter yellow (not pure/neon)
+            const yR = 1.0, yG = 0.92, yB = 0.45;
+            if (t <= redAt) {
+                return Qt.rgba(1, 0, 0, 1);
+            }
+            if (t >= yellowAt) {
+                // white (1,1,1) → muted yellow
+                const u = (t - yellowAt) / (1 - yellowAt);
+                return Qt.rgba(1, 1 - (1 - yG) * (1 - u), 1 - (1 - yB) * (1 - u), 1);
+            }
+            // muted yellow → red (1,0,0)
+            const u = (t - redAt) / (yellowAt - redAt);
+            return Qt.rgba(1, yG * u, yB * u, 1);
         }
 
         function compactBarColor(provider, percentLeft) {

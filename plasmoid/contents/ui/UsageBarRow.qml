@@ -10,14 +10,29 @@ ColumnLayout {
     property real percentLeft: 0
     property string resetsAt: ""
     property color accentColor: Kirigami.Theme.highlightColor
-    // Fill color tracks remaining %: white when full, red when empty.
+    // Fill color: white when full, muted yellow mid, red when low (red by ~10%).
     readonly property color remainingColor: {
         const value = Number(percentLeft);
         if (!Number.isFinite(value)) {
             return accentColor;
         }
         const t = Math.max(0, Math.min(100, value)) / 100;
-        return Qt.rgba(1, t, t, 1);
+        // muted yellow around 55% remaining; pure red by 10%
+        const yellowAt = 0.55;
+        const redAt = 0.10;
+        // soft butter yellow (not pure/neon)
+        const yR = 1.0, yG = 0.92, yB = 0.45;
+        if (t <= redAt) {
+            return Qt.rgba(1, 0, 0, 1);
+        }
+        if (t >= yellowAt) {
+            // white (1,1,1) → muted yellow
+            const u = (t - yellowAt) / (1 - yellowAt);
+            return Qt.rgba(1, 1 - (1 - yG) * (1 - u), 1 - (1 - yB) * (1 - u), 1);
+        }
+        // muted yellow → red (1,0,0)
+        const u = (t - redAt) / (yellowAt - redAt);
+        return Qt.rgba(1, yG * u, yB * u, 1);
     }
 
     spacing: Kirigami.Units.smallSpacing / 2
