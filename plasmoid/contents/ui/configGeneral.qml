@@ -25,6 +25,8 @@ Kirigami.ScrollablePage {
     property alias cfg_autoUpdateCli: autoUpdateCli.checked
     property string cfg_cliUpdateChannel: cliUpdateChannel.currentValue
     property alias cfg_refreshIntervalSeconds: refreshInterval.value
+    property alias cfg_shareProviderFetches: shareProviderFetches.checked
+    property alias cfg_syncProviders: syncProviders.checked
     property alias cfg_requestTimeoutSeconds: requestTimeout.value
     property alias cfg_compactMetric: compactMetric.currentValue
     property alias cfg_compactShowMetric: compactShowMetric.checked
@@ -32,6 +34,8 @@ Kirigami.ScrollablePage {
     property alias cfg_compactBarsProviders: compactBarsProviders.currentValue
     property string antigravityAuthStatus: ""
     property bool antigravityAuthBusy: false
+    property bool providerSyncApplying: false
+    property string providerSyncStatus: ""
     property alias cfg_compactBarsTint: compactBarsTint.currentValue
     property alias cfg_compactProviderBarWidth: compactProviderBarWidth.value
 
@@ -100,7 +104,12 @@ Kirigami.ScrollablePage {
         { id: "devin", name: "Devin", sources: ["auto", "native", "web"], linuxDefault: "native" }
     ]
 
-    Component.onCompleted: loadProviders()
+    Component.onCompleted: {
+        loadProviders();
+        if (syncProviders.checked) {
+            Qt.callLater(readSharedProviders);
+        }
+    }
 
     ColumnLayout {
         width: page.availableWidth
@@ -157,6 +166,29 @@ Kirigami.ScrollablePage {
                 id: allowMultiProviderSelection
                 Layout.fillWidth: true
                 text: i18n("Allow selecting multiple providers in the widget")
+            }
+
+            QtControls.CheckBox {
+                id: syncProviders
+                Layout.fillWidth: true
+                text: i18n("Sync providers between widgets")
+                onClicked: {
+                    if (checked) {
+                        page.readSharedProviders();
+                    } else {
+                        page.providerSyncStatus = "";
+                    }
+                }
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                visible: syncProviders.checked
+                text: page.providerSyncStatus.length > 0
+                    ? page.providerSyncStatus
+                    : i18n("Provider order, sources, accounts, and enabled state are shared. Tray appearance stays local.")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
             }
 
             ListView {
@@ -837,6 +869,19 @@ Kirigami.ScrollablePage {
                 }
             }
 
+            QtControls.CheckBox {
+                id: shareProviderFetches
+                Kirigami.FormData.label: i18n("Multiple widgets:")
+                text: i18n("Share matching provider refreshes")
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: i18n("Widgets using the same CLI, provider, source, account, and fetch options reuse one result per refresh interval.")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
+            }
+
             QtControls.SpinBox {
                 id: requestTimeout
                 Kirigami.FormData.label: i18n("Timeout:")
@@ -958,6 +1003,65 @@ Kirigami.ScrollablePage {
     function syncConfig() {
         cfg_providerConfigs = serializeProviders();
         cfg_provider = enabledProviders().join(",");
+        if (syncProviders.checked && !providerSyncApplying) {
+            writeSharedProviders();
+        }
+    }
+
+    function providerSyncScriptPath() {
+        let scriptPath = Qt.resolvedUrl("../code/codexbar-provider-sync.mjs").toString();
+        if (scriptPath.startsWith("file://")) {
+            scriptPath = decodeURIComponent(scriptPath.slice("file://".length));
+            if (scriptPath.startsWith("//") && !/^\/\/[A-Za-z]:\//.test(scriptPath)) {
+                scriptPath = scriptPath.slice(1);
+            }
+        }
+        return scriptPath;
+    }
+
+    function readSharedProviders() {
+        providerSyncStatus = i18n("Loading shared providers…");
+        providerSyncRunner.connectSource(shellQuote(providerSyncScriptPath()) + " --action read");
+    }
+
+    function writeSharedProviders() {
+        providerSyncStatus = i18n("Saving shared providers…");
+        providerSyncRunner.connectSource(
+            shellQuote(providerSyncScriptPath())
+                + " --action write --providers "
+                + shellQuote(serializeProviders())
+        );
+    }
+
+    function applySharedProviders(sharedProviders) {
+        const localPresentation = {};
+        for (let index = 0; index < providerModel.count; index += 1) {
+            const local = providerModel.get(index);
+            localPresentation[normalizedProviderId(local.provider)] = {
+                showInCompactAll: local.showInCompactAll,
+                compactBarLimit: local.compactBarLimit,
+                compactBarIds: local.compactBarIds,
+                compactColor: local.compactColor
+            };
+        }
+
+        const parsed = parseProviderConfigs(JSON.stringify(sharedProviders || []));
+        providerSyncApplying = true;
+        providerModel.clear();
+        for (let index = 0; index < parsed.length; index += 1) {
+            const item = parsed[index];
+            const presentation = localPresentation[normalizedProviderId(item.provider)];
+            if (presentation) {
+                item.showInCompactAll = presentation.showInCompactAll;
+                item.compactBarLimit = presentation.compactBarLimit;
+                item.compactBarIds = presentation.compactBarIds;
+                item.compactColor = presentation.compactColor;
+            }
+            providerModel.append(item);
+        }
+        cfg_providerConfigs = serializeProviders();
+        cfg_provider = enabledProviders().join(",");
+        providerSyncApplying = false;
     }
 
     function parseProviderConfigs(raw) {
@@ -1272,6 +1376,39 @@ Kirigami.ScrollablePage {
         visible: false
         width: 0
         height: 0
+    }
+
+    Plasma5Support.DataSource {
+        id: providerSyncRunner
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            const output = String(data.stdout || data["stdout"] || "").trim();
+            if (!output.length) {
+                page.providerSyncStatus = i18n("Provider sync returned no data");
+                return;
+            }
+            try {
+                const result = JSON.parse(output);
+                if (result.ok === false) {
+                    page.providerSyncStatus = result.error || i18n("Provider sync failed");
+                    return;
+                }
+                if (sourceName.indexOf("--action read") !== -1) {
+                    if (result.exists && Array.isArray(result.providers) && result.providers.length > 0) {
+                        page.applySharedProviders(result.providers);
+                        page.providerSyncStatus = i18n("Using shared providers");
+                    } else {
+                        page.writeSharedProviders();
+                    }
+                } else {
+                    page.providerSyncStatus = i18n("Shared providers saved");
+                }
+            } catch (error) {
+                page.providerSyncStatus = String(error);
+            }
+        }
     }
 
     Plasma5Support.DataSource {

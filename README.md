@@ -101,7 +101,9 @@ Open the widget configuration from Plasma and adjust:
 
 - CLI path
 - enabled providers and each provider's source, account, and all-accounts mode
+- optional provider-setting synchronization between widget instances
 - refresh interval and CLI timeout
+- shared provider refreshes between widget instances
 - status, credits, cost, and history visibility
 - compact representation metric
 
@@ -136,6 +138,13 @@ The account fields map to the CodexBar CLI account flags:
 - `allAccounts`: passes `--all-accounts`
 
 The refresh interval defaults to 5 minutes and is clamped to 1 minute through 24 hours. The request timeout is clamped to 5 through 300 seconds.
+Matching provider refreshes are shared by default between widget instances. Widgets using the same CLI, provider, source,
+account, and fetch options reuse a protected per-provider cache for one refresh interval, so several widgets do not run the
+same CodexBar usage and cost checks repeatedly. Manual refresh bypasses an older cached result, while simultaneous manual
+refreshes still collapse into one provider check. Presentation settings and provider-chip selections remain per widget.
+Enable **Sync providers between widgets** on each widget that should use the shared provider order, enabled state, source,
+account selection, all-accounts mode, and API keys. The first enabled widget publishes its current providers; later widgets
+adopt the shared list. Provider colors, tray-bar choices, and selected provider chips remain local to each widget.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
 providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→red), or theme text color.
 New widget instances default to all-provider usage bars with the first bar emphasized, theme-text tinting, and no metric text.

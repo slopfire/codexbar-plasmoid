@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const args = parseArgs(process.argv.slice(2));
 // KDE's plasmoid process inherits the user's session env from systemd --user
-// (which sources $XDG_CONFIG_HOME/environment.d/*.conf), but env vars the
+// (which sources $XDG_CONFIG_HOME/environment.d/*.conf), but env vars th e
 // user only set in their shell rc files (e.g. ~/.zshrc) do not make it
 // across. Re-read the standard env.d directory plus a plasmoid-local
 // ~/.codexbar/.env so API keys and other exports still reach the spawned
@@ -20,6 +21,9 @@ const nativeCliPath = args.nativeCli || process.env.CODEXBAR_NATIVE_CLI || resol
 const autoUpdate = args.autoUpdate === "true" || args["auto-update"] === "true";
 const updateTag = clean(args.tag) || "latest";
 const managedCliBinary = managedBinary();
+const sharedCacheSeconds = Math.max(0, Number(args.cacheSeconds || args["cache-seconds"] || 0));
+const forceRefresh = args.force === "true";
+const requestStartedAt = Date.now();
 
 function injectSqliteEnv(targetDir) {
   for (const envVar of ["NIX_LD_LIBRARY_PATH", "LD_LIBRARY_PATH"]) {
@@ -124,7 +128,9 @@ if (fs.existsSync(path.join(managedDir, "libsqlite3.so.0"))) {
 }
 const provider = clean(args.provider) || "all";
 const source = clean(args.source) || "auto";
-const providerConfigs = parseProviderConfigs(args.providers);
+const localProviderConfigs = parseProviderConfigs(args.providers);
+const syncProviders = args.syncProviders === "true" || args["sync-providers"] === "true";
+const providerConfigs = syncProviders ? loadSharedProviderConfigs(localProviderConfigs) : localProviderConfigs;
 const includeCost = args.cost !== "false";
 const includeStatus = args.status !== "false";
 const showCredits = args.credits !== "false";
@@ -278,7 +284,23 @@ function runUsageForConfig(config) {
 
   const command = commandForConfig(config);
   try {
-    return runJSON(command, commandArgs, config.provider, config.apiKey, clean(config.account));
+    return sharedFetch("usage", {
+      command,
+      commandArgs,
+      provider: normalizeProviderId(config.provider),
+      apiKeyHash: hashSecret(config.apiKey),
+      account: clean(config.account),
+    }, () => {
+      try {
+        return runJSON(command, commandArgs, config.provider, config.apiKey, clean(config.account));
+      } catch (error) {
+        return [{
+          provider: normalizeProviderId(config.provider),
+          source: resolveSource(config.provider, config.source),
+          error: { message: shortError(error, command) },
+        }];
+      }
+    });
   } catch (error) {
     return [{
       provider: normalizeProviderId(config.provider),
@@ -306,7 +328,23 @@ function runCost() {
     ];
     const command = commandForConfig(config);
     try {
-      results.push(...asArray(runJSON(command, commandArgs, config.provider, config.apiKey || "")));
+      const payload = sharedFetch("cost", {
+        command,
+        commandArgs,
+        provider: normalizeProviderId(config.provider),
+        apiKeyHash: hashSecret(config.apiKey),
+        account: clean(config.account),
+      }, () => {
+        try {
+          return runJSON(command, commandArgs, config.provider, config.apiKey || "");
+        } catch (error) {
+          return [{
+            provider: "cost",
+            error: { message: shortError(error, command) },
+          }];
+        }
+      });
+      results.push(...asArray(payload));
     } catch (error) {
       results.push({
         provider: "cost",
@@ -317,6 +355,110 @@ function runCost() {
     }
   }
   return results;
+}
+
+function sharedFetch(namespace, identity, producer) {
+  if (sharedCacheSeconds <= 0) {
+    return producer();
+  }
+
+  const cacheDir = sharedProviderCacheDir();
+  fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  const cacheKey = crypto.createHash("sha256")
+    .update(JSON.stringify(identity))
+    .digest("hex");
+  const cachePath = path.join(cacheDir, `${namespace}-${cacheKey}.json`);
+  const lockPath = `${cachePath}.lock`;
+  const waitDeadline = Date.now() + timeoutMs + 5000;
+
+  while (true) {
+    const cached = readSharedCache(cachePath, forceRefresh);
+    if (cached.hit) {
+      return cached.value;
+    }
+
+    let lockFd = null;
+    try {
+      lockFd = fs.openSync(lockPath, "wx", 0o600);
+      fs.writeFileSync(lockFd, `${process.pid}\n${Date.now()}\n`);
+
+      // Another helper may have populated the cache between our read and lock.
+      const afterLock = readSharedCache(cachePath, forceRefresh);
+      if (afterLock.hit) {
+        return afterLock.value;
+      }
+
+      const value = producer();
+      writeSharedCache(cachePath, value);
+      return value;
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+      removeStaleLock(lockPath);
+      if (Date.now() >= waitDeadline) {
+        // A broken peer must not prevent this widget from refreshing forever.
+        return producer();
+      }
+      sleepMilliseconds(50);
+    } finally {
+      if (lockFd !== null) {
+        try { fs.closeSync(lockFd); } catch {}
+        try { fs.unlinkSync(lockPath); } catch {}
+      }
+    }
+  }
+}
+
+function sharedProviderCacheDir() {
+  const cacheHome = clean(process.env.XDG_CACHE_HOME) || path.join(os.homedir(), ".cache");
+  return path.join(cacheHome, "codexbar-plasmoid", "provider-cache");
+}
+
+function readSharedCache(cachePath, forced) {
+  try {
+    const stat = fs.statSync(cachePath);
+    const freshEnough = forced
+      ? stat.mtimeMs >= requestStartedAt
+      : Date.now() - stat.mtimeMs <= sharedCacheSeconds * 1000;
+    if (!freshEnough) {
+      return { hit: false, value: null };
+    }
+    return { hit: true, value: JSON.parse(fs.readFileSync(cachePath, "utf8")) };
+  } catch {
+    return { hit: false, value: null };
+  }
+}
+
+function writeSharedCache(cachePath, value) {
+  const temporaryPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, JSON.stringify(value), { mode: 0o600 });
+    fs.renameSync(temporaryPath, cachePath);
+  } finally {
+    try { fs.unlinkSync(temporaryPath); } catch {}
+  }
+}
+
+function removeStaleLock(lockPath) {
+  try {
+    const stat = fs.statSync(lockPath);
+    if (Date.now() - stat.mtimeMs > timeoutMs + 10000) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch {
+    // The lock disappeared between checks; the next loop will read the cache.
+  }
+}
+
+function sleepMilliseconds(milliseconds) {
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(sleeper, 0, 0, milliseconds);
+}
+
+function hashSecret(value) {
+  const secret = clean(value);
+  return secret ? crypto.createHash("sha256").update(secret).digest("hex") : "";
 }
 
 function effectiveProviderConfigs() {
@@ -617,6 +759,22 @@ function parseProviderConfigs(raw) {
       allAccounts: item.allAccounts === true,
       apiKey: clean(item.apiKey),
     }));
+}
+
+function loadSharedProviderConfigs(fallback) {
+  const configHome = clean(process.env.XDG_CONFIG_HOME) || path.join(os.homedir(), ".config");
+  const candidate = path.join(configHome, "codexbar-plasmoid", "shared-providers.json");
+  try {
+    if (fs.existsSync(candidate)) {
+      const parsed = parseProviderConfigs(fs.readFileSync(candidate, "utf8"));
+      if (parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {
+    // A malformed shared file should not prevent a widget refresh.
+  }
+  return fallback;
 }
 
 function resolveSource(providerId, requestedSource) {

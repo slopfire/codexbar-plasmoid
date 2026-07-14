@@ -74,6 +74,14 @@
       <min>60</min>
       <max>86400</max>
     </entry>
+    <entry name="shareProviderFetches" type="Bool">
+      <label>Share matching provider refreshes between widget instances</label>
+      <default>true</default>
+    </entry>
+    <entry name="syncProviders" type="Bool">
+      <label>Synchronize provider fetch settings between widget instances</label>
+      <default>false</default>
+    </entry>
     <entry name="requestTimeoutSeconds" type="Int">
       <label>Request timeout in seconds</label>
       <default>45</default>

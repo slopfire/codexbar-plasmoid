@@ -42,7 +42,7 @@ PlasmoidItem {
         PlasmaCore.Action {
             text: i18n("Refresh")
             icon.name: "view-refresh"
-            onTriggered: root.refreshNow()
+            onTriggered: root.refreshNow(true)
         }
     ]
 
@@ -51,7 +51,7 @@ PlasmoidItem {
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
         }
-        refreshNow();
+        refreshNow(false);
     }
     onRefreshIntervalChanged: refreshTimer.restart()
     onSelectedEntryIdsChanged: persistSelectedEntryIds()
@@ -67,7 +67,7 @@ PlasmoidItem {
         repeat: true
         running: true
         triggeredOnStart: false
-        onTriggered: root.refreshNow()
+        onTriggered: root.refreshNow(false)
     }
 
     QtObject {
@@ -81,7 +81,7 @@ PlasmoidItem {
             return "'" + String(value).replace(/'/g, "'\"'\"'") + "'";
         }
 
-        function command() {
+        function command(forceRefresh) {
             const script = localPath(Qt.resolvedUrl("../code/codexbar-plasmoid-helper.mjs"));
             const parts = [
                 quote(script),
@@ -98,7 +98,10 @@ PlasmoidItem {
                 "--credits", quote(plasmoid.configuration.showCredits ? "true" : "false"),
                 "--anonymize-emails", quote(plasmoid.configuration.anonymizeEmail ? "true" : "false"),
                 "--auto-update", quote(plasmoid.configuration.autoUpdateCli ? "true" : "false"),
-                "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest")
+                "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest"),
+                "--cache-seconds", quote(plasmoid.configuration.shareProviderFetches === false ? 0 : root.refreshInterval),
+                "--sync-providers", quote(plasmoid.configuration.syncProviders === true ? "true" : "false"),
+                "--force", quote(forceRefresh ? "true" : "false")
             ];
             return parts.join(" ");
         }
@@ -560,8 +563,8 @@ PlasmoidItem {
         }
     }
 
-    function refreshNow() {
-        const command = codexBar.command();
+    function refreshNow(forceRefresh) {
+        const command = codexBar.command(forceRefresh === true);
         if (previousCommand.length > 0) {
             executable.disconnectSource(previousCommand);
         }
@@ -705,7 +708,7 @@ PlasmoidItem {
                     text: i18n("Refresh")
                     display: QtControls.AbstractButton.IconOnly
                     enabled: !root.loading
-                    onClicked: root.refreshNow()
+                    onClicked: root.refreshNow(true)
                 }
 
                 PlasmaComponents3.ToolButton {
