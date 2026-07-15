@@ -22,6 +22,8 @@ PlasmoidItem {
     property bool multiProviderSelectionEnabled: plasmoid.configuration.allowMultiProviderSelection === true
     property string activeCommand: ""
     property string previousCommand: ""
+    property string activeSiteLaunchCommand: ""
+    property string previousSiteLaunchCommand: ""
     readonly property var entries: snapshot.entries || []
     readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
         ? selectedEntryIds
@@ -159,6 +161,67 @@ PlasmoidItem {
                 devin: "Devin"
             };
             return names[provider] || String(provider || "CodexBar");
+        }
+
+        function providerSiteUrl(provider, entry) {
+            const discoveredUrl = String(entry && entry.siteUrl || "");
+            if (discoveredUrl.indexOf("https://") === 0
+                    || discoveredUrl.indexOf("http://127.0.0.1") === 0
+                    || discoveredUrl.indexOf("http://localhost") === 0
+                    || discoveredUrl.indexOf("http://[::1]") === 0) {
+                return discoveredUrl;
+            }
+            const sites = {
+                codex: "https://chatgpt.com/codex/cloud/settings/analytics",
+                openai: "https://platform.openai.com/usage",
+                azureopenai: "https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/overview",
+                claude: "https://platform.claude.com/settings/billing",
+                gemini: "https://aistudio.google.com/usage",
+                antigravity: "https://antigravity.google/",
+                cursor: "https://cursor.com/dashboard",
+                opencode: "https://opencode.ai/",
+                opencodego: "https://opencode.ai/",
+                alibaba: "https://bailian.console.aliyun.com/?tab=model#/efm/usage",
+                alibabatokenplan: "https://bailian.console.aliyun.com/?tab=model#/efm/usage",
+                zai: "https://open.bigmodel.cn/console/overview",
+                abacus: "https://abacus.ai/app",
+                copilot: "https://github.com/settings/copilot",
+                minimax: "https://platform.minimax.io/subscribe",
+                manus: "https://manus.im/app#settings/usage",
+                vertexai: "https://console.cloud.google.com/vertex-ai",
+                kilo: "https://app.kilo.ai/profile",
+                kiro: "https://app.kiro.dev/",
+                augment: "https://app.augmentcode.com/",
+                factory: "https://app.factory.ai/",
+                jetbrains: "https://account.jetbrains.com/licenses",
+                kimi: "https://www.kimi.com/code/console",
+                kimik2: "https://platform.kimi.com/console",
+                moonshot: "https://platform.kimi.com/console",
+                amp: "https://ampcode.com/settings",
+                t3chat: "https://t3.chat/",
+                ollama: "https://ollama.com/settings/keys",
+                synthetic: "https://api.synthetic.new/v2/quotas",
+                openrouter: "https://openrouter.ai/activity",
+                elevenlabs: "https://elevenlabs.io/app/developers/analytics/usage",
+                warp: "https://app.warp.dev/usage",
+                windsurf: "https://windsurf.com/subscription/usage",
+                perplexity: "https://www.perplexity.ai/settings/api",
+                mimo: "https://platform.xiaomimimo.com/#/console/balance",
+                doubao: "https://console.volcengine.com/ark/region:ark+cn-beijing/overview",
+                mistral: "https://console.mistral.ai/usage",
+                deepseek: "https://platform.deepseek.com/usage",
+                codebuff: "https://codebuff.com/",
+                crof: "https://crof.ai/usage_api/",
+                venice: "https://venice.ai/settings/api",
+                commandcode: "https://commandcode.ai/",
+                stepfun: "https://platform.stepfun.com/interface-key",
+                bedrock: "https://console.aws.amazon.com/bedrock/",
+                grok: "https://grok.com/?_s=usage",
+                groq: "https://console.groq.com/dashboard/usage",
+                deepgram: "https://console.deepgram.com/projects",
+                devin: "https://app.devin.ai/settings/billing"
+            };
+            return sites[normalizeProviderId(provider)] || "";
         }
 
         function color(provider) {
@@ -578,6 +641,16 @@ PlasmoidItem {
         }
     }
 
+    Plasma5Support.DataSource {
+        id: siteLauncher
+        engine: "executable"
+        connectedSources: []
+        interval: 0
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+        }
+    }
+
     function refreshNow(forceRefresh) {
         const command = codexBar.command(forceRefresh === true);
         if (previousCommand.length > 0) {
@@ -588,6 +661,26 @@ PlasmoidItem {
         loading = true;
         lastError = "";
         executable.connectSource(command);
+    }
+
+    function openProviderSite(entry) {
+        if (!entry) {
+            return;
+        }
+        const url = codexBar.providerSiteUrl(entry.provider, entry);
+        if (!url) {
+            return;
+        }
+        const script = codexBar.localPath(Qt.resolvedUrl("../code/codexbar-browser-launcher.mjs"));
+        const command = codexBar.quote("node") + " " + codexBar.quote(script)
+            + " --url " + codexBar.quote(url)
+            + " --source " + codexBar.quote(entry.source || "");
+        if (previousSiteLaunchCommand.length > 0) {
+            siteLauncher.disconnectSource(previousSiteLaunchCommand);
+        }
+        previousSiteLaunchCommand = command;
+        activeSiteLaunchCommand = command;
+        siteLauncher.connectSource(command);
     }
 
     function loadSelectedEntryIds() {
@@ -787,9 +880,11 @@ PlasmoidItem {
                             Layout.rightMargin: Kirigami.Units.smallSpacing
                             entry: modelData
                             providerName: codexBar.providerName(modelData.provider)
+                            providerSiteUrl: codexBar.providerSiteUrl(modelData.provider, modelData)
                             accentColor: codexBar.color(modelData.provider)
                             showCredits: plasmoid.configuration.showCredits
                             showHistory: plasmoid.configuration.showHistory
+                            onSiteRequested: root.openProviderSite(modelData)
                         }
                     }
                 }

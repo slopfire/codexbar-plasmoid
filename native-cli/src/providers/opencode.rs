@@ -21,7 +21,7 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
     let subscription = fetch_subscription(http, &workspace, &cookie.header)?;
     let snapshot = parse_usage(&subscription, false)?;
 
-    Ok(ProviderPayload::ok(
+    let mut payload = ProviderPayload::ok(
         "opencode",
         UsageSnapshot {
             primary: Some(snapshot.primary),
@@ -36,5 +36,7 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
         None,
         None,
         None,
-    ))
+    );
+    payload.site_url = Some(format!("https://opencode.ai/workspace/{workspace}/billing"));
+    Ok(payload)
 }

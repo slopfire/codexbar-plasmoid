@@ -9,9 +9,12 @@ PlasmaComponents3.Frame {
 
     property var entry
     property string providerName: ""
+    property url providerSiteUrl: ""
     property color accentColor: Kirigami.Theme.highlightColor
     property bool showCredits: true
     property bool showHistory: true
+
+    signal siteRequested()
 
     padding: Kirigami.Units.smallSpacing
 
@@ -39,6 +42,7 @@ PlasmaComponents3.Frame {
             Layout.fillWidth: true
 
             Kirigami.Icon {
+                id: providerIcon
                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
                 source: {
@@ -51,6 +55,20 @@ PlasmaComponents3.Frame {
                 }
                 isMask: true
                 color: card.accentColor
+
+                MouseArea {
+                    id: providerIconMouseArea
+                    anchors.fill: parent
+                    enabled: String(card.providerSiteUrl).length > 0
+                    hoverEnabled: enabled
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: card.siteRequested()
+
+                    QtControls.ToolTip {
+                        visible: providerIconMouseArea.containsMouse
+                        text: i18n("Open %1 website", card.providerName)
+                    }
+                }
             }
 
             ColumnLayout {

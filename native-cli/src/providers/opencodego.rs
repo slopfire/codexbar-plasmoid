@@ -117,6 +117,7 @@ fn fetch_one_web_inner(
         None,
     );
     payload.source = source_label.to_string();
+    payload.site_url = Some(format!("https://opencode.ai/workspace/{workspace}/go"));
     Ok(payload)
 }
 

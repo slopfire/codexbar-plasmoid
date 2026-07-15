@@ -617,12 +617,14 @@ function normalizeProvider(item, cost) {
     creditsRemaining = parseBalanceFromDescription(usage.primary.resetDescription);
   }
 
+  const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
   return {
     provider: providerId,
     account,
     organization,
     plan: usage.loginMethod || identity.loginMethod || null,
     source,
+    siteUrl: itemSiteUrl || configuredProviderSiteUrl(providerId),
     version: item.version || null,
     updatedAt: usage.updatedAt || item.credits?.updatedAt || cost?.updatedAt || new Date().toISOString(),
     status: item.status || null,
@@ -641,6 +643,32 @@ function normalizeProvider(item, cost) {
     } : null,
     dailyUsage,
   };
+}
+
+function configuredProviderSiteUrl(providerId) {
+  if (normalizeProviderId(providerId) !== "llmproxy") {
+    return null;
+  }
+  const providerConfig = kdeProviderConfig.llmproxy || {};
+  const rawUrl = clean(process.env.LLM_PROXY_BASE_URL) || clean(providerConfig.enterpriseHost);
+  if (!rawUrl) {
+    return null;
+  }
+  try {
+    const withScheme = rawUrl.includes("://") ? rawUrl : `https://${rawUrl}`;
+    const url = new URL(withScheme);
+    const isLoopbackHttp = url.protocol === "http:"
+      && (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]");
+    if (url.protocol !== "https:" && !isLoopbackHttp) {
+      return null;
+    }
+    url.pathname = url.pathname.replace(/\/(?:v1\/quota-stats|v1)\/?$/, "") || "/";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function usageRows(providerId, usage, source) {
@@ -906,6 +934,16 @@ function loadKdeProviderConfig() {
     if (fs.existsSync(candidate)) {
       const parsed = JSON.parse(fs.readFileSync(candidate, "utf8"));
       const providers = parsed?.providers;
+      if (Array.isArray(providers)) {
+        const normalized = {};
+        for (const config of providers) {
+          const providerId = clean(config?.id) || clean(config?.provider);
+          if (providerId) {
+            normalized[normalizeProviderId(providerId)] = config;
+          }
+        }
+        return normalized;
+      }
       if (providers && typeof providers === "object" && !Array.isArray(providers)) {
         const normalized = {};
         for (const [providerId, config] of Object.entries(providers)) {
