@@ -1,5 +1,7 @@
 # Agent instructions
 
+after implementing a feature always install with ./scripts/install-plasmoid.sh
+
 ## Context7
 
 Use `bunx ctx7@latest` for all Context7 CLI requests. Do not use `npx` or `npm exec` for Context7.
