@@ -2,6 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.2 — 2026-07-15
+
+### Maintenance
+
+- Bump release version
+
 ## 0.1.1 — 2026-07-14
 
 ### Improvements
