@@ -12,6 +12,7 @@ PlasmoidItem {
     id: root
 
     property var snapshot: ({ ok: false, entries: [] })
+    property var lastSuccessfulEntries: []
     property var cliUpdateInfo: ({ ok: true, installedVersion: "", latestVersion: "", needsUpdate: false, updated: false, error: "" })
     property bool loading: false
     property string lastError: ""
@@ -582,6 +583,88 @@ PlasmoidItem {
             }
             return items;
         }
+
+        function rememberSuccessfulEntries(entries) {
+            const remembered = root.lastSuccessfulEntries.slice();
+            for (const entry of entries || []) {
+                if (!entry || entry.error) {
+                    continue;
+                }
+                const existingIndex = remembered.findIndex(function(candidate) {
+                    return candidate && candidate.id === entry.id;
+                });
+                if (existingIndex >= 0) {
+                    remembered[existingIndex] = entry;
+                } else {
+                    remembered.push(entry);
+                }
+            }
+            root.lastSuccessfulEntries = remembered;
+        }
+
+        function lastSuccessfulEntryFor(entry) {
+            if (!entry) {
+                return null;
+            }
+            const exact = root.lastSuccessfulEntries.find(function(candidate) {
+                return candidate && candidate.id === entry.id;
+            });
+            if (exact) {
+                return exact;
+            }
+
+            // Failed CLI entries often omit the account, so their generated id
+            // no longer matches the successful one. A provider/source fallback
+            // is safe only when it identifies one remembered account.
+            const providerMatches = root.lastSuccessfulEntries.filter(function(candidate) {
+                return candidate && candidate.provider === entry.provider
+                    && (!entry.source || candidate.source === entry.source);
+            });
+            return providerMatches.length === 1 ? providerMatches[0] : null;
+        }
+
+        function retainLastSuccessfulResults(parsed) {
+            if (!parsed || parsed.ok === false) {
+                return parsed;
+            }
+
+            let retainedAny = false;
+            let receivedAnySuccess = false;
+            const mergedEntries = (parsed.entries || []).map(function(entry) {
+                if (!entry || !entry.error) {
+                    receivedAnySuccess = receivedAnySuccess || !!entry;
+                    return entry;
+                }
+                const previous = lastSuccessfulEntryFor(entry);
+                if (!previous) {
+                    return entry;
+                }
+                const retained = {};
+                for (const key in previous) {
+                    retained[key] = previous[key];
+                }
+                retained.error = entry.error;
+                retainedAny = true;
+                return retained;
+            });
+
+            rememberSuccessfulEntries(parsed.entries || []);
+            if (!retainedAny) {
+                return parsed;
+            }
+
+            const mergedSnapshot = {};
+            for (const key in parsed) {
+                mergedSnapshot[key] = parsed[key];
+            }
+            mergedSnapshot.entries = mergedEntries;
+            // When every provider failed, keep the timestamp of the data that
+            // is actually on screen instead of claiming it was just updated.
+            if (!receivedAnySuccess && root.snapshot.generatedAt) {
+                mergedSnapshot.generatedAt = root.snapshot.generatedAt;
+            }
+            return mergedSnapshot;
+        }
     }
 
     Plasma5Support.DataSource {
@@ -599,17 +682,21 @@ PlasmoidItem {
             }
             try {
                 const parsed = JSON.parse(output);
-                root.snapshot = parsed;
-                codexBar.updateCompactBarCatalog(parsed.entries || []);
                 root.lastError = parsed.ok === false ? (parsed.error || i18n("CodexBar refresh failed")) : "";
+                if (parsed.ok !== false) {
+                    root.snapshot = codexBar.retainLastSuccessfulResults(parsed);
+                    codexBar.updateCompactBarCatalog(root.snapshot.entries || []);
+                }
                 if (parsed.cliUpdate && (parsed.cliUpdate.updated || parsed.cliUpdate.error)) {
                     root.cliUpdateInfo = parsed.cliUpdate;
                 }
                 // Drop stale ids only when we have a real entry list. An empty
                 // or failed refresh must not wipe the remembered selection.
                 if (root.selectedEntryIds.length > 0) {
-                    const availableIds = (parsed.entries || []).map(function(entry) { return entry.id; });
-                    if (availableIds.length > 0) {
+                    const parsedEntries = parsed.entries || [];
+                    const hasEntryErrors = parsedEntries.some(function(entry) { return entry && entry.error; });
+                    const availableIds = (root.snapshot.entries || []).map(function(entry) { return entry.id; });
+                    if (availableIds.length > 0 && !hasEntryErrors) {
                         root.selectedEntryIds = root.selectedEntryIds.filter(function(entryId) {
                             return availableIds.indexOf(entryId) !== -1;
                         });
