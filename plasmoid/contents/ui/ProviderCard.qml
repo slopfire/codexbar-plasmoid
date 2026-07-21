@@ -13,8 +13,13 @@ PlasmaComponents3.Frame {
     property color accentColor: Kirigami.Theme.highlightColor
     property bool showCredits: true
     property bool showHistory: true
+    // When true, show a drag handle so the parent ListView can reorder cards.
+    property bool reorderEnabled: false
+    property bool dragActive: dragHandleArea.drag.active
 
     signal siteRequested()
+    // Parent can bind Drag to this handle; the card itself is the drag target.
+    readonly property alias dragHandle: dragHandleArea
 
     padding: Kirigami.Units.smallSpacing
 
@@ -40,6 +45,47 @@ PlasmaComponents3.Frame {
 
         RowLayout {
             Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Item {
+                id: dragHandle
+                Layout.preferredWidth: card.reorderEnabled ? Kirigami.Units.gridUnit * 1.25 : 0
+                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                Layout.alignment: Qt.AlignVCenter
+                visible: card.reorderEnabled
+                opacity: card.reorderEnabled ? 1 : 0
+
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    source: "list-drag-handle-symbolic"
+                    width: Kirigami.Units.iconSizes.small
+                    height: Kirigami.Units.iconSizes.small
+                    color: dragHandleArea.pressed
+                        ? Kirigami.Theme.highlightColor
+                        : Kirigami.Theme.textColor
+                    opacity: dragHandleArea.containsMouse || dragHandleArea.pressed ? 1.0 : 0.45
+                    Behavior on opacity { NumberAnimation { duration: 120 } }
+                }
+
+                MouseArea {
+                    id: dragHandleArea
+                    anchors.fill: parent
+                    enabled: card.reorderEnabled
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: drag.active
+                        ? Qt.ClosedHandCursor
+                        : (containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
+                    drag.target: card
+                    drag.axis: Drag.YAxis
+                }
+
+                QtControls.ToolTip {
+                    visible: dragHandleArea.containsMouse && !dragHandleArea.drag.active
+                    text: i18n("Drag to reorder providers")
+                    delay: 600
+                }
+            }
 
             Kirigami.Icon {
                 id: providerIcon
