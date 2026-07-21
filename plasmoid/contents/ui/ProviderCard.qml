@@ -39,8 +39,10 @@ PlasmaComponents3.Frame {
         border.width: 0
     }
 
-    ColumnLayout {
-        width: parent.width
+    // contentItem so Frame/Control reports a real implicitHeight for ListView
+    // content-sizing (children alone are ignored by Control's size calculation).
+    contentItem: ColumnLayout {
+        id: contentLayout
         spacing: Kirigami.Units.smallSpacing
 
         RowLayout {
@@ -253,12 +255,25 @@ PlasmaComponents3.Frame {
             }
         }
 
-        HistoryChart {
+        Loader {
+            id: historyLoader
+
             Layout.fillWidth: true
-            Layout.preferredHeight: Kirigami.Units.gridUnit * 3
-            visible: !card.isErrorOnly && card.showHistory && card.entry && card.entry.dailyUsage && card.entry.dailyUsage.length > 0
-            points: card.entry && card.entry.dailyUsage ? card.entry.dailyUsage : []
-            accentColor: card.accentColor
+            // Collapse fully when inactive so content height tracks real cards.
+            Layout.preferredHeight: active ? Kirigami.Units.gridUnit * 3 : 0
+            active: !card.isErrorOnly
+                && card.showHistory
+                && card.entry
+                && card.entry.dailyUsage
+                && card.entry.dailyUsage.length > 0
+            visible: active
+
+            sourceComponent: Component {
+                HistoryChart {
+                    points: card.entry && card.entry.dailyUsage ? card.entry.dailyUsage : []
+                    accentColor: card.accentColor
+                }
+            }
         }
 
         RowLayout {

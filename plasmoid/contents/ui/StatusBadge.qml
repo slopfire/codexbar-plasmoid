@@ -19,6 +19,9 @@ RowLayout {
     }
 
     PlasmaComponents3.Label {
+        // Cap width so long status text yields to the card title/account line
+        // instead of colliding with the list scrollbar on the right edge.
+        Layout.maximumWidth: Kirigami.Units.gridUnit * 10
         text: statusText()
         color: Kirigami.Theme.disabledTextColor
         font: Kirigami.Theme.smallFont

@@ -121,16 +121,39 @@ update_response="$(mktemp "${TMPDIR:-/tmp}/codexbar-kde-update.XXXXXX")"
 cleanup() { rm -f "$upload_response" "$update_response"; }
 trap cleanup EXIT
 
-upload_status="$(curl -sS -o "$upload_response" -w '%{http_code}' \
-  "${cookie_args[@]}" \
-  -H 'Accept: application/json' \
-  -F "file_upload=@$archive;type=application/zip" \
-  "$upload_url")"
+upload_archive() {
+  curl -sS -o "$upload_response" -w '%{http_code}' \
+    "${cookie_args[@]}" \
+    -H 'Accept: application/json' \
+    -H "Origin: $store_base" \
+    -H "Referer: $store_base/p/$product_id/" \
+    -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150 Safari/537.36' \
+    -F "file_upload=@$archive;type=application/zip" \
+    "$upload_url/"
+}
+
+upload_status="$(upload_archive)"
 
 if [[ "$upload_status" == 3* ]]; then
-  echo "The discovered store session is no longer authenticated." >&2
-  echo "Sign in to store.kde.org with Chrome and run this command again." >&2
-  exit 1
+  chrome="$(command -v google-chrome || command -v google-chrome-stable || true)"
+  if [[ -z "$chrome" ]]; then
+    echo "Chrome is required to refresh the KDE Store session." >&2
+    exit 1
+  fi
+  echo "Refreshing the KDE Store session through Chrome..."
+  "$chrome" "$store_base/p/$product_id/edit/" >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+  sleep 5
+  if discovered_cookie="$(discover_chrome_cookie)"; then
+    cookie_args=(-b "$discovered_cookie")
+    unset discovered_cookie
+    upload_status="$(upload_archive)"
+  fi
+  if [[ "$upload_status" == 3* ]]; then
+    echo "Chrome did not refresh access to the protected product page." >&2
+    echo "Open the tab Chrome created, complete any OAuth prompt, and retry." >&2
+    exit 1
+  fi
 fi
 if [[ "$upload_status" != 2* ]]; then
   echo "Store upload failed with HTTP $upload_status." >&2
@@ -155,10 +178,13 @@ PY
 update_status="$(curl -sS -o "$update_response" -w '%{http_code}' \
   "${cookie_args[@]}" \
   -H 'Accept: application/json' \
+  -H "Origin: $store_base" \
+  -H "Referer: $store_base/p/$product_id/" \
+  -A 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150 Safari/537.36' \
   --data-urlencode "file_id=$file_id" \
   --data-urlencode "file_version=$version" \
   --data-urlencode 'ocs_compatible=1' \
-  "$update_url")"
+  "$update_url/")"
 
 if [[ "$update_status" != 2* ]]; then
   echo "Archive uploaded as file $file_id, but version update failed with HTTP $update_status." >&2

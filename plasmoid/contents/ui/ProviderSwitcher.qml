@@ -12,8 +12,15 @@ Item {
     property var selectedEntryIds: []
     property var colorForProvider: null
 
-    implicitHeight: grid.implicitHeight
-    height: grid.implicitHeight
+    // Report height to ColumnLayout so the expanded popup can size to content
+    // when the chip grid wraps to extra rows. Collapse fully when hidden —
+    // visible:false alone still reserves layout space.
+    readonly property real contentHeight: entries.length > 1 ? grid.implicitHeight : 0
+    implicitHeight: contentHeight
+    Layout.preferredHeight: contentHeight
+    Layout.minimumHeight: contentHeight
+    Layout.maximumHeight: contentHeight
+    height: contentHeight
     visible: entries.length > 1
 
     readonly property real buttonWidth: {
@@ -52,7 +59,7 @@ Item {
                 Layout.preferredWidth: switcher.buttonWidth
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3.4
                 checkable: true
-                checked: switcher.selectedEntryIds.indexOf(button.modelData.id) !== -1
+                checked: switcher.isEntrySelected(button.modelData)
                 onClicked: switcher.entrySelected(button.modelData.id)
 
                 background: Rectangle {
@@ -121,6 +128,41 @@ Item {
                 }
             }
         }
+    }
+
+    function isEntrySelected(entry) {
+        if (!entry || !entry.id) {
+            return false;
+        }
+        const selected = selectedEntryIds || [];
+        if (selected.indexOf(entry.id) !== -1) {
+            return true;
+        }
+        // Soft-match restored tokens after Plasma restart when the id shape
+        // changed (legacy index ids, provider-only fallback, account drift).
+        const provider = String(entry.provider || "");
+        for (let i = 0; i < selected.length; i += 1) {
+            const token = String(selected[i] || "");
+            if (!token) {
+                continue;
+            }
+            if (token === provider) {
+                return true;
+            }
+            const colon = token.indexOf(":");
+            const tokenProvider = colon === -1 ? token : token.slice(0, colon);
+            if (tokenProvider !== provider) {
+                continue;
+            }
+            const rest = colon === -1 ? "" : token.slice(colon + 1);
+            if (!rest) {
+                return true;
+            }
+            if (entry.account === rest || entry.source === rest) {
+                return true;
+            }
+        }
+        return false;
     }
 
     function primaryPercent(entry) {

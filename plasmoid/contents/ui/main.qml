@@ -33,9 +33,9 @@ PlasmoidItem {
     readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
         ? selectedEntryIds
         : selectedEntryIds.slice(0, 1)
-    readonly property var visibleEntries: effectiveSelectedEntryIds.length > 0
-        ? entries.filter(function(entry) { return effectiveSelectedEntryIds.indexOf(entry.id) !== -1; })
-        : entries
+    // Soft-match selection tokens so a restored id like "codex:0" or a bare
+    // "codex" still shows the live entry after account/source-based id changes.
+    readonly property var visibleEntries: resolveVisibleEntries(entries, effectiveSelectedEntryIds)
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
     readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 300)
@@ -55,6 +55,8 @@ PlasmoidItem {
     ]
 
     Component.onCompleted: {
+        // Restore before any refresh so the first paint can keep the last
+        // selection even while the CLI is still loading.
         selectedEntryIds = loadSelectedEntryIds();
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
@@ -706,17 +708,10 @@ PlasmoidItem {
                 if (parsed.cliUpdate && (parsed.cliUpdate.updated || parsed.cliUpdate.error)) {
                     root.cliUpdateInfo = parsed.cliUpdate;
                 }
-                // Drop stale ids only when we have a real entry list. An empty
-                // or failed refresh must not wipe the remembered selection.
-                if (root.selectedEntryIds.length > 0) {
-                    const parsedEntries = parsed.entries || [];
-                    const hasEntryErrors = parsedEntries.some(function(entry) { return entry && entry.error; });
-                    const availableIds = (root.snapshot.entries || []).map(function(entry) { return entry.id; });
-                    if (availableIds.length > 0 && !hasEntryErrors) {
-                        root.selectedEntryIds = root.selectedEntryIds.filter(function(entryId) {
-                            return availableIds.indexOf(entryId) !== -1;
-                        });
-                    }
+                // Remap remembered selection onto the latest entry ids. Never
+                // hard-wipe on id drift (account/index changes across restarts).
+                if (parsed.ok !== false) {
+                    root.reconcileSelectedEntryIds(root.snapshot.entries || []);
                 }
             } catch (error) {
                 root.lastError = String(error) + "\n" + output.slice(0, 500);
@@ -798,24 +793,209 @@ PlasmoidItem {
         siteLauncher.connectSource(command);
     }
 
+    function resolveVisibleEntries(allEntries, selectedIds) {
+        const list = allEntries || [];
+        const selected = selectedIds || [];
+        if (selected.length === 0) {
+            return list;
+        }
+
+        const matched = [];
+        const used = {};
+        function pushUnique(entry) {
+            if (!entry || !entry.id || used[entry.id]) {
+                return;
+            }
+            used[entry.id] = true;
+            matched.push(entry);
+        }
+
+        for (let i = 0; i < selected.length; i += 1) {
+            const selectedId = String(selected[i] || "");
+            if (!selectedId) {
+                continue;
+            }
+            const exact = list.find(function(entry) { return entry && entry.id === selectedId; });
+            if (exact) {
+                pushUnique(exact);
+                continue;
+            }
+
+            const provider = providerKeyFromEntryId(selectedId);
+            const rest = selectedId.indexOf(":") === -1 ? "" : selectedId.slice(selectedId.indexOf(":") + 1);
+            const candidates = list.filter(function(entry) {
+                return entry && String(entry.provider || "") === provider;
+            });
+            if (candidates.length === 0) {
+                continue;
+            }
+            if (rest) {
+                const accountMatch = candidates.find(function(entry) {
+                    return entry.account === rest
+                        || entry.source === rest
+                        || String(entry.id).indexOf(":" + rest) !== -1;
+                });
+                if (accountMatch) {
+                    pushUnique(accountMatch);
+                    continue;
+                }
+            }
+            // Provider-only token, or legacy index-based id — show sole/first account.
+            pushUnique(candidates[0]);
+        }
+
+        // If nothing matched (stale providers only), fall back to all entries
+        // rather than rendering an empty dashboard.
+        return matched.length > 0 ? matched : list;
+    }
+
     function loadSelectedEntryIds() {
+        const fromIds = parseStringListConfig(plasmoid.configuration.selectedEntryIds);
+        if (fromIds.length > 0) {
+            return fromIds;
+        }
+        // Older sessions / id-format changes may only have provider names.
+        return parseStringListConfig(plasmoid.configuration.selectedProviders);
+    }
+
+    function parseStringListConfig(raw) {
         try {
-            const parsed = JSON.parse(String(plasmoid.configuration.selectedEntryIds || "[]"));
+            const parsed = JSON.parse(String(raw || "[]"));
             if (!Array.isArray(parsed)) {
                 return [];
             }
-            return parsed.map(function(entryId) { return String(entryId); }).filter(function(entryId) {
-                return entryId.length > 0;
+            return parsed.map(function(item) { return String(item); }).filter(function(item) {
+                return item.length > 0;
             });
         } catch (error) {
             return [];
         }
     }
 
+    function providerKeyFromEntryId(entryId) {
+        const value = String(entryId || "");
+        const colon = value.indexOf(":");
+        return colon === -1 ? value : value.slice(0, colon);
+    }
+
     function persistSelectedEntryIds() {
-        const serialized = JSON.stringify(selectedEntryIds || []);
-        if (serialized !== String(plasmoid.configuration.selectedEntryIds || "[]")) {
-            plasmoid.configuration.selectedEntryIds = serialized;
+        const ids = selectedEntryIds || [];
+        const serializedIds = JSON.stringify(ids);
+        if (serializedIds !== String(plasmoid.configuration.selectedEntryIds || "[]")) {
+            plasmoid.configuration.selectedEntryIds = serializedIds;
+        }
+
+        // Provider names are a durable fallback when entry ids change shape
+        // (account appears/disappears, source changes, id format upgrades).
+        const providers = [];
+        const seen = {};
+        for (let i = 0; i < ids.length; i += 1) {
+            const provider = providerKeyFromEntryId(ids[i]);
+            if (!provider || seen[provider]) {
+                continue;
+            }
+            seen[provider] = true;
+            providers.push(provider);
+        }
+        const serializedProviders = JSON.stringify(providers);
+        if (serializedProviders !== String(plasmoid.configuration.selectedProviders || "[]")) {
+            plasmoid.configuration.selectedProviders = serializedProviders;
+        }
+    }
+
+    /**
+     * Map remembered selection onto the current entry list without dropping
+     * selections just because the id string changed across a Plasma restart.
+     */
+    function reconcileSelectedEntryIds(entries) {
+        const previous = selectedEntryIds || [];
+        if (previous.length === 0) {
+            return;
+        }
+        if (!entries || entries.length === 0) {
+            // Keep the remembered selection while data is empty/unavailable.
+            return;
+        }
+
+        const availableIds = {};
+        const byProvider = {};
+        for (let i = 0; i < entries.length; i += 1) {
+            const entry = entries[i];
+            if (!entry || !entry.id) {
+                continue;
+            }
+            availableIds[entry.id] = entry;
+            const provider = String(entry.provider || providerKeyFromEntryId(entry.id));
+            if (!byProvider[provider]) {
+                byProvider[provider] = [];
+            }
+            byProvider[provider].push(entry);
+        }
+
+        const next = [];
+        const used = {};
+        function pushUnique(entry) {
+            if (!entry || !entry.id || used[entry.id]) {
+                return;
+            }
+            used[entry.id] = true;
+            next.push(entry.id);
+        }
+
+        for (let i = 0; i < previous.length; i += 1) {
+            const selectedId = String(previous[i] || "");
+            if (!selectedId) {
+                continue;
+            }
+            if (availableIds[selectedId]) {
+                pushUnique(availableIds[selectedId]);
+                continue;
+            }
+
+            const provider = providerKeyFromEntryId(selectedId);
+            const rest = selectedId.indexOf(":") === -1 ? "" : selectedId.slice(selectedId.indexOf(":") + 1);
+            const candidates = byProvider[provider] || [];
+            if (candidates.length === 0) {
+                // Provider not in this snapshot — keep the token for a later
+                // refresh instead of permanently forgetting the choice.
+                if (!used[selectedId]) {
+                    used[selectedId] = true;
+                    next.push(selectedId);
+                }
+                continue;
+            }
+
+            let match = null;
+            if (rest) {
+                match = candidates.find(function(entry) {
+                    return entry.account === rest
+                        || entry.source === rest
+                        || String(entry.id) === selectedId
+                        || String(entry.id).indexOf(":" + rest) !== -1;
+                }) || null;
+            }
+            if (!match && candidates.length === 1) {
+                match = candidates[0];
+            }
+            if (!match && provider === selectedId && candidates.length > 0) {
+                // Provider-only token from selectedProviders fallback.
+                match = candidates[0];
+            }
+            if (match) {
+                pushUnique(match);
+            } else {
+                // Provider is present but the old account/source token no longer
+                // matches — keep the first live account instead of a dead id.
+                pushUnique(candidates[0]);
+            }
+        }
+
+        if (!multiProviderSelectionEnabled && next.length > 1) {
+            next.length = 1;
+        }
+
+        if (JSON.stringify(next) !== JSON.stringify(previous)) {
+            selectedEntryIds = next;
         }
     }
 
@@ -913,15 +1093,20 @@ PlasmoidItem {
         const previousEntries = root.snapshot.entries || [];
         let nextEntries = orderedVisibleEntries.slice();
         if (root.effectiveSelectedEntryIds.length > 0) {
-            const selected = {};
-            for (let index = 0; index < root.effectiveSelectedEntryIds.length; index += 1) {
-                selected[String(root.effectiveSelectedEntryIds[index])] = true;
+            // Soft-matched visible set may not equal selectedEntryIds tokens.
+            const previousVisible = resolveVisibleEntries(previousEntries, root.effectiveSelectedEntryIds);
+            const previousVisibleIds = {};
+            for (let index = 0; index < previousVisible.length; index += 1) {
+                const entry = previousVisible[index];
+                if (entry && entry.id) {
+                    previousVisibleIds[String(entry.id)] = true;
+                }
             }
             nextEntries = [];
             let visibleIndex = 0;
             for (let index = 0; index < previousEntries.length; index += 1) {
                 const entry = previousEntries[index];
-                if (entry && selected[String(entry.id || "")]) {
+                if (entry && previousVisibleIds[String(entry.id || "")]) {
                     if (visibleIndex < orderedVisibleEntries.length) {
                         nextEntries.push(orderedVisibleEntries[visibleIndex]);
                         visibleIndex += 1;
@@ -934,12 +1119,6 @@ PlasmoidItem {
                 nextEntries.push(orderedVisibleEntries[visibleIndex]);
                 visibleIndex += 1;
             }
-        }
-
-        if (visibleEntryIdsSignature(previousEntries) === visibleEntryIdsSignature(nextEntries)
-            && previousEntries.length === nextEntries.length) {
-            // Only relative order may have changed; still assign a new array so
-            // bindings refresh, then persist config order.
         }
 
         const nextSnapshot = {};
@@ -1102,13 +1281,30 @@ PlasmoidItem {
 
     fullRepresentation: PlasmaExtras.Representation {
         id: representation
+
+        // Desktop/windowed (planar) should be freely resizable. Panel popups
+        // size to content so they do not leave a fixed empty bottom region.
+        readonly property bool isPlanar: plasmoid.formFactor === PlasmaCore.Types.Planar
+        readonly property real maximumPopupHeight: Kirigami.Units.gridUnit * 32
+        readonly property real maximumProviderListHeight: Kirigami.Units.gridUnit * 20
+
         Layout.minimumWidth: Kirigami.Units.gridUnit * 18
-        Layout.minimumHeight: Kirigami.Units.gridUnit * 20
+        Layout.minimumHeight: Kirigami.Units.gridUnit * 10
         Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-        Layout.preferredHeight: Kirigami.Units.gridUnit * 32
+        Layout.preferredHeight: {
+            const contentHeight = Math.max(Layout.minimumHeight, expandedContent.implicitHeight);
+            if (isPlanar) {
+                return contentHeight;
+            }
+            return Math.min(maximumPopupHeight, contentHeight);
+        }
+        // -1 means unlimited in Qt Quick Layouts (planar free resize).
+        Layout.maximumHeight: isPlanar ? -1 : maximumPopupHeight
+        Layout.fillHeight: isPlanar
         collapseMarginsHint: true
 
         contentItem: ColumnLayout {
+            id: expandedContent
             spacing: Kirigami.Units.smallSpacing
 
             RowLayout {
@@ -1192,6 +1388,16 @@ PlasmoidItem {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.minimumHeight: providerEntryModel.count > 0 ? Kirigami.Units.gridUnit : 0
+                Layout.preferredHeight: providerEntryModel.count > 0
+                    ? Math.min(
+                        Math.max(contentHeight, Kirigami.Units.gridUnit),
+                        representation.maximumProviderListHeight
+                    )
+                    : 0
+                Layout.maximumHeight: representation.isPlanar
+                    ? -1
+                    : representation.maximumProviderListHeight
                 visible: providerEntryModel.count > 0
                 clip: true
                 spacing: Kirigami.Units.smallSpacing

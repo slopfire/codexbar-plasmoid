@@ -10,8 +10,11 @@ Control {
     Layout.minimumWidth: implicitWidth
     Layout.preferredWidth: implicitWidth
     Layout.maximumWidth: implicitWidth
-    Layout.minimumHeight: implicitHeight
+    // Let the panel own thickness; fill it so bars/icons track height on resize.
+    // Locking min/preferred to implicitHeight fights panel height changes.
+    Layout.minimumHeight: 0
     Layout.preferredHeight: implicitHeight
+    Layout.fillHeight: true
     clip: true
 
     property var entry

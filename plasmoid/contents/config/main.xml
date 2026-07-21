@@ -36,6 +36,10 @@
       <label>Last selected provider entry ids in the widget</label>
       <default>[]</default>
     </entry>
+    <entry name="selectedProviders" type="String">
+      <label>Last selected provider names (fallback when entry ids drift)</label>
+      <default>[]</default>
+    </entry>
     <entry name="compactBarCatalog" type="String">
       <label>Last discovered provider usage rows for tray configuration</label>
       <default>{}</default>

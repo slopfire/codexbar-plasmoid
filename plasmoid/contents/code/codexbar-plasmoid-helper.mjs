@@ -546,14 +546,9 @@ function normalizeSnapshot(usagePayload, costPayload) {
     }
   }
 
-  const entries = asArray(usagePayload).map((item, index) => {
+  const entries = asArray(usagePayload).map((item) => {
     const cost = costByProvider.get(item.provider);
-    const normalized = normalizeProvider(item, cost);
-    // Stable id so the switcher can select between multiple accounts of the
-    // same provider (e.g. several OpenCode Go accounts). Prefer the account
-    // email; fall back to the entry index to guarantee uniqueness.
-    normalized.id = `${normalized.provider}:${normalized.account || String(index)}`;
-    return normalized;
+    return normalizeProvider(item, cost);
   });
 
   // For each provider, keep only working accounts. If every account failed,
@@ -578,16 +573,16 @@ function normalizeSnapshot(usagePayload, costPayload) {
   }
 
   if (filteredEntries.length === 0 && costByProvider.size > 0) {
-    let fallbackIndex = 0;
     for (const [providerId, cost] of costByProvider) {
       if (providerId !== "cost") {
-        const fallback = normalizeProvider({ provider: providerId, source: "local" }, cost);
-        fallback.id = `${fallback.provider}:${fallback.account || String(fallbackIndex)}`;
-        filteredEntries.push(fallback);
-        fallbackIndex += 1;
+        filteredEntries.push(normalizeProvider({ provider: providerId, source: "local" }, cost));
       }
     }
   }
+
+  // Assign stable ids after filtering so selection survives Plasma restarts.
+  // Never key off payload order — that changes when providers fail/succeed.
+  assignStableEntryIds(filteredEntries);
 
   return {
     ok: true,
@@ -596,6 +591,34 @@ function normalizeSnapshot(usagePayload, costPayload) {
     entries: filteredEntries,
     costError: costByProvider.get("cost")?.error?.message || null,
   };
+}
+
+/**
+ * Build a stable entry id for the provider switcher / selection restore.
+ * Prefer account (anonymized when enabled); otherwise provider+source.
+ * Collisions among multi-account providers get a numeric disambiguator.
+ */
+function assignStableEntryIds(entries) {
+  const baseCounts = new Map();
+  for (const entry of entries) {
+    const base = stableEntryIdBase(entry);
+    const count = baseCounts.get(base) || 0;
+    baseCounts.set(base, count + 1);
+    entry.id = count === 0 ? base : `${base}#${count}`;
+  }
+}
+
+function stableEntryIdBase(entry) {
+  const providerId = clean(entry?.provider) || "unknown";
+  const account = clean(entry?.account);
+  if (account) {
+    return `${providerId}:${account}`;
+  }
+  const source = clean(entry?.source);
+  if (source) {
+    return `${providerId}:${source}`;
+  }
+  return providerId;
 }
 
 
