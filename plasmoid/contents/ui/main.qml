@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QtControls
+import QtQml.Models
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.plasma.core as PlasmaCore
@@ -25,6 +26,9 @@ PlasmoidItem {
     property string previousCommand: ""
     property string activeSiteLaunchCommand: ""
     property string previousSiteLaunchCommand: ""
+    // True while a provider card is being dragged so model rebuilds wait.
+    property bool providerReorderActive: false
+    property string previousProviderSyncCommand: ""
     readonly property var entries: snapshot.entries || []
     readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
         ? selectedEntryIds
@@ -35,6 +39,7 @@ PlasmoidItem {
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
     readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 300)
+    readonly property bool canReorderProviders: providerEntryModel.count > 1
 
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : compactRepresentation
     toolTipMainText: primaryEntry
@@ -54,14 +59,25 @@ PlasmoidItem {
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
         }
+        syncProviderEntryModel();
         refreshNow(false);
     }
     onRefreshIntervalChanged: refreshTimer.restart()
-    onSelectedEntryIdsChanged: persistSelectedEntryIds()
+    onSelectedEntryIdsChanged: {
+        persistSelectedEntryIds();
+        Qt.callLater(syncProviderEntryModel);
+    }
     onMultiProviderSelectionEnabledChanged: {
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
         }
+        Qt.callLater(syncProviderEntryModel);
+    }
+    onSnapshotChanged: Qt.callLater(syncProviderEntryModel)
+
+    // Flat ListModel mirror of visibleEntries so drag-and-drop can call move().
+    ListModel {
+        id: providerEntryModel
     }
 
     Timer {
@@ -738,6 +754,18 @@ PlasmoidItem {
         }
     }
 
+    Plasma5Support.DataSource {
+        id: providerSyncRunner
+        engine: "executable"
+        connectedSources: []
+        interval: 0
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            // Shared-provider writes are best-effort; local config already holds
+            // the new order for this widget instance.
+        }
+    }
+
     function refreshNow(forceRefresh) {
         const command = codexBar.command(forceRefresh === true);
         if (previousCommand.length > 0) {
@@ -808,6 +836,209 @@ PlasmoidItem {
         // Returning to an empty selection intentionally restores the
         // unfiltered, all-provider view.
         selectedEntryIds = selected;
+    }
+
+    function entryJsonForModel(entry) {
+        try {
+            return JSON.stringify(entry || {});
+        } catch (error) {
+            return "{}";
+        }
+    }
+
+    function entryFromModelItem(item) {
+        try {
+            return JSON.parse(String(item.entryJson || "{}"));
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function visibleEntryIdsSignature(list) {
+        const ids = [];
+        for (let index = 0; index < list.length; index += 1) {
+            ids.push(String(list[index] && list[index].id || ""));
+        }
+        return ids.join("\n");
+    }
+
+    function syncProviderEntryModel() {
+        if (root.providerReorderActive) {
+            return;
+        }
+        const list = root.visibleEntries || [];
+        let sameOrder = providerEntryModel.count === list.length;
+        if (sameOrder) {
+            for (let index = 0; index < list.length; index += 1) {
+                if (String(providerEntryModel.get(index).entryId || "") !== String(list[index].id || "")) {
+                    sameOrder = false;
+                    break;
+                }
+            }
+        }
+        if (sameOrder) {
+            for (let index = 0; index < list.length; index += 1) {
+                const entry = list[index];
+                providerEntryModel.set(index, {
+                    entryId: String(entry.id || ""),
+                    provider: String(entry.provider || ""),
+                    entryJson: entryJsonForModel(entry)
+                });
+            }
+            return;
+        }
+        providerEntryModel.clear();
+        for (let index = 0; index < list.length; index += 1) {
+            const entry = list[index];
+            providerEntryModel.append({
+                entryId: String(entry.id || ""),
+                provider: String(entry.provider || ""),
+                entryJson: entryJsonForModel(entry)
+            });
+        }
+    }
+
+    function orderedEntriesFromModel() {
+        const ordered = [];
+        for (let index = 0; index < providerEntryModel.count; index += 1) {
+            const entry = entryFromModelItem(providerEntryModel.get(index));
+            if (entry) {
+                ordered.push(entry);
+            }
+        }
+        return ordered;
+    }
+
+    function applyVisibleProviderOrder(orderedVisibleEntries) {
+        const previousEntries = root.snapshot.entries || [];
+        let nextEntries = orderedVisibleEntries.slice();
+        if (root.effectiveSelectedEntryIds.length > 0) {
+            const selected = {};
+            for (let index = 0; index < root.effectiveSelectedEntryIds.length; index += 1) {
+                selected[String(root.effectiveSelectedEntryIds[index])] = true;
+            }
+            nextEntries = [];
+            let visibleIndex = 0;
+            for (let index = 0; index < previousEntries.length; index += 1) {
+                const entry = previousEntries[index];
+                if (entry && selected[String(entry.id || "")]) {
+                    if (visibleIndex < orderedVisibleEntries.length) {
+                        nextEntries.push(orderedVisibleEntries[visibleIndex]);
+                        visibleIndex += 1;
+                    }
+                } else if (entry) {
+                    nextEntries.push(entry);
+                }
+            }
+            while (visibleIndex < orderedVisibleEntries.length) {
+                nextEntries.push(orderedVisibleEntries[visibleIndex]);
+                visibleIndex += 1;
+            }
+        }
+
+        if (visibleEntryIdsSignature(previousEntries) === visibleEntryIdsSignature(nextEntries)
+            && previousEntries.length === nextEntries.length) {
+            // Only relative order may have changed; still assign a new array so
+            // bindings refresh, then persist config order.
+        }
+
+        const nextSnapshot = {};
+        for (const key in root.snapshot) {
+            nextSnapshot[key] = root.snapshot[key];
+        }
+        nextSnapshot.entries = nextEntries;
+        // Hold the rebuild lock across the assignment so onSnapshotChanged cannot
+        // clobber providerEntryModel while a drag is still in progress.
+        const wasReordering = root.providerReorderActive;
+        root.providerReorderActive = true;
+        root.snapshot = nextSnapshot;
+        root.providerReorderActive = wasReordering;
+        persistProviderConfigsOrder(nextEntries);
+    }
+
+    function commitProviderEntryOrder() {
+        applyVisibleProviderOrder(orderedEntriesFromModel());
+    }
+
+    function persistProviderConfigsOrder(orderedEntries) {
+        const configs = codexBar.parseProviderConfigs();
+        if (!Array.isArray(configs) || configs.length === 0) {
+            // Automatic-discovery mode has no ordered config list to rewrite.
+            return;
+        }
+
+        const used = [];
+        for (let index = 0; index < configs.length; index += 1) {
+            used.push(false);
+        }
+
+        const reordered = [];
+        for (let entryIndex = 0; entryIndex < orderedEntries.length; entryIndex += 1) {
+            const entry = orderedEntries[entryIndex];
+            if (!entry) {
+                continue;
+            }
+            const entryProvider = codexBar.normalizeProviderId(entry.provider);
+            const entryAccount = String(entry.account || "");
+            let match = -1;
+
+            for (let index = 0; index < configs.length; index += 1) {
+                if (used[index]) {
+                    continue;
+                }
+                if (codexBar.normalizeProviderId(configs[index].provider) !== entryProvider) {
+                    continue;
+                }
+                const configAccount = String(configs[index].account || "");
+                if (configAccount.length > 0 && entryAccount.length > 0 && configAccount === entryAccount) {
+                    match = index;
+                    break;
+                }
+            }
+            if (match < 0) {
+                for (let index = 0; index < configs.length; index += 1) {
+                    if (used[index]) {
+                        continue;
+                    }
+                    if (codexBar.normalizeProviderId(configs[index].provider) === entryProvider) {
+                        match = index;
+                        break;
+                    }
+                }
+            }
+            if (match >= 0) {
+                used[match] = true;
+                reordered.push(configs[match]);
+            }
+        }
+        for (let index = 0; index < configs.length; index += 1) {
+            if (!used[index]) {
+                reordered.push(configs[index]);
+            }
+        }
+
+        const serialized = JSON.stringify(reordered);
+        if (serialized !== String(plasmoid.configuration.providerConfigs || "")) {
+            plasmoid.configuration.providerConfigs = serialized;
+        }
+        if (plasmoid.configuration.syncProviders === true) {
+            writeSharedProviders(serialized);
+        }
+    }
+
+    function providerSyncScriptPath() {
+        return codexBar.localPath(Qt.resolvedUrl("../code/codexbar-provider-sync.mjs"));
+    }
+
+    function writeSharedProviders(serializedProviders) {
+        const command = codexBar.quote(providerSyncScriptPath())
+            + " --action write --providers "
+            + codexBar.quote(serializedProviders || plasmoid.configuration.providerConfigs || "[]");
+        if (previousProviderSyncCommand.length > 0) {
+            providerSyncRunner.disconnectSource(previousProviderSyncCommand);
+        }
+        previousProviderSyncCommand = command;
+        providerSyncRunner.connectSource(command);
     }
 
     function checkCliUpdate() {
@@ -948,30 +1179,149 @@ PlasmoidItem {
                 horizontalAlignment: Text.AlignHCenter
             }
 
-            QtControls.ScrollView {
+            ListView {
+                id: providerList
+
+                // Attached ScrollBar paints over the view; reserve its width so
+                // right-edge labels (status, %, source) are not covered.
+                readonly property bool scrollBarNeeded: contentHeight > height + 1
+                readonly property real scrollBarInset: scrollBarNeeded
+                    ? Math.max(verticalScrollBar.implicitWidth, Kirigami.Units.gridUnit * 0.75)
+                      + Kirigami.Units.smallSpacing
+                    : 0
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                contentWidth: availableWidth
+                visible: providerEntryModel.count > 0
                 clip: true
+                spacing: Kirigami.Units.smallSpacing
+                boundsBehavior: Flickable.StopAtBounds
+                // Item reuse fights drag parent changes and DropArea indices.
+                reuseItems: false
+                cacheBuffer: Kirigami.Units.gridUnit * 8
 
-                ColumnLayout {
-                    width: parent.width
-                    spacing: Kirigami.Units.smallSpacing
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        easing.type: Easing.OutQuad
+                        duration: Kirigami.Units.shortDuration
+                    }
+                }
 
-                    Repeater {
-                        model: root.visibleEntries
+                QtControls.ScrollBar.vertical: QtControls.ScrollBar {
+                    id: verticalScrollBar
+                    policy: providerList.scrollBarNeeded
+                        ? QtControls.ScrollBar.AsNeeded
+                        : QtControls.ScrollBar.AlwaysOff
+                }
+
+                model: DelegateModel {
+                    id: providerVisualModel
+                    model: providerEntryModel
+
+                    delegate: DropArea {
+                        id: dropDelegate
+
+                        required property int index
+                        required property string entryId
+                        required property string provider
+                        required property string entryJson
+
+                        property int visualIndex: DelegateModel.itemsIndex
+                        readonly property var entryData: {
+                            try {
+                                return JSON.parse(entryJson || "{}");
+                            } catch (error) {
+                                return null;
+                            }
+                        }
+
+                        width: providerList.width
+                        height: providerCard.implicitHeight > 0
+                            ? providerCard.implicitHeight
+                            : providerCard.height
+
+                        keys: ["codexbar-provider-card"]
+
+                        onEntered: function(drag) {
+                            if (!drag.source || drag.source.visualIndex === undefined) {
+                                return;
+                            }
+                            const fromIndex = drag.source.visualIndex;
+                            const toIndex = dropDelegate.visualIndex;
+                            if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
+                                return;
+                            }
+                            root.providerReorderActive = true;
+                            providerEntryModel.move(fromIndex, toIndex, 1);
+                            root.commitProviderEntryOrder();
+                        }
 
                         ProviderCard {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: Kirigami.Units.smallSpacing
-                            Layout.rightMargin: Kirigami.Units.smallSpacing
-                            entry: modelData
-                            providerName: codexBar.providerName(modelData.provider)
-                            providerSiteUrl: codexBar.providerSiteUrl(modelData.provider, modelData)
-                            accentColor: codexBar.color(modelData.provider)
+                            id: providerCard
+
+                            property int visualIndex: dropDelegate.visualIndex
+
+                            width: Math.max(
+                                0,
+                                providerList.width
+                                    - Kirigami.Units.smallSpacing * 2
+                                    - providerList.scrollBarInset
+                            )
+                            x: Kirigami.Units.smallSpacing
+                            anchors.verticalCenter: parent.verticalCenter
+                            z: dragActive ? 100 : 0
+                            opacity: dragActive ? 0.92 : 1.0
+                            scale: dragActive ? 1.015 : 1.0
+                            Behavior on scale { NumberAnimation { duration: 100 } }
+                            Behavior on opacity { NumberAnimation { duration: 100 } }
+
+                            entry: dropDelegate.entryData
+                            providerName: codexBar.providerName(
+                                dropDelegate.entryData ? dropDelegate.entryData.provider : dropDelegate.provider
+                            )
+                            providerSiteUrl: dropDelegate.entryData
+                                ? codexBar.providerSiteUrl(dropDelegate.entryData.provider, dropDelegate.entryData)
+                                : ""
+                            accentColor: codexBar.color(
+                                dropDelegate.entryData ? dropDelegate.entryData.provider : dropDelegate.provider
+                            )
                             showCredits: plasmoid.configuration.showCredits
                             showHistory: plasmoid.configuration.showHistory
-                            onSiteRequested: root.openProviderSite(modelData)
+                            reorderEnabled: root.canReorderProviders
+                            onSiteRequested: root.openProviderSite(dropDelegate.entryData)
+
+                            Drag.active: dragActive
+                            Drag.source: providerCard
+                            Drag.keys: ["codexbar-provider-card"]
+                            Drag.hotSpot.x: Kirigami.Units.gridUnit
+                            Drag.hotSpot.y: height / 2
+
+                            states: [
+                                State {
+                                    when: providerCard.dragActive
+                                    ParentChange {
+                                        target: providerCard
+                                        parent: representation
+                                    }
+                                    AnchorChanges {
+                                        target: providerCard
+                                        anchors {
+                                            verticalCenter: undefined
+                                        }
+                                    }
+                                }
+                            ]
+
+                            onDragActiveChanged: {
+                                if (dragActive) {
+                                    root.providerReorderActive = true;
+                                    return;
+                                }
+                                root.commitProviderEntryOrder();
+                                root.providerReorderActive = false;
+                                Qt.callLater(root.syncProviderEntryModel);
+                            }
                         }
                     }
                 }
