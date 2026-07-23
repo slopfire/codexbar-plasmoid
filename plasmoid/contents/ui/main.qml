@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QtControls
-import QtQml.Models
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components 3.0 as PlasmaComponents3
 import org.kde.plasma.core as PlasmaCore
@@ -21,14 +20,19 @@ PlasmoidItem {
     // rather than a single id so provider chips can be combined as filters.
     // Restored from plasmoid.configuration.selectedEntryIds on startup.
     property var selectedEntryIds: []
+    // False until Component.onCompleted finishes hydrating selection from
+    // config. Prevents teardown/init from persisting an empty [] over a
+    // previously saved multi-select (the main Plasma-restart amnesia bug).
+    property bool selectionHydrated: false
     property bool multiProviderSelectionEnabled: plasmoid.configuration.allowMultiProviderSelection === true
     property string activeCommand: ""
     property string previousCommand: ""
     property string activeSiteLaunchCommand: ""
     property string previousSiteLaunchCommand: ""
-    // True while a provider card is being dragged so model rebuilds wait.
+    // True while top chips are being reordered so model rebuilds wait.
     property bool providerReorderActive: false
     property string previousProviderSyncCommand: ""
+    property string previousSelectionStoreCommand: ""
     readonly property var entries: snapshot.entries || []
     readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
         ? selectedEntryIds
@@ -39,7 +43,6 @@ PlasmoidItem {
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
     readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 300)
-    readonly property bool canReorderProviders: providerEntryModel.count > 1
 
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : compactRepresentation
     toolTipMainText: primaryEntry
@@ -57,27 +60,45 @@ PlasmoidItem {
     Component.onCompleted: {
         // Restore before any refresh so the first paint can keep the last
         // selection even while the CLI is still loading.
-        selectedEntryIds = loadSelectedEntryIds();
-        if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
-            selectedEntryIds = selectedEntryIds.slice(0, 1);
+        const restored = loadSelectedEntryIds();
+        selectedEntryIds = !multiProviderSelectionEnabled && restored.length > 1
+            ? restored.slice(0, 1)
+            : restored;
+        selectionHydrated = true;
+        // Re-write after hydrate so the value is marked dirty in KConfig even
+        // when it matches the in-memory default and would otherwise be skipped.
+        if (selectedEntryIds.length > 0) {
+            persistSelectedEntryIds({ allowEmpty: false, force: true });
         }
         syncProviderEntryModel();
+        // Async file fallback in case KConfig lost the keys (common when the
+        // config dialog Apply rewrote General without cfg_ bindings).
+        loadSelectedEntryIdsFromStore();
         refreshNow(false);
+    }
+    Component.onDestruction: {
+        // Stop any further persists during teardown; an empty default must not
+        // overwrite the last real selection on plasmashell restart.
+        selectionHydrated = false;
     }
     onRefreshIntervalChanged: refreshTimer.restart()
     onSelectedEntryIdsChanged: {
-        persistSelectedEntryIds();
+        // Model rebuild only. Persistence is explicit (toggle / reconcile /
+        // hydrate) so Component destruction cannot clobber saved selection.
         Qt.callLater(syncProviderEntryModel);
     }
     onMultiProviderSelectionEnabledChanged: {
         if (!multiProviderSelectionEnabled && selectedEntryIds.length > 1) {
             selectedEntryIds = selectedEntryIds.slice(0, 1);
+            if (selectionHydrated) {
+                persistSelectedEntryIds({ allowEmpty: false });
+            }
         }
         Qt.callLater(syncProviderEntryModel);
     }
     onSnapshotChanged: Qt.callLater(syncProviderEntryModel)
 
-    // Flat ListModel mirror of visibleEntries so drag-and-drop can call move().
+    // Flat ListModel mirror of visibleEntries for the bottom provider cards.
     ListModel {
         id: providerEntryModel
     }
@@ -519,6 +540,12 @@ PlasmoidItem {
             if (serialized !== String(plasmoid.configuration.compactBarCatalog || "{}")) {
                 plasmoid.configuration.compactBarCatalog = serialized;
             }
+            // compactBarCatalog writes reliably flush the General group — reassert
+            // selection on the same path so KConfig cannot drop it while other
+            // keys keep updating across a session.
+            if (root.selectionHydrated && (root.selectedEntryIds || []).length > 0) {
+                root.persistSelectedEntryIds({ allowEmpty: false });
+            }
         }
 
         function compactBarRows(entry) {
@@ -761,6 +788,28 @@ PlasmoidItem {
         }
     }
 
+    Plasma5Support.DataSource {
+        id: selectionStoreRunner
+        engine: "executable"
+        connectedSources: []
+        interval: 0
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            const output = String(data.stdout || data["stdout"] || "").trim();
+            if (!output.length) {
+                return;
+            }
+            try {
+                const parsed = JSON.parse(output);
+                if (parsed && parsed.action === "read-selection") {
+                    root.applyStoredSelectionPayload(parsed);
+                }
+            } catch (error) {
+                // Selection-store writes are best-effort.
+            }
+        }
+    }
+
     function refreshNow(forceRefresh) {
         const command = codexBar.command(forceRefresh === true);
         if (previousCommand.length > 0) {
@@ -860,6 +909,12 @@ PlasmoidItem {
 
     function parseStringListConfig(raw) {
         try {
+            // Config may already be a JS array when the key is exposed as a list.
+            if (Array.isArray(raw)) {
+                return raw.map(function(item) { return String(item); }).filter(function(item) {
+                    return item.length > 0;
+                });
+            }
             const parsed = JSON.parse(String(raw || "[]"));
             if (!Array.isArray(parsed)) {
                 return [];
@@ -878,11 +933,57 @@ PlasmoidItem {
         return colon === -1 ? value : value.slice(0, colon);
     }
 
-    function persistSelectedEntryIds() {
+    function appletInstanceKey() {
+        // Prefer the Plasma applet id so multi-instance widgets keep separate
+        // selections. Fall back to a shared key when id is unavailable.
+        try {
+            if (Plasmoid && Plasmoid.id !== undefined && Plasmoid.id !== null) {
+                return String(Plasmoid.id);
+            }
+        } catch (error) {
+            // Plasmoid.id is not always exposed on every Plasma build.
+        }
+        try {
+            if (plasmoid && plasmoid.id !== undefined && plasmoid.id !== null) {
+                return String(plasmoid.id);
+            }
+        } catch (error) {
+            // ignore
+        }
+        return "default";
+    }
+
+    /**
+     * Persist switcher selection.
+     * options.allowEmpty — when false, refuse to overwrite a non-empty saved
+     *   selection with []. Blocks plasmashell teardown / init races from
+     *   wiping the last choice.
+     * options.force — write even when the serialized value matches config.
+     */
+    function persistSelectedEntryIds(options) {
+        if (!selectionHydrated && !(options && options.force)) {
+            return;
+        }
+        const allowEmpty = !!(options && options.allowEmpty);
+        const force = !!(options && options.force);
         const ids = selectedEntryIds || [];
         const serializedIds = JSON.stringify(ids);
-        if (serializedIds !== String(plasmoid.configuration.selectedEntryIds || "[]")) {
+
+        if (ids.length === 0 && !allowEmpty) {
+            const existingIds = String(plasmoid.configuration.selectedEntryIds || "[]");
+            if (existingIds !== "[]" && existingIds !== "") {
+                return;
+            }
+            const existingProviders = String(plasmoid.configuration.selectedProviders || "[]");
+            if (existingProviders !== "[]" && existingProviders !== "") {
+                return;
+            }
+        }
+
+        // Write via both accessors; some Plasma builds only dirty one path.
+        if (force || serializedIds !== String(plasmoid.configuration.selectedEntryIds || "[]")) {
             plasmoid.configuration.selectedEntryIds = serializedIds;
+            try { Plasmoid.configuration.selectedEntryIds = serializedIds; } catch (error) {}
         }
 
         // Provider names are a durable fallback when entry ids change shape
@@ -898,9 +999,73 @@ PlasmoidItem {
             providers.push(provider);
         }
         const serializedProviders = JSON.stringify(providers);
-        if (serializedProviders !== String(plasmoid.configuration.selectedProviders || "[]")) {
+        if (force || serializedProviders !== String(plasmoid.configuration.selectedProviders || "[]")) {
             plasmoid.configuration.selectedProviders = serializedProviders;
+            try { Plasmoid.configuration.selectedProviders = serializedProviders; } catch (error) {}
         }
+
+        // Side-file backup: survives config-dialog Apply wiping undeclared keys
+        // and KConfig not flushing applet string keys before a hard restart.
+        writeSelectedEntryIdsToStore(ids, providers);
+    }
+
+    function selectionStoreScriptPath() {
+        return codexBar.localPath(Qt.resolvedUrl("../code/codexbar-provider-sync.mjs"));
+    }
+
+    function writeSelectedEntryIdsToStore(ids, providers) {
+        const payload = JSON.stringify({
+            entryIds: ids || [],
+            providers: providers || []
+        });
+        const command = codexBar.quote(selectionStoreScriptPath())
+            + " --action write-selection"
+            + " --instance " + codexBar.quote(appletInstanceKey())
+            + " --selection " + codexBar.quote(payload);
+        if (previousSelectionStoreCommand.length > 0) {
+            selectionStoreRunner.disconnectSource(previousSelectionStoreCommand);
+        }
+        previousSelectionStoreCommand = command;
+        selectionStoreRunner.connectSource(command);
+    }
+
+    function loadSelectedEntryIdsFromStore() {
+        const command = codexBar.quote(selectionStoreScriptPath())
+            + " --action read-selection"
+            + " --instance " + codexBar.quote(appletInstanceKey());
+        if (previousSelectionStoreCommand.length > 0) {
+            selectionStoreRunner.disconnectSource(previousSelectionStoreCommand);
+        }
+        previousSelectionStoreCommand = command;
+        selectionStoreRunner.connectSource(command);
+    }
+
+    function applyStoredSelectionPayload(payload) {
+        if (!payload || payload.ok === false) {
+            return;
+        }
+        // Config already had a selection — keep it as the source of truth.
+        if ((selectedEntryIds || []).length > 0) {
+            return;
+        }
+        let restored = [];
+        if (Array.isArray(payload.entryIds) && payload.entryIds.length > 0) {
+            restored = payload.entryIds.map(function(item) { return String(item); }).filter(function(item) {
+                return item.length > 0;
+            });
+        } else if (Array.isArray(payload.providers) && payload.providers.length > 0) {
+            restored = payload.providers.map(function(item) { return String(item); }).filter(function(item) {
+                return item.length > 0;
+            });
+        }
+        if (restored.length === 0) {
+            return;
+        }
+        if (!multiProviderSelectionEnabled && restored.length > 1) {
+            restored = restored.slice(0, 1);
+        }
+        selectedEntryIds = restored;
+        persistSelectedEntryIds({ allowEmpty: false, force: true });
     }
 
     /**
@@ -996,6 +1161,13 @@ PlasmoidItem {
 
         if (JSON.stringify(next) !== JSON.stringify(previous)) {
             selectedEntryIds = next;
+            // Remapped ids should stick across restarts. Do not allowEmpty —
+            // reconcile should not invent a total clear.
+            persistSelectedEntryIds({ allowEmpty: false });
+        } else if (selectionHydrated && previous.length > 0) {
+            // Same tokens, but re-assert so KConfig keeps a dirty write after
+            // long sessions / refresh-only updates.
+            persistSelectedEntryIds({ allowEmpty: false });
         }
     }
 
@@ -1004,6 +1176,8 @@ PlasmoidItem {
             selectedEntryIds = selectedEntryIds.length === 1 && selectedEntryIds[0] === entryId
                 ? []
                 : [entryId];
+            // User-driven: empty means "show all" and must be remembered.
+            persistSelectedEntryIds({ allowEmpty: true });
             return;
         }
         const selected = selectedEntryIds.slice();
@@ -1016,6 +1190,7 @@ PlasmoidItem {
         // Returning to an empty selection intentionally restores the
         // unfiltered, all-provider view.
         selectedEntryIds = selected;
+        persistSelectedEntryIds({ allowEmpty: true });
     }
 
     function entryJsonForModel(entry) {
@@ -1023,14 +1198,6 @@ PlasmoidItem {
             return JSON.stringify(entry || {});
         } catch (error) {
             return "{}";
-        }
-    }
-
-    function entryFromModelItem(item) {
-        try {
-            return JSON.parse(String(item.entryJson || "{}"));
-        } catch (error) {
-            return null;
         }
     }
 
@@ -1078,65 +1245,22 @@ PlasmoidItem {
         }
     }
 
-    function orderedEntriesFromModel() {
-        const ordered = [];
-        for (let index = 0; index < providerEntryModel.count; index += 1) {
-            const entry = entryFromModelItem(providerEntryModel.get(index));
-            if (entry) {
-                ordered.push(entry);
-            }
+    // Apply a full provider order from the top chip switcher and persist it.
+    function applyProviderOrder(orderedEntries) {
+        if (!orderedEntries || orderedEntries.length === 0) {
+            return;
         }
-        return ordered;
-    }
-
-    function applyVisibleProviderOrder(orderedVisibleEntries) {
-        const previousEntries = root.snapshot.entries || [];
-        let nextEntries = orderedVisibleEntries.slice();
-        if (root.effectiveSelectedEntryIds.length > 0) {
-            // Soft-matched visible set may not equal selectedEntryIds tokens.
-            const previousVisible = resolveVisibleEntries(previousEntries, root.effectiveSelectedEntryIds);
-            const previousVisibleIds = {};
-            for (let index = 0; index < previousVisible.length; index += 1) {
-                const entry = previousVisible[index];
-                if (entry && entry.id) {
-                    previousVisibleIds[String(entry.id)] = true;
-                }
-            }
-            nextEntries = [];
-            let visibleIndex = 0;
-            for (let index = 0; index < previousEntries.length; index += 1) {
-                const entry = previousEntries[index];
-                if (entry && previousVisibleIds[String(entry.id || "")]) {
-                    if (visibleIndex < orderedVisibleEntries.length) {
-                        nextEntries.push(orderedVisibleEntries[visibleIndex]);
-                        visibleIndex += 1;
-                    }
-                } else if (entry) {
-                    nextEntries.push(entry);
-                }
-            }
-            while (visibleIndex < orderedVisibleEntries.length) {
-                nextEntries.push(orderedVisibleEntries[visibleIndex]);
-                visibleIndex += 1;
-            }
-        }
-
         const nextSnapshot = {};
         for (const key in root.snapshot) {
             nextSnapshot[key] = root.snapshot[key];
         }
-        nextSnapshot.entries = nextEntries;
-        // Hold the rebuild lock across the assignment so onSnapshotChanged cannot
-        // clobber providerEntryModel while a drag is still in progress.
+        nextSnapshot.entries = orderedEntries.slice();
         const wasReordering = root.providerReorderActive;
         root.providerReorderActive = true;
         root.snapshot = nextSnapshot;
         root.providerReorderActive = wasReordering;
-        persistProviderConfigsOrder(nextEntries);
-    }
-
-    function commitProviderEntryOrder() {
-        applyVisibleProviderOrder(orderedEntriesFromModel());
+        persistProviderConfigsOrder(nextSnapshot.entries);
+        Qt.callLater(syncProviderEntryModel);
     }
 
     function persistProviderConfigsOrder(orderedEntries) {
@@ -1282,25 +1406,16 @@ PlasmoidItem {
     fullRepresentation: PlasmaExtras.Representation {
         id: representation
 
-        // Desktop/windowed (planar) should be freely resizable. Panel popups
-        // size to content so they do not leave a fixed empty bottom region.
-        readonly property bool isPlanar: plasmoid.formFactor === PlasmaCore.Types.Planar
-        readonly property real maximumPopupHeight: Kirigami.Units.gridUnit * 32
-        readonly property real maximumProviderListHeight: Kirigami.Units.gridUnit * 20
-
+        // Panel popups are sized by PlasmaCore.AppletPopup from these Layout
+        // hints. Leave maximumWidth/Height unset so the popup stays freely
+        // resizable (edges drag; size remembered as popupWidth/popupHeight).
+        // A hard maximumHeight previously blocked growing past ~32 grid units.
         Layout.minimumWidth: Kirigami.Units.gridUnit * 18
-        Layout.minimumHeight: Kirigami.Units.gridUnit * 10
+        Layout.minimumHeight: Kirigami.Units.gridUnit * 12
         Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-        Layout.preferredHeight: {
-            const contentHeight = Math.max(Layout.minimumHeight, expandedContent.implicitHeight);
-            if (isPlanar) {
-                return contentHeight;
-            }
-            return Math.min(maximumPopupHeight, contentHeight);
-        }
-        // -1 means unlimited in Qt Quick Layouts (planar free resize).
-        Layout.maximumHeight: isPlanar ? -1 : maximumPopupHeight
-        Layout.fillHeight: isPlanar
+        Layout.preferredHeight: Kirigami.Units.gridUnit * 28
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         collapseMarginsHint: true
 
         contentItem: ColumnLayout {
@@ -1347,9 +1462,17 @@ PlasmoidItem {
                 Layout.rightMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
                 selectedEntryIds: root.effectiveSelectedEntryIds
+                reorderEnabled: root.entries.length > 1
+                dragContainer: representation
                 colorForProvider: function(provider) { return codexBar.color(provider); }
                 onEntrySelected: function(entryId) {
                     root.toggleEntrySelection(entryId);
+                }
+                onOrderCommitted: function(orderedEntries) {
+                    root.applyProviderOrder(orderedEntries);
+                }
+                onReorderActiveChanged: {
+                    root.providerReorderActive = reorderActive;
                 }
             }
 
@@ -1387,32 +1510,15 @@ PlasmoidItem {
                     : 0
 
                 Layout.fillWidth: true
+                // Fill whatever height the user gave the popup; do not cap the
+                // list — that left empty chrome and blocked taller resizes.
                 Layout.fillHeight: true
                 Layout.minimumHeight: providerEntryModel.count > 0 ? Kirigami.Units.gridUnit : 0
-                Layout.preferredHeight: providerEntryModel.count > 0
-                    ? Math.min(
-                        Math.max(contentHeight, Kirigami.Units.gridUnit),
-                        representation.maximumProviderListHeight
-                    )
-                    : 0
-                Layout.maximumHeight: representation.isPlanar
-                    ? -1
-                    : representation.maximumProviderListHeight
                 visible: providerEntryModel.count > 0
                 clip: true
                 spacing: Kirigami.Units.smallSpacing
                 boundsBehavior: Flickable.StopAtBounds
-                // Item reuse fights drag parent changes and DropArea indices.
-                reuseItems: false
                 cacheBuffer: Kirigami.Units.gridUnit * 8
-
-                displaced: Transition {
-                    NumberAnimation {
-                        properties: "x,y"
-                        easing.type: Easing.OutQuad
-                        duration: Kirigami.Units.shortDuration
-                    }
-                }
 
                 QtControls.ScrollBar.vertical: QtControls.ScrollBar {
                     id: verticalScrollBar
@@ -1421,115 +1527,44 @@ PlasmoidItem {
                         : QtControls.ScrollBar.AlwaysOff
                 }
 
-                model: DelegateModel {
-                    id: providerVisualModel
-                    model: providerEntryModel
+                model: providerEntryModel
 
-                    delegate: DropArea {
-                        id: dropDelegate
+                delegate: ProviderCard {
+                    id: providerCard
 
-                        required property int index
-                        required property string entryId
-                        required property string provider
-                        required property string entryJson
+                    required property string entryId
+                    required property string provider
+                    required property string entryJson
 
-                        property int visualIndex: DelegateModel.itemsIndex
-                        readonly property var entryData: {
-                            try {
-                                return JSON.parse(entryJson || "{}");
-                            } catch (error) {
-                                return null;
-                            }
-                        }
-
-                        width: providerList.width
-                        height: providerCard.implicitHeight > 0
-                            ? providerCard.implicitHeight
-                            : providerCard.height
-
-                        keys: ["codexbar-provider-card"]
-
-                        onEntered: function(drag) {
-                            if (!drag.source || drag.source.visualIndex === undefined) {
-                                return;
-                            }
-                            const fromIndex = drag.source.visualIndex;
-                            const toIndex = dropDelegate.visualIndex;
-                            if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
-                                return;
-                            }
-                            root.providerReorderActive = true;
-                            providerEntryModel.move(fromIndex, toIndex, 1);
-                            root.commitProviderEntryOrder();
-                        }
-
-                        ProviderCard {
-                            id: providerCard
-
-                            property int visualIndex: dropDelegate.visualIndex
-
-                            width: Math.max(
-                                0,
-                                providerList.width
-                                    - Kirigami.Units.smallSpacing * 2
-                                    - providerList.scrollBarInset
-                            )
-                            x: Kirigami.Units.smallSpacing
-                            anchors.verticalCenter: parent.verticalCenter
-                            z: dragActive ? 100 : 0
-                            opacity: dragActive ? 0.92 : 1.0
-                            scale: dragActive ? 1.015 : 1.0
-                            Behavior on scale { NumberAnimation { duration: 100 } }
-                            Behavior on opacity { NumberAnimation { duration: 100 } }
-
-                            entry: dropDelegate.entryData
-                            providerName: codexBar.providerName(
-                                dropDelegate.entryData ? dropDelegate.entryData.provider : dropDelegate.provider
-                            )
-                            providerSiteUrl: dropDelegate.entryData
-                                ? codexBar.providerSiteUrl(dropDelegate.entryData.provider, dropDelegate.entryData)
-                                : ""
-                            accentColor: codexBar.color(
-                                dropDelegate.entryData ? dropDelegate.entryData.provider : dropDelegate.provider
-                            )
-                            showCredits: plasmoid.configuration.showCredits
-                            showHistory: plasmoid.configuration.showHistory
-                            reorderEnabled: root.canReorderProviders
-                            onSiteRequested: root.openProviderSite(dropDelegate.entryData)
-
-                            Drag.active: dragActive
-                            Drag.source: providerCard
-                            Drag.keys: ["codexbar-provider-card"]
-                            Drag.hotSpot.x: Kirigami.Units.gridUnit
-                            Drag.hotSpot.y: height / 2
-
-                            states: [
-                                State {
-                                    when: providerCard.dragActive
-                                    ParentChange {
-                                        target: providerCard
-                                        parent: representation
-                                    }
-                                    AnchorChanges {
-                                        target: providerCard
-                                        anchors {
-                                            verticalCenter: undefined
-                                        }
-                                    }
-                                }
-                            ]
-
-                            onDragActiveChanged: {
-                                if (dragActive) {
-                                    root.providerReorderActive = true;
-                                    return;
-                                }
-                                root.commitProviderEntryOrder();
-                                root.providerReorderActive = false;
-                                Qt.callLater(root.syncProviderEntryModel);
-                            }
+                    readonly property var entryData: {
+                        try {
+                            return JSON.parse(entryJson || "{}");
+                        } catch (error) {
+                            return null;
                         }
                     }
+
+                    width: Math.max(
+                        0,
+                        providerList.width
+                            - Kirigami.Units.smallSpacing * 2
+                            - providerList.scrollBarInset
+                    )
+                    x: Kirigami.Units.smallSpacing
+
+                    entry: providerCard.entryData
+                    providerName: codexBar.providerName(
+                        providerCard.entryData ? providerCard.entryData.provider : providerCard.provider
+                    )
+                    providerSiteUrl: providerCard.entryData
+                        ? codexBar.providerSiteUrl(providerCard.entryData.provider, providerCard.entryData)
+                        : ""
+                    accentColor: codexBar.color(
+                        providerCard.entryData ? providerCard.entryData.provider : providerCard.provider
+                    )
+                    showCredits: plasmoid.configuration.showCredits
+                    showHistory: plasmoid.configuration.showHistory
+                    onSiteRequested: root.openProviderSite(providerCard.entryData)
                 }
             }
 

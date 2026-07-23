@@ -14,6 +14,11 @@ Kirigami.ScrollablePage {
     property string cfg_source: "auto"
     property string cfg_providerConfigs: ""
     property alias cfg_allowMultiProviderSelection: allowMultiProviderSelection.checked
+    // Hidden: keep switcher selection across Configure → Apply. Without cfg_
+    // bindings, Plasma rewrites the General group and drops these keys.
+    property string cfg_selectedEntryIds: "[]"
+    property string cfg_selectedProviders: "[]"
+    property string cfg_compactBarCatalog: "{}"
     property string cfg_account: ""
     property int cfg_accountIndex: 0
     property bool cfg_allAccounts: false
