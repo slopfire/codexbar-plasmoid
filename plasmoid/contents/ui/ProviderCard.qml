@@ -195,6 +195,45 @@ PlasmaComponents3.Frame {
                 value: card.entry ? Number(card.entry.creditsRemaining).toLocaleString(Qt.locale(), "f", 2) : "—"
             }
 
+            // Stacked in one grid cell so "Reset limits" / "Expires" share a
+            // label column and values line up (not interleaved with Today/30d).
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                visible: card.showLimitResetCredits()
+                columns: 2
+                columnSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: Math.max(1, Math.round(Kirigami.Units.smallSpacing / 2))
+
+                PlasmaComponents3.Label {
+                    text: i18n("Reset limits")
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    text: card.limitResetCreditsValue()
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+
+                PlasmaComponents3.Label {
+                    visible: card.limitResetExpiresValue().length > 0
+                    text: i18n("Expires")
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+                PlasmaComponents3.Label {
+                    Layout.fillWidth: true
+                    visible: card.limitResetExpiresValue().length > 0
+                    text: card.limitResetExpiresValue()
+                    font: Kirigami.Theme.smallFont
+                    elide: Text.ElideRight
+                }
+            }
+
             MetricLine {
                 Layout.fillWidth: true
                 visible: card.entry && card.entry.tokenUsage
@@ -215,7 +254,7 @@ PlasmaComponents3.Frame {
 
             Layout.fillWidth: true
             // Collapse fully when inactive so content height tracks real cards.
-            Layout.preferredHeight: active ? Kirigami.Units.gridUnit * 3 : 0
+            Layout.preferredHeight: active ? Kirigami.Units.gridUnit * 3.5 : 0
             active: !card.isErrorOnly
                 && card.showHistory
                 && card.entry
@@ -366,5 +405,47 @@ PlasmaComponents3.Frame {
         const tokens = kind === "session" ? token.sessionTokens : token.last30DaysTokens;
         const tokenPart = tokenText(tokens);
         return money(cost, token.currencyCode) + (tokenPart.length > 0 ? " · " + tokenPart : "");
+    }
+
+    function showLimitResetCredits() {
+        return !!(entry && entry.limitResetCredits && Number.isFinite(Number(entry.limitResetCredits.availableCount)));
+    }
+
+    function limitResetCreditsValue() {
+        if (!showLimitResetCredits()) {
+            return "";
+        }
+        const count = Math.max(0, Math.round(Number(entry.limitResetCredits.availableCount)));
+        return i18np("%1 available", "%1 available", count);
+    }
+
+    function limitResetExpiresValue() {
+        if (!showLimitResetCredits()) {
+            return "";
+        }
+        const expiresAt = entry.limitResetCredits.nextExpiresAt;
+        if (!expiresAt) {
+            return "";
+        }
+        const date = new Date(expiresAt);
+        if (!Number.isFinite(date.getTime())) {
+            return "";
+        }
+        const diffMs = date.getTime() - Date.now();
+        if (diffMs <= 0) {
+            return i18n("soon");
+        }
+        const totalMinutes = Math.floor(diffMs / 60000);
+        const days = Math.floor(totalMinutes / (60 * 24));
+        const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+        // Value-only phrasing; the row title is already "Expires".
+        if (days > 0) {
+            return i18n("in %1d %2h", days, hours);
+        }
+        if (hours > 0) {
+            const minutes = totalMinutes % 60;
+            return i18n("in %1h %2m", hours, minutes);
+        }
+        return i18n("in %1m", Math.max(1, totalMinutes));
     }
 }

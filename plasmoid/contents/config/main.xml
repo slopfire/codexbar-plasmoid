@@ -30,7 +30,11 @@
     </entry>
     <entry name="allowMultiProviderSelection" type="Bool">
       <label>Allow selecting multiple providers in the widget</label>
-      <default>false</default>
+      <default>true</default>
+    </entry>
+    <entry name="providerSwitcherStyle" type="String">
+      <label>Provider switcher style</label>
+      <default>tabs</default>
     </entry>
     <entry name="selectedEntryIds" type="String">
       <label>Last selected provider entry ids in the widget</label>
@@ -72,6 +76,14 @@
       <label>Show usage history chart</label>
       <default>true</default>
     </entry>
+    <entry name="showTopBar" type="Bool">
+      <label>Show expanded view top bar</label>
+      <default>true</default>
+    </entry>
+    <entry name="showScrollbar" type="Bool">
+      <label>Show expanded list scrollbar</label>
+      <default>true</default>
+    </entry>
     <entry name="refreshIntervalSeconds" type="Int">
       <label>Refresh interval in seconds</label>
       <default>300</default>
@@ -84,7 +96,7 @@
     </entry>
     <entry name="syncProviders" type="Bool">
       <label>Synchronize provider fetch settings between widget instances</label>
-      <default>false</default>
+      <default>true</default>
     </entry>
     <entry name="requestTimeoutSeconds" type="Int">
       <label>Request timeout in seconds</label>

@@ -1425,6 +1425,8 @@ PlasmoidItem {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.margins: Kirigami.Units.smallSpacing
+                // Prefer !== false so missing config (pre-upgrade) still shows the bar.
+                visible: plasmoid.configuration.showTopBar !== false
 
                 PlasmaExtras.Heading {
                     Layout.fillWidth: true
@@ -1458,10 +1460,18 @@ PlasmoidItem {
 
             ProviderSwitcher {
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.smallSpacing
-                Layout.rightMargin: Kirigami.Units.smallSpacing
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                Layout.topMargin: Kirigami.Units.smallSpacing
                 entries: root.entries
                 selectedEntryIds: root.effectiveSelectedEntryIds
+                style: {
+                    const value = String(plasmoid.configuration.providerSwitcherStyle || "tabs");
+                    if (value === "chips" || value === "none" || value === "tabs") {
+                        return value;
+                    }
+                    return "tabs";
+                }
                 reorderEnabled: root.entries.length > 1
                 dragContainer: representation
                 colorForProvider: function(provider) { return codexBar.color(provider); }
@@ -1503,7 +1513,9 @@ PlasmoidItem {
 
                 // Attached ScrollBar paints over the view; reserve its width so
                 // right-edge labels (status, %, source) are not covered.
-                readonly property bool scrollBarNeeded: contentHeight > height + 1
+                // Prefer !== false so missing config (pre-upgrade) still shows the bar.
+                readonly property bool scrollBarEnabled: plasmoid.configuration.showScrollbar !== false
+                readonly property bool scrollBarNeeded: scrollBarEnabled && contentHeight > height + 1
                 readonly property real scrollBarInset: scrollBarNeeded
                     ? Math.max(verticalScrollBar.implicitWidth, Kirigami.Units.gridUnit * 0.75)
                       + Kirigami.Units.smallSpacing

@@ -75,6 +75,22 @@ The helper should output:
         { "id": "primary", "title": "Session", "percentLeft": 63, "resetsAt": "ISO-8601" }
       ],
       "creditsRemaining": 112.4,
+      "limitResetCredits": {
+        "availableCount": 1,
+        "nextExpiresAt": "2026-08-12T17:49:58Z",
+        "items": [
+          {
+            "id": "codex-reset-credit-…",
+            "title": "Full reset",
+            "description": "You've been granted one free rate limit reset.",
+            "status": "available",
+            "resetType": "codex_rate_limits",
+            "grantedAt": "2026-07-13T17:49:58Z",
+            "expiresAt": "2026-08-12T17:49:58Z"
+          }
+        ],
+        "updatedAt": "2026-07-24T14:01:21Z"
+      },
       "codeReviewRemainingPercent": 91,
       "tokenUsage": {
         "sessionCostUSD": 2.45,
@@ -86,7 +102,17 @@ The helper should output:
         "last30DaysLabel": "30d"
       },
       "dailyUsage": [
-        { "dayKey": "2026-06-10", "totalTokens": 128000, "costUSD": 2.45 }
+        {
+          "dayKey": "2026-06-10",
+          "totalTokens": 128000,
+          "costUSD": 2.45,
+          "models": [
+            { "name": "gpt-5.6-sol", "costUSD": 2.45, "totalTokens": 128000 }
+          ],
+          "limitResets": [
+            { "title": "Weekly", "percentLeft": 35, "resetsAt": "2026-06-10T12:00:00Z" }
+          ]
+        }
       ]
     }
   ],
@@ -113,6 +139,10 @@ On command failure:
 - Preserve Linux behavior: web-backed sources may fail for providers that require macOS browser/WebKit access; surface the CLI error.
 - Treat `usage.primary/secondary/tertiary.usedPercent` as used percent and convert to percent left with `100 - usedPercent` when `remainingPercent` is absent.
 - Use `openaiDashboard.dailyBreakdown` for credit history when available; otherwise use `cost.daily`.
+- Always pad `dailyUsage` to a continuous last-30 local-calendar-day window (zero-cost flat days when missing).
+- Preserve per-day `modelBreakdowns` as `models: [{ name, costUSD, totalTokens }]`.
+- Annotate calendar days where a usage row's `resetsAt` lands and `percentLeft > 0` as `limitResets` (unused limit resets).
+- Map Codex `usage.codexResetCredits` to entry `limitResetCredits` (`availableCount`, `nextExpiresAt`, `items`). When the primary source is `cli`/`codex-cli` and omits that field, enrich from a best-effort oauth usage fetch.
 - Cost lookup is best effort. A cost failure should populate `costError`, not discard successful usage entries.
 - QML number formatting is Qt/QML, not browser JS. Use `Number(value).toLocaleString(Qt.locale(), "f", digits)`, not options objects.
 

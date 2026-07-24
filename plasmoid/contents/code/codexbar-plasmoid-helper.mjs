@@ -247,15 +247,89 @@ function parseArgs(rawArgs) {
 
 function runUsage() {
   const configs = effectiveProviderConfigs();
-  if (configs.length > 0) {
-    return configs.flatMap((config) => asArray(runUsageForConfig(config)));
-  }
-  return runUsageForConfig({
-    provider,
-    source,
-    account: clean(args.account),
-    accountIndex: Number(args.accountIndex || 0),
-    allAccounts: args.allAccounts === "true",
+  const items = configs.length > 0
+    ? configs.flatMap((config) => asArray(runUsageForConfig(config)))
+    : asArray(runUsageForConfig({
+      provider,
+      source,
+      account: clean(args.account),
+      accountIndex: Number(args.accountIndex || 0),
+      allAccounts: args.allAccounts === "true",
+    }));
+  // codex-cli omits free rate-limit reset credits; oauth carries them. Merge when missing.
+  return enrichCodexLimitResetCredits(items);
+}
+
+/**
+ * Codex `cli` / local sources report weekly limits but not Limit Reset Credits.
+ * The oauth usage payload includes usage.codexResetCredits — pull that in when
+ * the primary source left it out so the widget matches `codexbar … --pretty`.
+ */
+function enrichCodexLimitResetCredits(items) {
+  return asArray(items).map((item) => {
+    if (normalizeProviderId(item?.provider) !== "codex") {
+      return item;
+    }
+    if (!item?.usage || item.usage.codexResetCredits) {
+      return item;
+    }
+    const currentSource = clean(item.source).toLowerCase();
+    if (currentSource === "oauth") {
+      return item;
+    }
+    try {
+      // Codex oauth rejects --account ("does not support token accounts"); always
+      // fetch the default oauth session and match by email when multiple return.
+      const commandArgs = [
+        "usage",
+        "--format",
+        "json",
+        "--json-only",
+        "--provider",
+        "codex",
+        "--source",
+        "oauth",
+      ];
+      if (includeStatus) {
+        commandArgs.push("--status");
+      }
+      const account = clean(item.account || item.usage?.accountEmail || item.usage?.identity?.accountEmail);
+      const command = currentCliPath();
+      const oauthPayload = sharedFetch("usage", {
+        command,
+        commandArgs,
+        provider: "codex",
+        apiKeyHash: "",
+        account: "",
+      }, () => runJSON(command, commandArgs, "codex", "", ""));
+      const oauthItems = asArray(oauthPayload).filter((candidate) => (
+        normalizeProviderId(candidate?.provider) === "codex" && !candidate?.error
+      ));
+      const accountLower = account.toLowerCase();
+      const match = (accountLower
+        ? oauthItems.find((candidate) => {
+          const candidateAccount = clean(
+            candidate.account
+            || candidate.usage?.accountEmail
+            || candidate.usage?.identity?.accountEmail,
+          ).toLowerCase();
+          return candidateAccount === accountLower;
+        })
+        : null) || oauthItems[0];
+      const resetCredits = match?.usage?.codexResetCredits;
+      if (!resetCredits) {
+        return item;
+      }
+      return {
+        ...item,
+        usage: {
+          ...item.usage,
+          codexResetCredits: resetCredits,
+        },
+      };
+    } catch {
+      return item;
+    }
   });
 }
 
@@ -732,7 +806,7 @@ function normalizeProvider(item, cost) {
   const identity = usage.identity || {};
   const source = item.source || "unknown";
   const rows = usageRows(providerId, usage, source);
-  const dailyUsage = dailyUsagePoints(dashboard, cost);
+  const dailyUsage = annotateLimitResets(dailyUsagePoints(dashboard, cost), rows);
   const rawAccount = item.account || usage.accountEmail || identity.accountEmail || null;
   const account = anonymizeEmails ? anonymizeIdentity(rawAccount) : rawAccount;
   const rawOrganization = usage.accountOrganization || identity.accountOrganization || null;
@@ -745,6 +819,7 @@ function normalizeProvider(item, cost) {
 
   const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
   const tokenUsage = buildTokenUsage(cost, usage);
+  const limitResetCredits = normalizeLimitResetCredits(usage);
   return {
     provider: providerId,
     account,
@@ -758,9 +833,54 @@ function normalizeProvider(item, cost) {
     error: item.error || null,
     rows,
     creditsRemaining,
+    limitResetCredits,
     codeReviewRemainingPercent: numberOrNull(dashboard.codeReviewRemainingPercent),
     tokenUsage,
     dailyUsage,
+  };
+}
+
+/**
+ * Codex (and similar) grant free rate-limit reset credits, exposed on usage as
+ * codexResetCredits. Normalize for the widget as limitResetCredits.
+ */
+function normalizeLimitResetCredits(usage) {
+  const raw = usage?.codexResetCredits || usage?.limitResetCredits || null;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const items = asArray(raw.credits).map((credit) => {
+    const status = clean(credit?.status) || "unknown";
+    return {
+      id: clean(credit?.id) || null,
+      title: clean(credit?.title) || "Reset",
+      description: clean(credit?.description) || null,
+      status,
+      resetType: clean(credit?.reset_type || credit?.resetType) || null,
+      grantedAt: credit?.granted_at || credit?.grantedAt || null,
+      expiresAt: credit?.expires_at || credit?.expiresAt || null,
+    };
+  });
+  const availableItems = items.filter((item) => String(item.status).toLowerCase() === "available");
+  const availableCount = integerOrNull(raw.availableCount) ?? availableItems.length;
+  let nextExpiresAt = null;
+  for (const item of (availableItems.length > 0 ? availableItems : items)) {
+    if (!item.expiresAt) {
+      continue;
+    }
+    const ms = Date.parse(item.expiresAt);
+    if (!Number.isFinite(ms)) {
+      continue;
+    }
+    if (nextExpiresAt === null || ms < Date.parse(nextExpiresAt)) {
+      nextExpiresAt = item.expiresAt;
+    }
+  }
+  return {
+    availableCount,
+    nextExpiresAt,
+    items,
+    updatedAt: raw.updatedAt || raw.updated_at || null,
   };
 }
 
@@ -882,25 +1002,196 @@ function parseBalanceFromDescription(description) {
 }
 
 function dailyUsagePoints(dashboard, cost) {
-  const dashboardDays = Array.isArray(dashboard.dailyBreakdown)
-    ? dashboard.dailyBreakdown.map((day) => ({
-      dayKey: day.day,
-      totalTokens: null,
-      costUSD: numberOrNull(day.totalCreditsUsed),
-    }))
-    : [];
-  if (dashboardDays.length > 0) {
-    return dashboardDays.slice(-30);
+  const byDay = new Map();
+  let hasSource = false;
+
+  if (Array.isArray(dashboard.dailyBreakdown) && dashboard.dailyBreakdown.length > 0) {
+    hasSource = true;
+    for (const day of dashboard.dailyBreakdown) {
+      mergeDailyPoint(byDay, day.day, {
+        totalTokens: integerOrNull(day.totalTokens),
+        costUSD: numberOrNull(day.totalCreditsUsed),
+        models: normalizeModelBreakdowns(day.modelBreakdowns || day.models),
+      });
+    }
+  } else if (cost && !cost.error && (Array.isArray(cost.daily) || cost.last30DaysCostUSD != null || cost.sessionCostUSD != null)) {
+    hasSource = true;
+    for (const day of asArray(cost.daily)) {
+      mergeDailyPoint(byDay, day.date, {
+        totalTokens: integerOrNull(day.totalTokens),
+        costUSD: numberOrNull(day.totalCost),
+        models: normalizeModelBreakdowns(day.modelBreakdowns || day.models),
+      });
+    }
   }
 
-  const costDays = Array.isArray(cost?.daily)
-    ? cost.daily.map((day) => ({
-      dayKey: day.date,
-      totalTokens: integerOrNull(day.totalTokens),
-      costUSD: numberOrNull(day.totalCost),
+  if (!hasSource) {
+    return [];
+  }
+
+  // Always emit a continuous local-calendar window of the last 30 days so the
+  // chart shows real calendar time (missing days are zero / flat bars).
+  return padLast30Days(byDay);
+}
+
+function mergeDailyPoint(byDay, dayKey, next) {
+  const key = clean(dayKey);
+  if (!key) {
+    return;
+  }
+  const existing = byDay.get(key) || {
+    dayKey: key,
+    totalTokens: 0,
+    costUSD: 0,
+    models: [],
+  };
+  const tokens = next.totalTokens;
+  const cost = next.costUSD;
+  if (tokens !== null) {
+    existing.totalTokens = (existing.totalTokens || 0) + tokens;
+  }
+  if (cost !== null) {
+    existing.costUSD = (existing.costUSD || 0) + cost;
+  }
+  existing.models = mergeModelBreakdowns(existing.models, next.models || []);
+  byDay.set(key, existing);
+}
+
+function normalizeModelBreakdowns(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw
+    .map((item) => {
+      const name = clean(item?.modelName || item?.model || item?.name || item?.id);
+      if (!name) {
+        return null;
+      }
+      return {
+        name,
+        costUSD: numberOrNull(item.cost ?? item.costUSD ?? item.totalCost) ?? 0,
+        totalTokens: integerOrNull(item.totalTokens ?? item.tokens) ?? 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+function mergeModelBreakdowns(left, right) {
+  const byName = new Map();
+  for (const item of [...(left || []), ...(right || [])]) {
+    const name = clean(item?.name);
+    if (!name) {
+      continue;
+    }
+    const existing = byName.get(name) || { name, costUSD: 0, totalTokens: 0 };
+    existing.costUSD += Number(item.costUSD) || 0;
+    existing.totalTokens += Number(item.totalTokens) || 0;
+    byName.set(name, existing);
+  }
+  return [...byName.values()]
+    .map((item) => ({
+      name: item.name,
+      costUSD: Math.round(item.costUSD * 1_000_000) / 1_000_000,
+      totalTokens: item.totalTokens,
     }))
-    : [];
-  return costDays.slice(-30);
+    .sort((a, b) => (b.costUSD - a.costUSD) || (b.totalTokens - a.totalTokens) || a.name.localeCompare(b.name));
+}
+
+function padLast30Days(byDay) {
+  const days = [];
+  const today = startOfLocalDay(new Date());
+  for (let offset = 29; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const dayKey = formatLocalDayKey(date);
+    const existing = byDay.get(dayKey);
+    days.push({
+      dayKey,
+      totalTokens: existing?.totalTokens ?? 0,
+      costUSD: existing?.costUSD ?? 0,
+      models: existing?.models || [],
+      limitResets: [],
+    });
+  }
+  return days;
+}
+
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function formatLocalDayKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dayKeyFromTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+  return formatLocalDayKey(date);
+}
+
+/**
+ * Attach unused rate-limit resets for the chart hover popup.
+ *
+ * - If a window's resetsAt falls on a day inside the 30-day window, mark that day.
+ * - Always attach upcoming unused resets onto *today* as well, so future resets
+ *   (e.g. next week) still surface when hovering the current day.
+ * Only windows with percentLeft > 0 count as "unused" limit resets.
+ */
+function annotateLimitResets(dailyUsage, rows) {
+  if (!Array.isArray(dailyUsage) || dailyUsage.length === 0 || !Array.isArray(rows)) {
+    return dailyUsage;
+  }
+  const byDay = new Map(dailyUsage.map((day) => [day.dayKey, day]));
+  const todayKey = formatLocalDayKey(startOfLocalDay(new Date()));
+  const today = byDay.get(todayKey) || dailyUsage[dailyUsage.length - 1];
+
+  for (const row of rows) {
+    const percentLeft = numberOrNull(row?.percentLeft);
+    const resetsAt = row?.resetsAt || null;
+    if (percentLeft === null || percentLeft <= 0 || !resetsAt) {
+      continue;
+    }
+    const entry = {
+      title: String(row.title || "Limit"),
+      percentLeft,
+      resetsAt,
+    };
+    const dayKey = dayKeyFromTimestamp(resetsAt);
+    const onDay = dayKey ? byDay.get(dayKey) : null;
+    if (onDay) {
+      pushLimitReset(onDay, entry);
+    }
+    // Surface upcoming unused resets on today even when the reset day is outside
+    // the trailing 30-day window (or after the series ends).
+    if (today && (!onDay || onDay.dayKey !== today.dayKey)) {
+      const resetMs = Date.parse(resetsAt);
+      if (Number.isFinite(resetMs) && resetMs >= Date.now() - 60_000) {
+        pushLimitReset(today, entry);
+      }
+    }
+  }
+  return dailyUsage;
+}
+
+function pushLimitReset(day, entry) {
+  if (!Array.isArray(day.limitResets)) {
+    day.limitResets = [];
+  }
+  const already = day.limitResets.some((item) => (
+    item.title === entry.title && item.resetsAt === entry.resetsAt
+  ));
+  if (!already) {
+    day.limitResets.push(entry);
+  }
 }
 
 function providerLabels(providerId) {

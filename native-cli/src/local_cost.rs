@@ -50,6 +50,16 @@ pub struct DailyCostPoint {
     pub date: String,
     pub total_cost: f64,
     pub total_tokens: i64,
+    #[serde(rename = "modelBreakdowns")]
+    pub model_breakdowns: Vec<ModelCostPoint>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCostPoint {
+    pub model_name: String,
+    pub cost: f64,
+    pub total_tokens: i64,
 }
 
 #[derive(Clone)]
@@ -57,6 +67,7 @@ struct CostRow {
     created_ms: i64,
     cost: f64,
     tokens: i64,
+    model: Option<String>,
 }
 
 /// Providers the native binary can produce cost/token history for.
@@ -134,10 +145,19 @@ fn read_cost_rows(database_path: &Path, scope: CostScope) -> Result<Vec<CostRow>
     };
     let mut stmt = conn.prepare(sql)?;
     let rows = stmt.query_map([], |row| {
+        let model: Option<String> = row.get::<_, Option<String>>(3)?;
         Ok(CostRow {
             created_ms: row.get(0)?,
             cost: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
             tokens: row.get::<_, Option<i64>>(2)?.unwrap_or(0),
+            model: model.and_then(|value| {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }),
         })
     })?;
     Ok(rows
@@ -171,6 +191,12 @@ struct CursorUsageEvent {
     charged_cents: Option<f64>,
     usage_based_costs: Option<String>,
     token_usage: Option<CursorTokenUsage>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    model_name: Option<String>,
+    #[serde(default)]
+    underlying_model: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -259,10 +285,20 @@ fn cost_row_from_cursor_event(event: &CursorUsageEvent) -> Option<CostRow> {
     if cost <= 0.0 && tokens <= 0 {
         return None;
     }
+    let model = event
+        .model
+        .as_deref()
+        .or(event.model_name.as_deref())
+        .or(event.underlying_model.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
     Some(CostRow {
         created_ms,
         cost,
         tokens,
+        model,
     })
 }
 
@@ -407,26 +443,25 @@ fn read_grok_updates_file(path: &Path) -> Result<Vec<CostRow>> {
         let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
             continue;
         };
-        if let Some(row) = cost_row_from_grok_update(&value) {
-            rows.push(row);
-        }
+        rows.extend(cost_rows_from_grok_update(&value));
     }
     Ok(rows)
 }
 
-fn cost_row_from_grok_update(value: &serde_json::Value) -> Option<CostRow> {
-    let params = value.get("params")?;
-    let update = params.get("update")?;
+fn cost_rows_from_grok_update(value: &serde_json::Value) -> Vec<CostRow> {
+    let Some(params) = value.get("params") else {
+        return Vec::new();
+    };
+    let Some(update) = params.get("update") else {
+        return Vec::new();
+    };
     if update.get("sessionUpdate").and_then(|v| v.as_str()) != Some("turn_completed") {
-        return None;
+        return Vec::new();
     }
-    let usage = update.get("usage")?;
-    let tokens = grok_usage_total_tokens(usage);
-    let cost = grok_usage_cost_usd(usage);
-    if tokens <= 0 && cost <= 0.0 {
-        return None;
-    }
-    let created_ms = parse_event_timestamp(value.get("timestamp"))
+    let Some(usage) = update.get("usage") else {
+        return Vec::new();
+    };
+    let Some(created_ms) = parse_event_timestamp(value.get("timestamp"))
         .or_else(|| parse_event_timestamp(value.get("ts")))
         .or_else(|| {
             // Nested agent clock when top-level timestamp is missing.
@@ -434,12 +469,61 @@ fn cost_row_from_grok_update(value: &serde_json::Value) -> Option<CostRow> {
                 .pointer("/_meta/agentTimestampMs")
                 .and_then(|v| v.as_f64())
                 .and_then(normalize_epoch_ms)
-        })?;
-    Some(CostRow {
+        })
+    else {
+        return Vec::new();
+    };
+
+    // Prefer per-model rows when modelUsage is present so the chart can break
+    // spend down by model on hover.
+    if let Some(map) = usage.get("modelUsage").and_then(|v| v.as_object()) {
+        if !map.is_empty() {
+            let mut rows = Vec::new();
+            for (model_id, model_usage) in map {
+                let tokens = grok_usage_total_tokens(model_usage);
+                let cost = if let Some(cost) = grok_ticks_to_usd(model_usage.get("costUsdTicks")) {
+                    cost
+                } else {
+                    estimate_grok_model_cost(model_id, model_usage)
+                };
+                if tokens <= 0 && cost <= 0.0 {
+                    continue;
+                }
+                rows.push(CostRow {
+                    created_ms,
+                    cost,
+                    tokens,
+                    model: Some(model_id.clone()),
+                });
+            }
+            if !rows.is_empty() {
+                // If only top-level ticks are billed, re-scale model costs so
+                // they still sum to the turn total when ticks are non-zero.
+                if let Some(total_cost) = grok_ticks_to_usd(usage.get("costUsdTicks")) {
+                    let model_sum: f64 = rows.iter().map(|row| row.cost).sum();
+                    if model_sum > 0.0 && (model_sum - total_cost).abs() > 1e-9 {
+                        let scale = total_cost / model_sum;
+                        for row in &mut rows {
+                            row.cost = round_money(row.cost * scale);
+                        }
+                    }
+                }
+                return rows;
+            }
+        }
+    }
+
+    let tokens = grok_usage_total_tokens(usage);
+    let cost = grok_usage_cost_usd(usage);
+    if tokens <= 0 && cost <= 0.0 {
+        return Vec::new();
+    }
+    vec![CostRow {
         created_ms,
         cost,
         tokens,
-    })
+        model: Some("grok-4.5".to_string()),
+    }]
 }
 
 fn grok_usage_total_tokens(usage: &serde_json::Value) -> i64 {
@@ -596,7 +680,8 @@ fn snapshot_from_rows(
     let mut session_tokens: i64 = 0;
     let mut last30_cost = 0.0;
     let mut last30_tokens: i64 = 0;
-    let mut daily: BTreeMap<String, (f64, i64)> = BTreeMap::new();
+    // day -> (total_cost, total_tokens, model -> (cost, tokens))
+    let mut daily: BTreeMap<String, (f64, i64, BTreeMap<String, (f64, i64)>)> = BTreeMap::new();
 
     for row in rows {
         if row.created_ms >= day_start && row.created_ms <= now_ms {
@@ -611,18 +696,41 @@ fn snapshot_from_rows(
                 .single()
                 .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            let entry = daily.entry(day_key).or_insert((0.0, 0));
+            let entry = daily.entry(day_key).or_insert_with(|| (0.0, 0, BTreeMap::new()));
             entry.0 += row.cost;
             entry.1 += row.tokens;
+            if let Some(model) = row.model.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+                let model_entry = entry.2.entry(model.to_string()).or_insert((0.0, 0));
+                model_entry.0 += row.cost;
+                model_entry.1 += row.tokens;
+            }
         }
     }
 
     let daily_points: Vec<DailyCostPoint> = daily
         .into_iter()
-        .map(|(date, (total_cost, total_tokens))| DailyCostPoint {
-            date,
-            total_cost: round_money(total_cost),
-            total_tokens,
+        .map(|(date, (total_cost, total_tokens, models))| {
+            let mut model_breakdowns: Vec<ModelCostPoint> = models
+                .into_iter()
+                .map(|(model_name, (cost, tokens))| ModelCostPoint {
+                    model_name,
+                    cost: round_money(cost),
+                    total_tokens: tokens,
+                })
+                .collect();
+            model_breakdowns.sort_by(|a, b| {
+                b.cost
+                    .partial_cmp(&a.cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.total_tokens.cmp(&a.total_tokens))
+                    .then_with(|| a.model_name.cmp(&b.model_name))
+            });
+            DailyCostPoint {
+                date,
+                total_cost: round_money(total_cost),
+                total_tokens,
+                model_breakdowns,
+            }
         })
         .collect();
 
@@ -658,7 +766,8 @@ const MESSAGE_COST_SQL_ALL: &str = r#"
 SELECT
   CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
   CAST(json_extract(data, '$.cost') AS REAL) AS cost,
-  CAST(COALESCE(json_extract(data, '$.tokens.total'), 0) AS INTEGER) AS tokens
+  CAST(COALESCE(json_extract(data, '$.tokens.total'), 0) AS INTEGER) AS tokens,
+  COALESCE(json_extract(data, '$.modelID'), json_extract(data, '$.model'), json_extract(data, '$.modelName')) AS model
 FROM message
 WHERE json_valid(data)
   AND json_extract(data, '$.role') = 'assistant'
@@ -672,7 +781,8 @@ const MESSAGE_COST_SQL_OPENCODE_GO: &str = r#"
 SELECT
   CAST(COALESCE(json_extract(data, '$.time.created'), time_created) AS INTEGER) AS createdMs,
   CAST(json_extract(data, '$.cost') AS REAL) AS cost,
-  CAST(COALESCE(json_extract(data, '$.tokens.total'), 0) AS INTEGER) AS tokens
+  CAST(COALESCE(json_extract(data, '$.tokens.total'), 0) AS INTEGER) AS tokens,
+  COALESCE(json_extract(data, '$.modelID'), json_extract(data, '$.model'), json_extract(data, '$.modelName')) AS model
 FROM message
 WHERE json_valid(data)
   AND json_extract(data, '$.role') = 'assistant'
@@ -697,16 +807,19 @@ mod tests {
                 created_ms: day_ms + 60_000,
                 cost: 1.25,
                 tokens: 1000,
+                model: Some("model-a".to_string()),
             },
             CostRow {
                 created_ms: day_ms - 2 * 24 * 60 * 60 * 1000,
                 cost: 2.5,
                 tokens: 2000,
+                model: Some("model-b".to_string()),
             },
             CostRow {
                 created_ms: day_ms - 40 * 24 * 60 * 60 * 1000,
                 cost: 9.0,
                 tokens: 9000,
+                model: None,
             },
         ];
         let snapshot = snapshot_from_rows("opencode", "local", &rows, now);
@@ -715,6 +828,7 @@ mod tests {
         assert_eq!(snapshot.last30_days_cost_usd, 3.75);
         assert_eq!(snapshot.last30_days_tokens, 3000);
         assert_eq!(snapshot.daily.len(), 2);
+        assert_eq!(snapshot.daily[1].model_breakdowns[0].model_name, "model-a");
         assert_eq!(snapshot.source, "local");
     }
 
@@ -730,11 +844,15 @@ mod tests {
                 cache_read_tokens: Some(999),
                 total_cents: Some(21.6),
             }),
+            model: Some("gpt-5".to_string()),
+            model_name: None,
+            underlying_model: None,
         };
         let row = cost_row_from_cursor_event(&event).expect("row");
         assert_eq!(row.tokens, 150);
         assert!((row.cost - 0.108).abs() < 1e-9);
         assert_eq!(row.created_ms, 1782498274196);
+        assert_eq!(row.model.as_deref(), Some("gpt-5"));
     }
 
     #[test]
@@ -749,6 +867,9 @@ mod tests {
                 cache_read_tokens: None,
                 total_cents: None,
             }),
+            model: None,
+            model_name: None,
+            underlying_model: None,
         };
         let row = cost_row_from_cursor_event(&event).expect("row");
         assert!((row.cost - 1.25).abs() < 1e-9);
@@ -784,10 +905,13 @@ mod tests {
                 }
             }
         });
-        let row = cost_row_from_grok_update(&value).expect("row");
+        let rows = cost_rows_from_grok_update(&value);
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
         assert_eq!(row.tokens, 63211);
         assert!((row.cost - 0.044772).abs() < 1e-6);
         assert_eq!(row.created_ms, 1784139060 * 1000);
+        assert_eq!(row.model.as_deref(), Some("grok-4.5-build"));
     }
 
     #[test]
@@ -817,11 +941,14 @@ mod tests {
                 }
             }
         });
-        let row = cost_row_from_grok_update(&value).expect("row");
+        let rows = cost_rows_from_grok_update(&value);
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
         // uncached 6000 * $2/M + cached 4000 * $0.30/M + output 1000 * $6/M
         // = 0.012 + 0.0012 + 0.006 = 0.0192
         assert_eq!(row.tokens, 11_000);
         assert!((row.cost - 0.0192).abs() < 1e-9);
+        assert_eq!(row.model.as_deref(), Some("grok-4.5"));
     }
 
     #[test]
