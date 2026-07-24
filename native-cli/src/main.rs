@@ -240,7 +240,7 @@ Providers:
 Cost (token spend / API $):
   opencode, opencodego — ~/.local/share/opencode/*.db
   cursor — dashboard usage events (session cookie)
-  grok — ~/.grok/sessions/**/updates.jsonl (tokens; $ is 0 for SuperGrok)
+  grok — ~/.grok/sessions/**/updates.jsonl (costUsdTicks or per-model API rates)
   all — soft-merge of the above
   (antigravity / devin: quota % only, no absolute token history)
 

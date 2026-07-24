@@ -3,7 +3,8 @@
 //! Sources:
 //! - OpenCode / OpenCode Go: SQLite under `~/.local/share/opencode/`
 //! - Cursor: dashboard usage events (`get-filtered-usage-events`) via session cookie
-//! - Grok: local session `updates.jsonl` turn_completed usage (tokens only; SuperGrok has no $)
+//! - Grok: local session `updates.jsonl` turn_completed usage (`costUsdTicks` when
+//!   present; otherwise API-equivalent $ from per-model token rates)
 //!
 //! Antigravity and Devin only expose quota *percentages* — no absolute token/cost
 //! history is available to aggregate into this shape.
@@ -331,6 +332,18 @@ fn normalize_epoch_ms(number: f64) -> Option<i64> {
 
 // --- Grok local sessions -----------------------------------------------------
 
+/// Grok session `costUsdTicks` scale: $1.00 == 10_000_000_000 ticks.
+/// Verified against modelUsage token breakdown at xAI list rates ($2/$0.30/$6 for grok-4.5).
+const GROK_COST_USD_TICKS_PER_DOLLAR: f64 = 10_000_000_000.0;
+
+/// USD per 1M tokens for a model family (input / cached input / output).
+#[derive(Clone, Copy)]
+struct GrokModelRates {
+    input_per_m: f64,
+    cached_per_m: f64,
+    output_per_m: f64,
+}
+
 fn fetch_grok_cost(home: &Path) -> Result<CostSnapshot> {
     let sessions_root = grok_sessions_dir(home);
     if !sessions_root.is_dir() {
@@ -349,7 +362,8 @@ fn fetch_grok_cost(home: &Path) -> Result<CostSnapshot> {
         ));
     }
 
-    // SuperGrok is subscription-billed; cost stays 0 and tokens drive the UI.
+    // Prefer costUsdTicks (API-billed). When ticks are 0 (SuperGrok free tier),
+    // fall back to per-model API list rates so the UI still shows spend-equivalent $.
     Ok(snapshot_from_rows("grok", "local", &rows, Utc::now()))
 }
 
@@ -407,23 +421,9 @@ fn cost_row_from_grok_update(value: &serde_json::Value) -> Option<CostRow> {
         return None;
     }
     let usage = update.get("usage")?;
-    let tokens = usage
-        .get("totalTokens")
-        .and_then(|v| v.as_i64())
-        .or_else(|| {
-            let input = usage.get("inputTokens").and_then(|v| v.as_i64()).unwrap_or(0);
-            let output = usage
-                .get("outputTokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            let reasoning = usage
-                .get("reasoningTokens")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            Some(input + output + reasoning)
-        })
-        .unwrap_or(0);
-    if tokens <= 0 {
+    let tokens = grok_usage_total_tokens(usage);
+    let cost = grok_usage_cost_usd(usage);
+    if tokens <= 0 && cost <= 0.0 {
         return None;
     }
     let created_ms = parse_event_timestamp(value.get("timestamp"))
@@ -437,9 +437,147 @@ fn cost_row_from_grok_update(value: &serde_json::Value) -> Option<CostRow> {
         })?;
     Some(CostRow {
         created_ms,
-        cost: 0.0,
+        cost,
         tokens,
     })
+}
+
+fn grok_usage_total_tokens(usage: &serde_json::Value) -> i64 {
+    usage
+        .get("totalTokens")
+        .and_then(json_i64)
+        .or_else(|| {
+            let input = usage.get("inputTokens").and_then(json_i64).unwrap_or(0);
+            let output = usage.get("outputTokens").and_then(json_i64).unwrap_or(0);
+            // totalTokens already equals input+output; reasoning is part of output.
+            Some(input + output)
+        })
+        .unwrap_or(0)
+        .max(0)
+}
+
+/// Resolve USD for one turn_completed usage blob.
+///
+/// 1. Top-level `costUsdTicks` when > 0 (matches API billing).
+/// 2. Else sum per-model ticks / estimated rates from `modelUsage`.
+/// 3. Else estimate from top-level token fields with default (grok-4.5) rates.
+fn grok_usage_cost_usd(usage: &serde_json::Value) -> f64 {
+    if let Some(cost) = grok_ticks_to_usd(usage.get("costUsdTicks")) {
+        return cost;
+    }
+
+    if let Some(map) = usage.get("modelUsage").and_then(|v| v.as_object()) {
+        let mut total = 0.0;
+        for (model_id, model_usage) in map {
+            if let Some(cost) = grok_ticks_to_usd(model_usage.get("costUsdTicks")) {
+                total += cost;
+            } else {
+                total += estimate_grok_model_cost(model_id, model_usage);
+            }
+        }
+        if total > 0.0 {
+            return round_money(total);
+        }
+    }
+
+    round_money(estimate_grok_model_cost("grok-4.5", usage))
+}
+
+fn grok_ticks_to_usd(value: Option<&serde_json::Value>) -> Option<f64> {
+    let ticks = json_f64(value?)?;
+    if !ticks.is_finite() || ticks <= 0.0 {
+        return None;
+    }
+    Some(round_money(ticks / GROK_COST_USD_TICKS_PER_DOLLAR))
+}
+
+fn estimate_grok_model_cost(model_id: &str, usage: &serde_json::Value) -> f64 {
+    let rates = grok_model_rates(model_id);
+    let input = usage.get("inputTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
+    let output = usage.get("outputTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
+    let cached = usage
+        .get("cachedReadTokens")
+        .and_then(json_i64)
+        .unwrap_or(0)
+        .max(0) as f64;
+    // When only totalTokens is present (older events), treat as uncached input.
+    let (input, output, cached) = if input <= 0.0 && output <= 0.0 {
+        let total = usage.get("totalTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
+        (total, 0.0, 0.0)
+    } else {
+        (input, output, cached)
+    };
+    let uncached_input = (input - cached).max(0.0);
+    let cost = uncached_input * rates.input_per_m / 1_000_000.0
+        + cached * rates.cached_per_m / 1_000_000.0
+        + output * rates.output_per_m / 1_000_000.0;
+    round_money(cost)
+}
+
+/// API list rates (USD / 1M tokens). Free-tier model ids use the same rates so
+/// SuperGrok usage still reports API-equivalent spend for tracking.
+fn grok_model_rates(model_id: &str) -> GrokModelRates {
+    let id = model_id.to_ascii_lowercase();
+    // Strip optional "-free" suffix used by subscription-billed variants.
+    let id = id.strip_suffix("-free").unwrap_or(&id);
+
+    // Flagship Grok 4.5 (+ build variant; matches observed costUsdTicks).
+    if id.starts_with("grok-4.5") || id.starts_with("grok-4-5") {
+        return GrokModelRates {
+            input_per_m: 2.0,
+            cached_per_m: 0.30,
+            output_per_m: 6.0,
+        };
+    }
+    // Grok 4.3 / 4.20 multi-agent / dated SKUs.
+    if id.starts_with("grok-4.3")
+        || id.starts_with("grok-4-3")
+        || id.starts_with("grok-4.20")
+        || id.starts_with("grok-4-20")
+        || id.contains("multi-agent")
+    {
+        return GrokModelRates {
+            input_per_m: 1.25,
+            cached_per_m: 0.20,
+            output_per_m: 2.50,
+        };
+    }
+    // Fast / volume tiers.
+    if id.contains("fast") || id.contains("code-fast") || id.contains("composer") {
+        return GrokModelRates {
+            input_per_m: 0.20,
+            cached_per_m: 0.05,
+            output_per_m: 0.50,
+        };
+    }
+    // Build / coding-oriented mid tier.
+    if id.contains("build") {
+        return GrokModelRates {
+            input_per_m: 1.0,
+            cached_per_m: 0.20,
+            output_per_m: 2.0,
+        };
+    }
+    // Default: current flagship rates.
+    GrokModelRates {
+        input_per_m: 2.0,
+        cached_per_m: 0.30,
+        output_per_m: 6.0,
+    }
+}
+
+fn json_i64(value: &serde_json::Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().map(|n| n as i64))
+        .or_else(|| value.as_f64().map(|n| n as i64))
+}
+
+fn json_f64(value: &serde_json::Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_i64().map(|n| n as f64))
+        .or_else(|| value.as_u64().map(|n| n as f64))
 }
 
 // --- Aggregation -------------------------------------------------------------
@@ -618,7 +756,8 @@ mod tests {
     }
 
     #[test]
-    fn grok_turn_completed_row() {
+    fn grok_turn_completed_prefers_cost_usd_ticks() {
+        // 447_724_000 ticks == $0.0447724 at 1e10 ticks/$ (observed for grok-4.5-build).
         let value = serde_json::json!({
             "timestamp": 1784139060,
             "method": "_x.ai/session/update",
@@ -626,18 +765,77 @@ mod tests {
                 "update": {
                     "sessionUpdate": "turn_completed",
                     "usage": {
-                        "inputTokens": 100,
-                        "outputTokens": 20,
-                        "totalTokens": 120,
-                        "reasoningTokens": 5
+                        "inputTokens": 62353,
+                        "outputTokens": 858,
+                        "totalTokens": 63211,
+                        "cachedReadTokens": 50048,
+                        "reasoningTokens": 375,
+                        "costUsdTicks": 447_724_000_i64,
+                        "modelUsage": {
+                            "grok-4.5-build": {
+                                "inputTokens": 62353,
+                                "outputTokens": 858,
+                                "totalTokens": 63211,
+                                "cachedReadTokens": 50048,
+                                "costUsdTicks": 447_724_000_i64
+                            }
+                        }
                     }
                 }
             }
         });
         let row = cost_row_from_grok_update(&value).expect("row");
-        assert_eq!(row.tokens, 120);
-        assert_eq!(row.cost, 0.0);
+        assert_eq!(row.tokens, 63211);
+        assert!((row.cost - 0.044772).abs() < 1e-6);
         assert_eq!(row.created_ms, 1784139060 * 1000);
+    }
+
+    #[test]
+    fn grok_turn_completed_estimates_zero_ticks_from_model_rates() {
+        // SuperGrok free tier often reports costUsdTicks=0; price via model rates.
+        let value = serde_json::json!({
+            "timestamp": 1784139060,
+            "params": {
+                "update": {
+                    "sessionUpdate": "turn_completed",
+                    "usage": {
+                        "inputTokens": 10_000,
+                        "outputTokens": 1_000,
+                        "totalTokens": 11_000,
+                        "cachedReadTokens": 4_000,
+                        "costUsdTicks": 0,
+                        "modelUsage": {
+                            "grok-4.5": {
+                                "inputTokens": 10_000,
+                                "outputTokens": 1_000,
+                                "totalTokens": 11_000,
+                                "cachedReadTokens": 4_000,
+                                "costUsdTicks": 0
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let row = cost_row_from_grok_update(&value).expect("row");
+        // uncached 6000 * $2/M + cached 4000 * $0.30/M + output 1000 * $6/M
+        // = 0.012 + 0.0012 + 0.006 = 0.0192
+        assert_eq!(row.tokens, 11_000);
+        assert!((row.cost - 0.0192).abs() < 1e-9);
+    }
+
+    #[test]
+    fn grok_fast_model_uses_volume_rates() {
+        let cost = estimate_grok_model_cost(
+            "grok-composer-2.5-fast",
+            &serde_json::json!({
+                "inputTokens": 1_000_000,
+                "outputTokens": 1_000_000,
+                "cachedReadTokens": 0
+            }),
+        );
+        // $0.20 + $0.50 = $0.70 per 1M in + 1M out
+        assert!((cost - 0.70).abs() < 1e-9);
     }
 
     #[test]
@@ -652,7 +850,7 @@ mod tests {
         let mut file = fs::File::create(&path).expect("create");
         writeln!(
             file,
-            r#"{{"timestamp":1784139060,"params":{{"update":{{"sessionUpdate":"turn_completed","usage":{{"totalTokens":42}}}}}}}}"#
+            r#"{{"timestamp":1784139060,"params":{{"update":{{"sessionUpdate":"turn_completed","usage":{{"totalTokens":42,"costUsdTicks":100000000}}}}}}}}"#
         )
         .unwrap();
         writeln!(
@@ -664,6 +862,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].tokens, 42);
+        assert!((rows[0].cost - 0.01).abs() < 1e-9);
     }
 
     #[test]
