@@ -14,7 +14,7 @@
     "Id": "org.slopfire.codexbar-plasmoid",
     "License": "MIT",
     "Name": "CodexBar",
-    "Version": "0.1.3",
+    "Version": "0.1.4",
     "Website": "https://github.com/slopfire/codexbar-plasmoid"
   },
   "X-Plasma-API-Minimum-Version": "6.0"
