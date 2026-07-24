@@ -222,12 +222,25 @@ Item {
                     border.width: 1
                     border.color: bars.strokeColor
 
+                    // Exact percent width, rounded like the track. Cap radius by
+                    // half the fill width so short fills stay circular capsules
+                    // instead of using the track radius on a too-narrow rect.
                     Rectangle {
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
-                        width: Math.max(3, parent.width * Number(modelData.percentLeft) / 100)
-                        radius: parent.radius
+                        width: {
+                            const p = Number(modelData.percentLeft);
+                            if (!Number.isFinite(p) || p <= 0) {
+                                return 0;
+                            }
+                            const clamped = Math.max(0, Math.min(100, p));
+                            const exact = parent.width * clamped / 100;
+                            // Hairline only when nearly empty so "some left" is still
+                            // visible on narrow tray slots — do not inflate mid values.
+                            return clamped > 0 && exact < 1 ? 1 : exact;
+                        }
+                        radius: Math.min(parent.radius, width / 2)
                         color: bars.stale
                             ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)
                             : modelData.color

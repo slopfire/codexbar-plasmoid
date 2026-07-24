@@ -22,8 +22,12 @@ const EMPTY_GRPC_WEB_FRAME: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x00];
 
 /// Fetch every visible Grok account: `grok login` credentials in `~/.grok/auth.json`
 /// plus browser `sso` sessions (Chrome, Zen, Firefox, …). Returns one payload per
-/// distinct account so the plasmoid can show paid SuperGrok and free grok.com
-/// sessions side by side.
+/// distinct account.
+///
+/// When at least one account has an **active** SuperGrok subscription, free or
+/// cancelled sessions are dropped so a leftover Zen/Chrome login does not keep
+/// a card in the widget after SuperGrok ends. Free-only users still see free
+/// weekly limits (with no Plan label).
 pub fn fetch(http: &HttpClient) -> Vec<ProviderPayload> {
     let mut payloads = Vec::new();
     let mut seen_keys = HashSet::new();
@@ -76,10 +80,35 @@ pub fn fetch(http: &HttpClient) -> Vec<ProviderPayload> {
     // the widget does not show a failing Chrome cookie next to a good Zen login.
     let successes: Vec<_> = payloads.iter().filter(|p| p.error.is_none()).cloned().collect();
     if !successes.is_empty() {
-        return successes;
+        return prefer_active_subscription_accounts(successes);
     }
     // All failed — keep a single first error.
     payloads.into_iter().take(1).collect()
+}
+
+/// If any account is on an active paid plan (login_method set from subscriptions),
+/// hide free / cancelled leftovers. Otherwise keep free accounts as-is.
+fn prefer_active_subscription_accounts(successes: Vec<ProviderPayload>) -> Vec<ProviderPayload> {
+    let paid: Vec<ProviderPayload> = successes
+        .iter()
+        .filter(|payload| payload_has_active_plan(payload))
+        .cloned()
+        .collect();
+    if paid.is_empty() {
+        successes
+    } else {
+        paid
+    }
+}
+
+fn payload_has_active_plan(payload: &ProviderPayload) -> bool {
+    payload
+        .usage
+        .as_ref()
+        .and_then(|usage| usage.identity.as_ref())
+        .and_then(|identity| identity.login_method.as_ref())
+        .map(|plan| !plan.trim().is_empty())
+        .unwrap_or(false)
 }
 
 fn push_unique(
@@ -687,5 +716,64 @@ mod tests {
             plan_from_subscriptions(&value).as_deref(),
             Some("SuperGrok Heavy")
         );
+    }
+
+    fn test_payload(email: &str, plan: Option<&str>, source: &str) -> ProviderPayload {
+        let mut payload = ProviderPayload::ok(
+            "grok",
+            UsageSnapshot {
+                primary: None,
+                secondary: None,
+                tertiary: None,
+                usage_rows: None,
+                provider_cost: None,
+                cursor_requests: None,
+                updated_at: Utc::now(),
+                identity: Some(ProviderIdentitySnapshot {
+                    account_email: Some(email.to_string()),
+                    account_organization: None,
+                    login_method: plan.map(|p| p.to_string()),
+                }),
+            },
+            Some(email.to_string()),
+            None,
+            None,
+        );
+        payload.source = source.to_string();
+        payload
+    }
+
+    #[test]
+    fn drops_free_accounts_when_active_supergrok_exists() {
+        let successes = vec![
+            test_payload("paid@hotmail.com", Some("SuperGrok"), "native-auth"),
+            test_payload("free@gmail.com", None, "Zen"),
+        ];
+        let filtered = prefer_active_subscription_accounts(successes);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].account.as_deref(), Some("paid@hotmail.com"));
+        assert!(payload_has_active_plan(&filtered[0]));
+    }
+
+    #[test]
+    fn keeps_free_accounts_when_no_active_subscription() {
+        let successes = vec![
+            test_payload("a@gmail.com", None, "Zen"),
+            test_payload("b@gmail.com", None, "Chrome"),
+        ];
+        let filtered = prefer_active_subscription_accounts(successes);
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn keeps_multiple_active_paid_accounts() {
+        let successes = vec![
+            test_payload("one@x.com", Some("SuperGrok"), "native-auth"),
+            test_payload("two@x.com", Some("SuperGrok Heavy"), "Zen"),
+            test_payload("free@x.com", None, "Chrome"),
+        ];
+        let filtered = prefer_active_subscription_accounts(successes);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(payload_has_active_plan));
     }
 }
