@@ -139,6 +139,12 @@ const kdeProviderConfig = loadKdeProviderConfig();
 
 const nativeProviders = new Set(["antigravity", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
+// Upstream codexbar cost only scans Claude/Codex local logs. Native cost covers
+// OpenCode SQLite, Cursor dashboard events, and Grok local session usage.
+// Antigravity / Devin only expose quota percentages (no absolute token history).
+const CODEXBAR_COST_PROVIDERS = new Set(["codex", "claude"]);
+const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok"]);
+
 const linuxAutoFallbacks = {
   codex: "cli",
   claude: "cli",
@@ -151,7 +157,7 @@ const linuxAutoFallbacks = {
   factory: "cli",
   // Grok agent-stdio billing RPC is broken (-32601). The native fetcher reads
   // every session: ~/.grok/auth.json (grok login) plus browser sso cookies
-  // (Chrome/Zen/Firefox) so multi-account SuperGrok usage shows up.
+  // (Chrome/Zen/Firefox). Plan is only SuperGrok when /rest/subscriptions is active.
   grok: "native",
   jetbrains: "cli",
   kilo: "api",
@@ -313,48 +319,99 @@ function runUsageForConfig(config) {
 }
 
 function runCost() {
-  const configs = effectiveProviderConfigs().length > 0
+  const configs = (effectiveProviderConfigs().length > 0
     ? effectiveProviderConfigs()
-    : [{ provider }];
+    : [{ provider, includeCost: true }])
+    .filter((config) => config.includeCost !== false);
+
+  if (configs.length === 0) {
+    return [];
+  }
+
   const results = [];
-  for (const config of configs) {
-    const commandArgs = [
-      "cost",
-      "--format",
-      "json",
-      "--json-only",
-      "--provider",
-      config.provider,
-    ];
-    const command = commandForConfig(config);
-    try {
-      const payload = sharedFetch("cost", {
-        command,
-        commandArgs,
-        provider: normalizeProviderId(config.provider),
-        apiKeyHash: hashSecret(config.apiKey),
-        account: clean(config.account),
-      }, () => {
-        try {
-          return runJSON(command, commandArgs, config.provider, config.apiKey || "");
-        } catch (error) {
-          return [{
-            provider: "cost",
-            error: { message: shortError(error, command) },
-          }];
-        }
-      });
-      results.push(...asArray(payload));
-    } catch (error) {
-      results.push({
-        provider: "cost",
-        error: {
-          message: shortError(error, command),
-        },
-      });
+  const seenProviders = new Set();
+
+  const codexbarProviders = uniqueProviderIds(configs.filter((config) =>
+    CODEXBAR_COST_PROVIDERS.has(normalizeProviderId(config.provider))
+  ));
+  if (codexbarProviders.length > 0) {
+    results.push(...fetchCostWithCommand(
+      currentCliPath(),
+      codexbarProviders.length === 1 ? codexbarProviders[0] : "all",
+      "codexbar",
+    ));
+    for (const id of codexbarProviders) {
+      seenProviders.add(id);
     }
   }
-  return results;
+
+  const nativeProvidersForCost = uniqueProviderIds(configs.filter((config) =>
+    NATIVE_COST_PROVIDERS.has(normalizeProviderId(config.provider))
+  ));
+  for (const providerId of nativeProvidersForCost) {
+    results.push(...fetchCostWithCommand(nativeCliPath, providerId, "native"));
+    seenProviders.add(providerId);
+  }
+
+  // When auto-discovery requested a bare "all" without an explicit list, still
+  // try native OpenCode costs so local spend shows even if usage cookies fail.
+  if (provider === "all" && configs.every((config) => !config._fromConfigs)) {
+    for (const providerId of NATIVE_COST_PROVIDERS) {
+      if (!seenProviders.has(providerId)) {
+        results.push(...fetchCostWithCommand(nativeCliPath, providerId, "native"));
+      }
+    }
+  }
+
+  return results.filter((item) => item && !item.error);
+}
+
+function uniqueProviderIds(configs) {
+  const ids = [];
+  const seen = new Set();
+  for (const config of configs) {
+    const id = normalizeProviderId(config.provider);
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function fetchCostWithCommand(command, providerId, backend) {
+  const commandArgs = [
+    "cost",
+    "--format",
+    "json",
+    "--json-only",
+    "--provider",
+    providerId,
+  ];
+  try {
+    const payload = sharedFetch("cost", {
+      command,
+      commandArgs,
+      provider: providerId,
+      backend,
+    }, () => {
+      try {
+        return runJSON(command, commandArgs, providerId, "");
+      } catch (error) {
+        return [{
+          provider: "cost",
+          error: { message: shortError(error, command) },
+        }];
+      }
+    });
+    return asArray(payload).filter((item) => item && typeof item === "object" && !item.error);
+  } catch (error) {
+    return [{
+      provider: "cost",
+      error: { message: shortError(error, command) },
+    }];
+  }
 }
 
 function sharedFetch(namespace, identity, producer) {
@@ -541,13 +598,22 @@ function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "
 function normalizeSnapshot(usagePayload, costPayload) {
   const costByProvider = new Map();
   for (const item of asArray(costPayload)) {
-    if (item && typeof item.provider === "string") {
+    if (!item || typeof item.provider !== "string" || item.error) {
+      continue;
+    }
+    // Prefer the first successful cost payload per provider id.
+    if (!costByProvider.has(item.provider)) {
       costByProvider.set(item.provider, item);
     }
   }
 
+  const costEnabled = costEnabledProviders();
+
   const entries = asArray(usagePayload).map((item) => {
-    const cost = costByProvider.get(item.provider);
+    const providerId = item.provider || "unknown";
+    const cost = costEnabled.has(normalizeProviderId(providerId))
+      ? costByProvider.get(providerId)
+      : null;
     return normalizeProvider(item, cost);
   });
 
@@ -572,10 +638,31 @@ function normalizeSnapshot(usagePayload, costPayload) {
     }
   }
 
-  if (filteredEntries.length === 0 && costByProvider.size > 0) {
-    for (const [providerId, cost] of costByProvider) {
-      if (providerId !== "cost") {
-        filteredEntries.push(normalizeProvider({ provider: providerId, source: "local" }, cost));
+  // Surface local cost even when usage failed (or was never configured).
+  // Prefer replacing a pure error card with cost-backed stats over leaving
+  // the user with only a red failure for providers that still have spend.
+  const successProviders = new Set(
+    filteredEntries.filter((entry) => !entry.error).map((entry) => entry.provider),
+  );
+  const presentProviders = new Set(filteredEntries.map((entry) => entry.provider));
+  for (const [providerId, cost] of costByProvider) {
+    if (providerId === "cost" || providerId === "cli") {
+      continue;
+    }
+    if (!costEnabled.has(normalizeProviderId(providerId))) {
+      continue;
+    }
+    if (!presentProviders.has(providerId)) {
+      filteredEntries.push(normalizeProvider({ provider: providerId, source: "local" }, cost));
+      presentProviders.add(providerId);
+      successProviders.add(providerId);
+      continue;
+    }
+    if (!successProviders.has(providerId)) {
+      const index = filteredEntries.findIndex((entry) => entry.provider === providerId && entry.error);
+      if (index >= 0) {
+        filteredEntries[index] = normalizeProvider({ provider: providerId, source: "local" }, cost);
+        successProviders.add(providerId);
       }
     }
   }
@@ -589,8 +676,24 @@ function normalizeSnapshot(usagePayload, costPayload) {
     generatedAt: new Date().toISOString(),
     requestedProvider: provider,
     entries: filteredEntries,
-    costError: costByProvider.get("cost")?.error?.message || null,
+    costError: null,
   };
+}
+
+function costEnabledProviders() {
+  const configs = effectiveProviderConfigs();
+  if (configs.length === 0) {
+    // No explicit list: allow every cost backend we know about.
+    return new Set([...CODEXBAR_COST_PROVIDERS, ...NATIVE_COST_PROVIDERS]);
+  }
+  const enabled = new Set();
+  for (const config of configs) {
+    if (config.includeCost === false) {
+      continue;
+    }
+    enabled.add(normalizeProviderId(config.provider));
+  }
+  return enabled;
 }
 
 /**
@@ -641,6 +744,7 @@ function normalizeProvider(item, cost) {
   }
 
   const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
+  const tokenUsage = buildTokenUsage(cost, usage);
   return {
     provider: providerId,
     account,
@@ -655,17 +759,54 @@ function normalizeProvider(item, cost) {
     rows,
     creditsRemaining,
     codeReviewRemainingPercent: numberOrNull(dashboard.codeReviewRemainingPercent),
-    tokenUsage: cost ? {
-      sessionCostUSD: numberOrNull(cost.sessionCostUSD),
-      sessionTokens: integerOrNull(cost.sessionTokens),
-      last30DaysCostUSD: numberOrNull(cost.last30DaysCostUSD),
-      last30DaysTokens: integerOrNull(cost.last30DaysTokens),
-      currencyCode: cost.currencyCode || "USD",
-      sessionLabel: cost.sessionLabel || "Today",
-      last30DaysLabel: cost.last30DaysLabel || "30d",
-    } : null,
+    tokenUsage,
     dailyUsage,
   };
+}
+
+function buildTokenUsage(cost, usage) {
+  if (cost && !cost.error) {
+    const sessionCostUSD = numberOrNull(cost.sessionCostUSD);
+    const sessionTokens = integerOrNull(cost.sessionTokens);
+    const last30DaysCostUSD = numberOrNull(cost.last30DaysCostUSD);
+    const last30DaysTokens = integerOrNull(cost.last30DaysTokens);
+    if (
+      sessionCostUSD !== null
+      || sessionTokens !== null
+      || last30DaysCostUSD !== null
+      || last30DaysTokens !== null
+    ) {
+      return {
+        sessionCostUSD,
+        sessionTokens,
+        last30DaysCostUSD,
+        last30DaysTokens,
+        currencyCode: cost.currencyCode || "USD",
+        sessionLabel: cost.sessionLabel || "Today",
+        last30DaysLabel: cost.last30DaysLabel || "30d",
+      };
+    }
+  }
+
+  // Cursor (and similar) expose a period spend on the usage payload when the
+  // dedicated cost scanner has nothing local to aggregate.
+  const providerCost = usage?.providerCost || usage?.provider_cost || null;
+  if (providerCost) {
+    const used = numberOrNull(providerCost.used);
+    if (used !== null) {
+      return {
+        sessionCostUSD: null,
+        sessionTokens: null,
+        last30DaysCostUSD: used,
+        last30DaysTokens: null,
+        currencyCode: providerCost.currencyCode || providerCost.currency_code || "USD",
+        sessionLabel: "Today",
+        last30DaysLabel: providerCost.period || "Period",
+      };
+    }
+  }
+
+  return null;
 }
 
 function configuredProviderSiteUrl(providerId) {
@@ -809,6 +950,9 @@ function parseProviderConfigs(raw) {
       accountIndex: Number(item.accountIndex || 0),
       allAccounts: item.allAccounts === true,
       apiKey: clean(item.apiKey),
+      // Default on: users opt out per provider when they do not want spend stats.
+      includeCost: item.includeCost !== false,
+      _fromConfigs: true,
     }));
 }
 

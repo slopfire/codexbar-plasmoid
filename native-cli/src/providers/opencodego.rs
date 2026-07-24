@@ -1,29 +1,53 @@
 use crate::config::workspace_id;
 use crate::cookies::{resolve_all_cookie_headers, resolve_cookie_header};
 use crate::http::HttpClient;
-use crate::opencodego_local::{can_read_local_usage, fetch_local_usage};
+use crate::opencodego_local::can_read_local_usage;
 use crate::output::{ProviderPayload, UsageSnapshot};
-use crate::providers::opencode_shared::{extract_account_email, fetch_usage_page, fetch_workspace_id, parse_usage};
+use crate::providers::opencode_shared::{
+    extract_account_email, fetch_usage_page, fetch_workspace_id, parse_usage,
+};
 use anyhow::Result;
 use std::path::Path;
 
-/// Fetch OpenCode Go usage, discovering every signed-in account across browser
-/// cookie stores. Returns one payload per account so the plasmoid can render
-/// each account (with its email) separately.
+/// Fetch OpenCode Go **subscription** usage, discovering every signed-in account
+/// across browser cookie stores. Returns one payload per account so the plasmoid
+/// can render each account (with its email) separately.
+///
+/// Rate-limit bars (rolling / weekly / monthly) only come from the live Go plan
+/// API. Local OpenCode SQLite history is pay-as-you-go spend and must not be
+/// mapped onto the subscription $12/$30/$60 windows — that produced full "100%"
+/// remaining bars for users with an API key but no Go plan. Local token spend is
+/// still surfaced via the separate `cost` command.
 pub fn fetch(http: &HttpClient, home: &Path) -> Vec<ProviderPayload> {
     let cookies = resolve_all_cookie_headers("opencodego");
     if !cookies.is_empty() {
         // A single manual config cookie may carry a configured workspace id;
         // auto-discovered browser sessions always resolve their own workspace.
         let use_config_workspace = cookies.len() == 1 && cookies[0].source == "config";
-        return cookies
+        let payloads: Vec<ProviderPayload> = cookies
             .iter()
             .map(|cookie| fetch_one_web(http, &cookie.header, &cookie.source, use_config_workspace))
             .collect();
+        let successes: Vec<ProviderPayload> = payloads
+            .iter()
+            .filter(|payload| payload.error.is_none())
+            .cloned()
+            .collect();
+        if !successes.is_empty() {
+            return successes;
+        }
+        // Prefer the real web failure (plan not enabled, session expired, …)
+        // over inventing subscription bars from local API spend.
+        return payloads.into_iter().take(1).collect();
     }
 
+    // No browser session → no subscription rate limits. The plasmoid helper
+    // still attaches local `opencodego` cost when spend exists in SQLite.
     if can_read_local_usage(home) {
-        return vec![fetch_local(home)];
+        return vec![ProviderPayload::error(
+            "opencodego",
+            "No OpenCode Go subscription session found. Rate limits need an active Go plan (sign in at opencode.ai). Local token spend still shows when cost is enabled.",
+        )];
     }
 
     vec![ProviderPayload::error(
@@ -35,7 +59,12 @@ pub fn fetch(http: &HttpClient, home: &Path) -> Vec<ProviderPayload> {
     )]
 }
 
-fn fetch_one_web(http: &HttpClient, cookie_header: &str, source_label: &str, use_config_workspace: bool) -> ProviderPayload {
+fn fetch_one_web(
+    http: &HttpClient,
+    cookie_header: &str,
+    source_label: &str,
+    use_config_workspace: bool,
+) -> ProviderPayload {
     match fetch_one_web_inner(http, cookie_header, source_label, use_config_workspace) {
         Ok(payload) => payload,
         Err(error) => {
@@ -53,16 +82,24 @@ fn friendly_error(error: &anyhow::Error) -> String {
     let lower = raw.to_lowercase();
     let trimmed = raw.trim();
 
-    if lower.contains("missing opencode go usage fields") {
-        return "OpenCode Go not enabled for this account.".to_string();
+    if lower.contains("missing opencode go usage fields")
+        || lower.contains("no subscription usage data")
+    {
+        return "OpenCode Go plan not enabled for this account. Local API spend still shows under cost.".to_string();
     }
-    if lower.contains("opencode session cookie is invalid") || lower.contains("session cookie is invalid or expired") {
+    if lower.contains("opencode session cookie is invalid")
+        || lower.contains("session cookie is invalid or expired")
+    {
         return "Session expired. Re-login to OpenCode Go in this browser.".to_string();
     }
     if lower.contains("opencode workspace id") {
         return "No OpenCode workspace found for this account.".to_string();
     }
-    if lower.contains("401") || lower.contains("403") || lower.contains("unauthorized") || lower.contains("forbidden") {
+    if lower.contains("401")
+        || lower.contains("403")
+        || lower.contains("unauthorized")
+        || lower.contains("forbidden")
+    {
         return "Session expired. Re-login to OpenCode Go in this browser.".to_string();
     }
     if lower.contains("404") || lower.contains("not found") {
@@ -71,7 +108,11 @@ fn friendly_error(error: &anyhow::Error) -> String {
     if lower.contains("timed out") || lower.contains("timeout") {
         return "Request timed out.".to_string();
     }
-    if lower.contains("connection refused") || lower.contains("dns") || lower.contains("network") || lower.contains("unreachable") {
+    if lower.contains("connection refused")
+        || lower.contains("dns")
+        || lower.contains("network")
+        || lower.contains("unreachable")
+    {
         return "Connection failed.".to_string();
     }
     if lower.contains("post https://") || lower.contains("status server error") {
@@ -119,26 +160,4 @@ fn fetch_one_web_inner(
     payload.source = source_label.to_string();
     payload.site_url = Some(format!("https://opencode.ai/workspace/{workspace}/go"));
     Ok(payload)
-}
-
-fn fetch_local(home: &Path) -> ProviderPayload {
-    match fetch_local_usage(home) {
-        Ok(local) => ProviderPayload::ok(
-            "opencodego",
-            UsageSnapshot {
-                primary: Some(local.primary),
-                secondary: Some(local.secondary),
-                tertiary: Some(local.tertiary),
-                usage_rows: None,
-                provider_cost: None,
-                cursor_requests: None,
-                updated_at: local.updated_at,
-                identity: None,
-            },
-            None,
-            None,
-            None,
-        ),
-        Err(error) => ProviderPayload::error("opencodego", error.to_string()),
-    }
 }

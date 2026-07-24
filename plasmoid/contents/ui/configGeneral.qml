@@ -229,6 +229,7 @@ Kirigami.ScrollablePage {
                         required property string compactBarIds
                         required property string compactColor
                         required property string apiKey
+                        required property bool includeCost
 
                         property int visualIndex: DelegateModel.itemsIndex
 
@@ -261,6 +262,7 @@ Kirigami.ScrollablePage {
                             readonly property string compactBarIds: delegateRoot.compactBarIds
                             readonly property string compactColor: delegateRoot.compactColor
                             readonly property string apiKey: delegateRoot.apiKey
+                            readonly property bool includeCost: delegateRoot.includeCost
 
                             property bool colorPickerOpen: false
 
@@ -592,6 +594,12 @@ Kirigami.ScrollablePage {
                                         Layout.fillWidth: true
 
                                         QtControls.CheckBox {
+                                            text: i18n("Token & API costs")
+                                            checked: providerDelegate.includeCost
+                                            onToggled: page.setProviderProperty(providerDelegate.index, "includeCost", checked)
+                                        }
+
+                                        QtControls.CheckBox {
                                             text: i18n("Show in all-provider tray")
                                             checked: providerDelegate.showInCompactAll
                                             onToggled: page.setProviderProperty(providerDelegate.index, "showInCompactAll", checked)
@@ -811,7 +819,8 @@ Kirigami.ScrollablePage {
                                 compactBarLimit: 4,
                                 compactBarIds: page.defaultBarIds(provider.id),
                                 compactColor: "",
-                                apiKey: ""
+                                apiKey: "",
+                                includeCost: true
                             });
                         page.syncConfig();
                     }
@@ -837,7 +846,15 @@ Kirigami.ScrollablePage {
 
             QtControls.CheckBox {
                 id: includeCost
-                text: i18n("Local token costs")
+                text: i18n("Local token costs (global)")
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: i18n("Per-provider Token & API costs checkboxes above further filter which providers fetch spend stats.")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
+                visible: includeCost.checked
             }
 
             QtControls.CheckBox {
@@ -1100,7 +1117,8 @@ Kirigami.ScrollablePage {
                 compactBarLimit: compactBarLimitFor(item),
                 compactBarIds: compactBarIdsFor(item, provider.id),
                 compactColor: normalizeColor(item.compactColor || ""),
-                apiKey: String(item.apiKey || "")
+                apiKey: String(item.apiKey || ""),
+                includeCost: item.includeCost !== false
             };
         });
     }
@@ -1120,7 +1138,8 @@ Kirigami.ScrollablePage {
                 compactBarLimit: item.compactBarLimit,
                 compactBarIds: item.compactBarIds,
                 compactColor: item.compactColor,
-                apiKey: item.apiKey
+                apiKey: item.apiKey,
+                includeCost: item.includeCost !== false
             });
         }
         return JSON.stringify(items);

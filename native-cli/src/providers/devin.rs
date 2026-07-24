@@ -217,9 +217,10 @@ fn extract_percent(obj: &serde_json::Map<String, serde_json::Value>, keys: &[&st
 
 fn parse_percent_value(value: &serde_json::Value) -> Option<f64> {
     let raw = value.as_f64()?;
-    // Values ≤1 are fractions (0.0–1.0), convert to percentage
-    let percent = if raw <= 1.0 { raw * 100.0 } else { raw };
-    Some(percent.clamp(0.0, 100.0))
+    // Devin's quota endpoint returns used percentage points (0–100), not
+    // fractions. Treating `1` as 1.0 (=100%) previously made 1% used look like
+    // a fully exhausted weekly quota.
+    Some(raw.clamp(0.0, 100.0))
 }
 
 fn extract_reset_at(obj: &serde_json::Map<String, serde_json::Value>, prefix: &str) -> Option<DateTime<Utc>> {
@@ -303,8 +304,87 @@ fn find_window(value: &serde_json::Value, key_fragment: &str) -> Option<(f64, Op
     None
 }
 
+/// Product plan for the UI. Prefers explicit plan fields; omits labels when the
+/// payload marks the subscription inactive/cancelled/expired (same class of bug
+/// as hardcoding a paid plan for every account).
 fn extract_plan_name(value: &serde_json::Value) -> Option<String> {
-    find_string_field(value, &["plan_name", "planName", "plan", "tier", "subscription_tier"])
+    if subscription_inactive(value) {
+        return None;
+    }
+    // Prefer dedicated product fields before generic "plan"/"tier".
+    let raw = find_string_field(value, &["plan_name", "planName", "subscription_tier"])
+        .or_else(|| find_string_field(value, &["plan", "tier"]))?;
+    sanitize_plan_label(raw)
+}
+
+fn sanitize_plan_label(raw: String) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    // Noise values that can appear under a generic "plan" key.
+    match trimmed.to_ascii_lowercase().as_str() {
+        "true" | "false" | "null" | "none" | "unknown" | "quota" | "n/a" | "na" => None,
+        _ => Some(trimmed.to_string()),
+    }
+}
+
+fn subscription_inactive(value: &serde_json::Value) -> bool {
+    collect_status_strings(value)
+        .into_iter()
+        .any(|status| is_inactive_status(&status))
+}
+
+fn is_inactive_status(status: &str) -> bool {
+    let upper = status.trim().to_ascii_uppercase();
+    if upper.is_empty() {
+        return false;
+    }
+    // Active / trial-still-valid markers must not count as inactive.
+    if upper.contains("ACTIVE") && !upper.contains("INACTIVE") {
+        return false;
+    }
+    upper.contains("INACTIVE")
+        || upper.contains("CANCEL")
+        || upper.contains("EXPIRED")
+        || upper.contains("ENDED")
+        || upper == "NONE"
+        || upper == "FREE"
+        || upper == "DISABLED"
+}
+
+fn collect_status_strings(value: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    collect_status_strings_into(value, &mut out);
+    out
+}
+
+fn collect_status_strings_into(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, val) in map {
+                let key_l = key.to_ascii_lowercase();
+                if key_l == "status"
+                    || key_l == "subscription_status"
+                    || key_l == "subscriptionstatus"
+                    || key_l == "plan_status"
+                    || key_l == "planstatus"
+                    || key_l.ends_with("_status")
+                {
+                    if let Some(s) = val.as_str() {
+                        out.push(s.to_string());
+                    }
+                }
+                collect_status_strings_into(val, out);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_status_strings_into(item, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn find_string_field(value: &serde_json::Value, keys: &[&str]) -> Option<String> {
@@ -384,4 +464,144 @@ fn build_payload(snapshot: QuotaSnapshot) -> ProviderPayload {
         None,
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_percent_keeps_one_as_one_percent() {
+        assert_eq!(parse_percent_value(&json!(1)), Some(1.0));
+        assert_eq!(parse_percent_value(&json!(1.0)), Some(1.0));
+        assert_eq!(parse_percent_value(&json!(0)), Some(0.0));
+        assert_eq!(parse_percent_value(&json!(2)), Some(2.0));
+        assert_eq!(parse_percent_value(&json!(98.5)), Some(98.5));
+        assert_eq!(parse_percent_value(&json!(100)), Some(100.0));
+    }
+
+    #[test]
+    fn parse_quota_matches_devin_dashboard_used_percent() {
+        // Live shape from app.devin.ai/.../billing/quota/usage
+        let value = json!({
+            "is_quota_plan": true,
+            "has_quota_allocation": true,
+            "daily_percentage": 2,
+            "weekly_percentage": 1,
+            "daily_reset_at": "2026-07-24T00:00:00-08:00",
+            "weekly_reset_at": "2026-07-26T00:00:00-08:00",
+            "overage_balance": 0.0,
+            "hide_daily_quota": false
+        });
+
+        let snapshot = parse_quota(&value, "organizations/org-test").expect("quota");
+        assert_eq!(snapshot.daily_used_percent, Some(2.0));
+        assert_eq!(snapshot.weekly_used_percent, Some(1.0));
+        assert!(snapshot.daily_resets_at.is_some());
+        assert!(snapshot.weekly_resets_at.is_some());
+
+        let payload = build_payload(snapshot);
+        let usage = payload.usage.expect("usage");
+        let daily = usage.primary.expect("daily");
+        let weekly = usage.secondary.expect("weekly");
+        assert_eq!(daily.used_percent, 2.0);
+        assert_eq!(daily.remaining_percent, 98.0);
+        assert_eq!(weekly.used_percent, 1.0);
+        assert_eq!(weekly.remaining_percent, 99.0);
+    }
+
+    #[test]
+    fn parse_quota_handles_zero_and_full_usage() {
+        let value = json!({
+            "daily_percentage": 0,
+            "weekly_percentage": 100,
+            "daily_reset_at": "2026-07-24T00:00:00Z",
+            "weekly_reset_at": "2026-07-26T00:00:00Z"
+        });
+        let snapshot = parse_quota(&value, "org/acme").expect("quota");
+        assert_eq!(snapshot.daily_used_percent, Some(0.0));
+        assert_eq!(snapshot.weekly_used_percent, Some(100.0));
+        assert_eq!(snapshot.organization, "acme");
+    }
+
+    #[test]
+    fn active_plan_name_is_surfaced() {
+        let value = json!({
+            "daily_percentage": 10,
+            "weekly_percentage": 5,
+            "plan_name": "Team",
+            "subscription_status": "active"
+        });
+        assert_eq!(extract_plan_name(&value).as_deref(), Some("Team"));
+        let snapshot = parse_quota(&value, "org/acme").expect("quota");
+        assert_eq!(snapshot.plan_name.as_deref(), Some("Team"));
+        let payload = build_payload(snapshot);
+        assert_eq!(
+            payload
+                .usage
+                .as_ref()
+                .and_then(|u| u.identity.as_ref())
+                .and_then(|i| i.login_method.as_deref()),
+            Some("Team")
+        );
+    }
+
+    #[test]
+    fn inactive_subscription_does_not_surface_paid_plan() {
+        let value = json!({
+            "daily_percentage": 0,
+            "weekly_percentage": 0,
+            "plan_name": "Team",
+            "subscription_status": "inactive"
+        });
+        assert_eq!(extract_plan_name(&value), None);
+        let snapshot = parse_quota(&value, "org/acme").expect("quota");
+        assert_eq!(snapshot.plan_name, None);
+        let payload = build_payload(snapshot);
+        assert_eq!(
+            payload
+                .usage
+                .as_ref()
+                .and_then(|u| u.identity.as_ref())
+                .and_then(|i| i.login_method.clone()),
+            None
+        );
+    }
+
+    #[test]
+    fn cancelled_nested_status_suppresses_plan() {
+        let value = json!({
+            "daily_percentage": 1,
+            "weekly_percentage": 1,
+            "billing": {
+                "plan": "Enterprise",
+                "status": "cancelled"
+            }
+        });
+        assert_eq!(extract_plan_name(&value), None);
+    }
+
+    #[test]
+    fn quota_noise_plan_values_are_ignored() {
+        let value = json!({
+            "daily_percentage": 1,
+            "weekly_percentage": 1,
+            "plan": "quota",
+            "is_quota_plan": true
+        });
+        assert_eq!(extract_plan_name(&value), None);
+    }
+
+    #[test]
+    fn dashboard_shape_without_plan_field_has_null_plan() {
+        // Live shape from app.devin.ai — no plan_name; must not invent one.
+        let value = json!({
+            "is_quota_plan": true,
+            "has_quota_allocation": true,
+            "daily_percentage": 2,
+            "weekly_percentage": 1
+        });
+        assert_eq!(extract_plan_name(&value), None);
+    }
 }

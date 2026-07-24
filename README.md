@@ -284,7 +284,8 @@ Authentication options:
 - `~/.codexbar/config.json` provider `cookie_header`
 - `CODEXBAR_PLASMOID_CURSOR_COOKIE`, `CODEXBAR_PLASMOID_OPENCODE_COOKIE`, or `CODEXBAR_PLASMOID_OPENCODEGO_COOKIE` (or older `SPLAZMA_*` fallback)
 - Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)
-- OpenCode Go local usage from `~/.local/share/opencode/opencode.db` when web cookies are unavailable
+- OpenCode Go subscription rate limits from an opencode.ai session (not estimated from local SQLite)
+- OpenCode / OpenCode Go local token spend from `~/.local/share/opencode/*.db` (cost)
 - Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
 
 Native cookie / auth configuration uses a provider list (local only — do not commit real secrets):

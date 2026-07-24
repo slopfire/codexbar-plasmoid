@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 const BILLING_URL: &str = "https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig";
 const SESSION_URL: &str = "https://grok.com/api/auth/session";
+const SUBSCRIPTIONS_URL: &str = "https://grok.com/rest/subscriptions";
 const USERINFO_URL: &str = "https://auth.x.ai/oauth2/userinfo";
 
 /// Empty gRPC-web framed protobuf message (flag 0 + length 0).
@@ -21,8 +22,8 @@ const EMPTY_GRPC_WEB_FRAME: &[u8] = &[0x00, 0x00, 0x00, 0x00, 0x00];
 
 /// Fetch every visible Grok account: `grok login` credentials in `~/.grok/auth.json`
 /// plus browser `sso` sessions (Chrome, Zen, Firefox, …). Returns one payload per
-/// distinct account so the plasmoid can show both SuperGrok CLI and grok.com
-/// browser logins side by side.
+/// distinct account so the plasmoid can show paid SuperGrok and free grok.com
+/// sessions side by side.
 pub fn fetch(http: &HttpClient) -> Vec<ProviderPayload> {
     let mut payloads = Vec::new();
     let mut seen_keys = HashSet::new();
@@ -198,9 +199,9 @@ fn fetch_bearer(http: &HttpClient, auth: &AuthCredential) -> Result<ProviderPayl
         }
     }
 
-    // Product plan for Grok Build / grok.com paid weekly limit (UI: "Weekly SuperGrok Limit").
-    // auth_mode is the login transport (oidc/…), not a plan name — do not surface it as Plan.
-    let plan = Some("SuperGrok".to_string());
+    // Plan comes from /rest/subscriptions (active only). Free / cancelled accounts
+    // still have weekly free limits via GetGrokCreditsConfig — do not label those SuperGrok.
+    let plan = fetch_active_plan(http, AuthKind::Bearer(&auth.bearer));
 
     Ok(build_payload(
         billing,
@@ -222,8 +223,7 @@ fn fetch_cookie(http: &HttpClient, cookie_header: &str, source_label: &str) -> R
     let session = fetch_web_session(http, cookie_header).ok();
     let email = session.as_ref().and_then(|s| s.email.clone());
     let user_id = session.as_ref().and_then(|s| s.user_id.clone());
-    // Same weekly SuperGrok limit product as native-auth; browser vs CLI is `source`, not Plan.
-    let plan = Some("SuperGrok".to_string());
+    let plan = fetch_active_plan(http, AuthKind::Cookie(cookie_header));
 
     Ok(build_payload(
         billing,
@@ -415,6 +415,81 @@ fn fetch_userinfo(http: &HttpClient, bearer: &str) -> Result<UserInfo> {
     serde_json::from_value(value).context("parse userinfo")
 }
 
+enum AuthKind<'a> {
+    Bearer(&'a str),
+    Cookie(&'a str),
+}
+
+/// Resolve a display plan only when the account has an **active** subscription.
+/// Inactive / cancelled SuperGrok (status INACTIVE) returns None so the UI does
+/// not keep showing Plan: SuperGrok after the period ends.
+fn fetch_active_plan(http: &HttpClient, auth: AuthKind<'_>) -> Option<String> {
+    let mut headers = HeaderMap::new();
+    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+    headers.insert("Referer", HeaderValue::from_static("https://grok.com/"));
+    headers.insert("Origin", HeaderValue::from_static("https://grok.com"));
+    match auth {
+        AuthKind::Bearer(token) => {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {token}")).ok()?,
+            );
+        }
+        AuthKind::Cookie(cookie) => {
+            headers.insert(COOKIE, HeaderValue::from_str(cookie).ok()?);
+        }
+    }
+    let value = http.fetch_json_value(SUBSCRIPTIONS_URL, &headers).ok()?;
+    plan_from_subscriptions(&value)
+}
+
+fn plan_from_subscriptions(value: &serde_json::Value) -> Option<String> {
+    let subscriptions = value.get("subscriptions")?.as_array()?;
+    for sub in subscriptions {
+        let status = sub
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_ascii_uppercase();
+        if status != "SUBSCRIPTION_STATUS_ACTIVE" {
+            continue;
+        }
+        let tier = sub.get("tier").and_then(|v| v.as_str()).unwrap_or("");
+        return Some(display_subscription_tier(tier));
+    }
+    None
+}
+
+fn display_subscription_tier(tier: &str) -> String {
+    match tier {
+        "SUBSCRIPTION_TIER_GROK_PRO" | "SUBSCRIPTION_TIER_SUPERGROK" => "SuperGrok".to_string(),
+        "SUBSCRIPTION_TIER_GROK_PRO_HEAVY"
+        | "SUBSCRIPTION_TIER_SUPERGROK_HEAVY"
+        | "SUBSCRIPTION_TIER_GROK_HEAVY" => "SuperGrok Heavy".to_string(),
+        "" => "SuperGrok".to_string(),
+        other => {
+            let stripped = other
+                .strip_prefix("SUBSCRIPTION_TIER_")
+                .unwrap_or(other)
+                .replace('_', " ");
+            // Title-case words for unknown tiers (e.g. GROK BASIC -> Grok Basic).
+            stripped
+                .split_whitespace()
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        Some(first) => {
+                            first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                        }
+                        None => String::new(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+    }
+}
+
 // --- minimal protobuf field readers (proto3 wire types) ---
 
 fn read_varint(buf: &[u8], mut offset: usize) -> Option<(u64, usize)> {
@@ -544,6 +619,7 @@ fn find_varint(buf: &[u8], field_num: u32) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parses_known_billing_frame() {
@@ -559,5 +635,57 @@ mod tests {
         frame.extend_from_slice(b"\x80\x00\x00\x00\x0fgrpc-status:0\r\n");
         let snap = parse_billing_response(&frame).unwrap();
         assert!((snap.used_percent - 15.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn active_grok_pro_is_supergrok() {
+        let value = json!({
+            "subscriptions": [{
+                "tier": "SUBSCRIPTION_TIER_GROK_PRO",
+                "status": "SUBSCRIPTION_STATUS_ACTIVE"
+            }]
+        });
+        assert_eq!(
+            plan_from_subscriptions(&value).as_deref(),
+            Some("SuperGrok")
+        );
+    }
+
+    #[test]
+    fn inactive_subscription_is_not_shown_as_plan() {
+        let value = json!({
+            "subscriptions": [{
+                "tier": "SUBSCRIPTION_TIER_GROK_PRO",
+                "status": "SUBSCRIPTION_STATUS_INACTIVE",
+                "cancelAtPeriodEnd": true
+            }]
+        });
+        assert_eq!(plan_from_subscriptions(&value), None);
+    }
+
+    #[test]
+    fn empty_subscriptions_means_free() {
+        let value = json!({ "subscriptions": [] });
+        assert_eq!(plan_from_subscriptions(&value), None);
+    }
+
+    #[test]
+    fn prefers_active_when_mixed() {
+        let value = json!({
+            "subscriptions": [
+                {
+                    "tier": "SUBSCRIPTION_TIER_GROK_PRO",
+                    "status": "SUBSCRIPTION_STATUS_INACTIVE"
+                },
+                {
+                    "tier": "SUBSCRIPTION_TIER_GROK_PRO_HEAVY",
+                    "status": "SUBSCRIPTION_STATUS_ACTIVE"
+                }
+            ]
+        });
+        assert_eq!(
+            plan_from_subscriptions(&value).as_deref(),
+            Some("SuperGrok Heavy")
+        );
     }
 }

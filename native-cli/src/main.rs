@@ -3,6 +3,7 @@ mod antigravity_oauth_discover;
 mod config;
 mod cookies;
 mod http;
+mod local_cost;
 mod opencodego_local;
 mod output;
 mod providers;
@@ -97,8 +98,7 @@ fn run_usage(args: &[String]) -> anyhow::Result<()> {
 
     let command = args[1].as_str();
     if command == "cost" {
-        println!("[]");
-        return Ok(());
+        return run_cost(&args[2..]);
     }
     if command != "usage" {
         anyhow::bail!("Unknown command: {command}");
@@ -157,6 +157,51 @@ fn run_usage(args: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn run_cost(args: &[String]) -> anyhow::Result<()> {
+    let parsed = parse_args(args);
+    let provider = parsed
+        .get("provider")
+        .map(|value| normalize_provider_id(value))
+        .unwrap_or_else(|| "all".to_string());
+    let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"));
+    let timeout_secs = parsed
+        .get("web-timeout")
+        .or(parsed.get("timeout"))
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(45)
+        .clamp(5, 300);
+    let http = HttpClient::new(Duration::from_secs(timeout_secs))?;
+
+    if !local_cost::supports_cost(&provider) {
+        // Match upstream codexbar's graceful empty result for unsupported ids
+        // when the helper probes the native binary first.
+        // Devin / Antigravity only expose quota percentages — no token history.
+        println!("[]");
+        return Ok(());
+    }
+
+    match local_cost::fetch_costs(&provider, &home, &http) {
+        Ok(snapshots) => {
+            println!("{}", serde_json::to_string(&snapshots)?);
+            Ok(())
+        }
+        Err(error) => {
+            // Soft-fail so a missing OpenCode install / cookie does not fail
+            // the whole multi-provider cost pass.
+            let payload = serde_json::json!([{
+                "provider": "cost",
+                "error": {
+                    "code": 1,
+                    "kind": "provider",
+                    "message": error.to_string(),
+                }
+            }]);
+            println!("{}", payload);
+            Ok(())
+        }
+    }
+}
+
 fn parse_args(args: &[String]) -> std::collections::HashMap<String, String> {
     let mut parsed = std::collections::HashMap::new();
     let mut index = 0;
@@ -185,11 +230,19 @@ fn print_help() {
 
 Usage:
   codexbar-plasmoid usage --format json --json-only --provider <id> --source native|native-auth [--status] [--web-timeout <seconds>]
+  codexbar-plasmoid cost --format json --json-only --provider <id>
   codexbar-plasmoid login --provider antigravity [--manual] [--no-browser] [--port <n>] [--timeout <seconds>]
   codexbar-plasmoid logout --provider antigravity [--account <email>] [--all]
 
 Providers:
   antigravity, cursor, devin, grok, opencode, opencodego, all
+
+Cost (token spend / API $):
+  opencode, opencodego — ~/.local/share/opencode/*.db
+  cursor — dashboard usage events (session cookie)
+  grok — ~/.grok/sessions/**/updates.jsonl (tokens; $ is 0 for SuperGrok)
+  all — soft-merge of the above
+  (antigravity / devin: quota % only, no absolute token history)
 
 Authentication:
   - Antigravity (--source native): running agy/IDE first, then Cloud Code OAuth fallback
@@ -202,6 +255,7 @@ Authentication:
   - ~/.codexbar/config.json provider cookieHeader / oauth_client_*
   - CODEXBAR_PLASMOID_CURSOR_COOKIE / CODEXBAR_PLASMOID_OPENCODE_COOKIE / CODEXBAR_PLASMOID_OPENCODEGO_COOKIE (or older SPLAZMA_* fallback)
   - Chrome/Chromium/Helium/Firefox/Zen cookie import (secret-tool required for encrypted Chromium cookies)
-  - OpenCode Go local usage from ~/.local/share/opencode/opencode.db"
+  - OpenCode Go subscription rate limits from opencode.ai session cookies
+  - OpenCode / OpenCode Go local token spend from ~/.local/share/opencode/*.db (cost)"
     );
 }

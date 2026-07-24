@@ -148,6 +148,7 @@ function normalizeProviders(raw) {
     accountIndex: Math.max(0, Number(item?.accountIndex || 0)),
     allAccounts: item?.allAccounts === true,
     apiKey: clean(item?.apiKey),
+    includeCost: item?.includeCost !== false,
   }));
 }
 

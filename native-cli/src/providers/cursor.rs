@@ -441,4 +441,49 @@ mod tests {
         assert!(usage.secondary.is_none());
         assert!(usage.tertiary.is_none());
     }
+
+    #[test]
+    fn membership_type_maps_to_live_plan_labels() {
+        // Plan shown in the UI is derived only from Cursor's membershipType —
+        // never a hardcoded paid tier for every account.
+        assert_eq!(format_membership("pro"), "Cursor Pro");
+        assert_eq!(format_membership("PRO"), "Cursor Pro");
+        assert_eq!(format_membership("free"), "Cursor Free");
+        assert_eq!(format_membership("hobby"), "Cursor Hobby");
+        assert_eq!(format_membership("team"), "Cursor Team");
+        assert_eq!(format_membership("enterprise"), "Cursor Enterprise");
+    }
+
+    #[test]
+    fn free_membership_is_not_labeled_as_pro() {
+        let summary: CursorUsageSummary = serde_json::from_str(
+            r#"{
+              "membershipType": "free",
+              "individualUsage": {
+                "plan": { "totalPercentUsed": 0 }
+              }
+            }"#,
+        )
+        .expect("usage summary JSON should deserialize");
+        let label = summary
+            .membership_type
+            .as_deref()
+            .map(format_membership);
+        assert_eq!(label.as_deref(), Some("Cursor Free"));
+        assert_ne!(label.as_deref(), Some("Cursor Pro"));
+    }
+
+    #[test]
+    fn missing_membership_type_yields_no_plan() {
+        let summary: CursorUsageSummary = serde_json::from_str(
+            r#"{ "individualUsage": { "plan": { "totalPercentUsed": 10 } } }"#,
+        )
+        .expect("usage summary JSON should deserialize");
+        assert!(summary.membership_type.is_none());
+        let label = summary
+            .membership_type
+            .as_deref()
+            .map(format_membership);
+        assert_eq!(label, None);
+    }
 }

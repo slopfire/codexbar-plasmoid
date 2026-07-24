@@ -137,7 +137,7 @@ fn missing_cookie_message(provider_id: &str) -> String {
     match normalize_provider_id(provider_id).as_str() {
         "cursor" => "No Cursor session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_CURSOR_COOKIE, or log in to cursor.com in Chrome/Chromium.".to_string(),
         "opencode" => "No OpenCode session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODE_COOKIE, or log in to opencode.ai in Chrome/Chromium.".to_string(),
-        "opencodego" => "No OpenCode Go session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODEGO_COOKIE, log in to opencode.ai, or use OpenCode Go locally.".to_string(),
+        "opencodego" => "No OpenCode Go subscription session found. Paste a Cookie header into ~/.codexbar/config.json, set CODEXBAR_PLASMOID_OPENCODEGO_COOKIE, or sign in to opencode.ai with an active Go plan. Local API spend still shows under cost.".to_string(),
         "grok" => "No Grok session found. Run `grok login`, or sign in to grok.com in Chrome/Zen, or paste a Cookie header into ~/.codexbar/config.json.".to_string(),
         _ => "No session cookie found.".to_string(),
     }
