@@ -183,6 +183,7 @@ const linuxAutoFallbacks = {
   venice: "api",
   zai: "api",
   vertexai: "oauth",
+  demo: "local",
 };
 
 function currentCliPath() {
@@ -334,6 +335,11 @@ function enrichCodexLimitResetCredits(items) {
 }
 
 function runUsageForConfig(config) {
+  // Built-in sample provider for tray/card UI testing — no CLI or network.
+  if (normalizeProviderId(config.provider) === "demo") {
+    return [buildDemoUsagePayload(config)];
+  }
+
   const commandArgs = [
     "usage",
     "--format",
@@ -390,6 +396,100 @@ function runUsageForConfig(config) {
       },
     }];
   }
+}
+
+/**
+ * Demo provider: fixed local sample data for widget UI checks.
+ * Put comma-separated remaining percents in the account field, e.g. "1,11,35,72".
+ * Defaults to low/mid values so tray bar fill and rounding are easy to verify.
+ */
+function buildDemoUsagePayload(config) {
+  const now = new Date();
+  const percents = parseDemoPercents(clean(config.account));
+  const usageRows = percents.map((percentLeft, index) => {
+    const title = demoRowTitle(index, percentLeft);
+    return {
+      id: `demo-${index + 1}`,
+      title,
+      percentLeft,
+      resetsAt: new Date(now.getTime() + (index + 1) * 36e5 * 6).toISOString(),
+    };
+  });
+
+  const dailyBreakdown = [];
+  for (let offset = 29; offset >= 0; offset -= 1) {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - offset);
+    const year = day.getFullYear();
+    const month = String(day.getMonth() + 1).padStart(2, "0");
+    const dayNum = String(day.getDate()).padStart(2, "0");
+    const dayKey = `${year}-${month}-${dayNum}`;
+    const totalTokens = 8000 + (29 - offset) * 1200 + (offset % 5) * 400;
+    const costUSD = Number((0.15 + (29 - offset) * 0.08 + (offset % 3) * 0.04).toFixed(2));
+    dailyBreakdown.push({
+      day: dayKey,
+      totalTokens,
+      totalCreditsUsed: costUSD,
+      modelBreakdowns: [
+        { name: "demo-model-a", costUSD: Number((costUSD * 0.65).toFixed(2)), totalTokens: Math.round(totalTokens * 0.6) },
+        { name: "demo-model-b", costUSD: Number((costUSD * 0.35).toFixed(2)), totalTokens: Math.round(totalTokens * 0.4) },
+      ],
+    });
+  }
+
+  const accountLabel = clean(config.account) || "1,11,35,72";
+  return {
+    provider: "demo",
+    source: "local",
+    version: "demo",
+    account: accountLabel,
+    status: includeStatus
+      ? { indicator: "none", description: "Demo / sample data" }
+      : null,
+    credits: showCredits
+      ? { remaining: 42.5, updatedAt: now.toISOString() }
+      : undefined,
+    usage: {
+      updatedAt: now.toISOString(),
+      accountEmail: "demo@local",
+      loginMethod: "demo",
+      usageRows,
+      providerCost: {
+        used: 12.34,
+        currencyCode: "USD",
+        period: "Period",
+      },
+    },
+    openaiDashboard: {
+      codeReviewRemainingPercent: 91,
+      dailyBreakdown,
+    },
+  };
+}
+
+function parseDemoPercents(raw) {
+  // Default set spans hairline → low → mid-low → healthy for tray fill tests.
+  const defaults = [1, 11, 35, 72];
+  if (!raw) {
+    return defaults;
+  }
+  // Allow "1,11,35" or "1 11 35" or "1%;11%;35%".
+  const parts = raw
+    .split(/[,;\s]+/)
+    .map((token) => Number(String(token).replace(/%/g, "").trim()))
+    .filter((value) => Number.isFinite(value));
+  if (parts.length === 0) {
+    return defaults;
+  }
+  return parts.slice(0, 4).map((value) => Math.max(0, Math.min(100, value)));
+}
+
+function demoRowTitle(index, percentLeft) {
+  const names = ["Low", "Session", "Weekly", "Extra"];
+  const base = names[index] || `Bar ${index + 1}`;
+  const rounded = Math.round(Number(percentLeft));
+  return `${base} ${rounded}%`;
 }
 
 function runCost() {
@@ -1217,6 +1317,8 @@ function providerLabels(providerId) {
     case "grok":
       // xAI UI labels this "Weekly SuperGrok Limit"; primary window is the weekly pool.
       return { session: "Weekly", weekly: "Weekly", tertiary: "Extra" };
+    case "demo":
+      return { session: "Low", weekly: "Session", tertiary: "Weekly" };
     default:
       return { session: "Session", weekly: "Weekly", tertiary: "Extra" };
   }

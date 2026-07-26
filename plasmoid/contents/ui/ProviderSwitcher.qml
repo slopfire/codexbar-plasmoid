@@ -198,7 +198,7 @@ Item {
     readonly property var knownProviderIconIds: [
         "abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude",
         "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram",
-        "deepseek", "devin", "doubao", "elevenlabs", "factory", "gemini", "grok",
+        "deepseek", "demo", "devin", "doubao", "elevenlabs", "factory", "gemini", "grok",
         "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo",
         "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter",
         "perplexity", "stepfun", "synthetic", "t3chat", "venice", "vertexai",

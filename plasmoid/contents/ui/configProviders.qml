@@ -44,7 +44,8 @@ Kirigami.ScrollablePage {
         api: i18n("API credentials"),
         web: i18n("Browser/web session"),
         native: i18n("Bundled Linux helper"),
-        "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)")
+        "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)"),
+        local: i18n("Built-in sample data (no CLI)")
     })
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },
@@ -90,7 +91,8 @@ Kirigami.ScrollablePage {
         { id: "t3chat", name: "T3 Chat", sources: ["auto", "web"], linuxDefault: "web" },
         { id: "vertexai", name: "Vertex AI", sources: ["auto", "oauth"], linuxDefault: "oauth" },
         { id: "windsurf", name: "Windsurf", sources: ["auto", "cli", "web"], linuxDefault: "cli" },
-        { id: "devin", name: "Devin", sources: ["auto", "native", "web"], linuxDefault: "native" }
+        { id: "devin", name: "Devin", sources: ["auto", "native", "web"], linuxDefault: "native" },
+        { id: "demo", name: "Demo (test)", sources: ["auto", "local"], linuxDefault: "local" }
     ]
 
     Component.onCompleted: {
@@ -494,11 +496,33 @@ Kirigami.ScrollablePage {
                                         }
                                     }
 
+                                    // Demo: remaining % list (no network / CLI)
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Kirigami.Units.smallSpacing
+                                        visible: providerDelegate.provider === "demo"
+
+                                        QtControls.Label {
+                                            Layout.fillWidth: true
+                                            text: i18n("Sample remaining percents (comma-separated, up to 4). Default: 1,11,35,72")
+                                            wrapMode: Text.Wrap
+                                            color: Kirigami.Theme.disabledTextColor
+                                        }
+
+                                        QtControls.TextField {
+                                            Layout.fillWidth: true
+                                            text: providerDelegate.account
+                                            placeholderText: i18n("1,11,35,72")
+                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "account", text)
+                                        }
+                                    }
+
                                     // Other providers: account filter toggle
                                     QtControls.Button {
                                         id: accountToggle
                                         Layout.fillWidth: true
                                         visible: providerDelegate.provider !== "devin"
+                                                 && providerDelegate.provider !== "demo"
                                         checkable: true
                                         checked: providerDelegate.account.length > 0 || providerDelegate.accountIndex > 0 || providerDelegate.allAccounts
                                         text: checked ? i18n("Account filter enabled") : i18n("Account filter")
@@ -514,7 +538,9 @@ Kirigami.ScrollablePage {
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        visible: providerDelegate.provider !== "devin" && accountToggle.checked
+                                        visible: providerDelegate.provider !== "devin"
+                                                 && providerDelegate.provider !== "demo"
+                                                 && accountToggle.checked
 
                                         QtControls.TextField {
                                             Layout.fillWidth: true
@@ -1113,7 +1139,8 @@ Kirigami.ScrollablePage {
             groq: "#b86c55",
             openrouter: "#4d88ad",
             llmproxy: "#4a9173",
-            devin: "#6769ad"
+            devin: "#6769ad",
+            demo: "#8b766e"
         };
         const normalized = String(providerId || "").toLowerCase().replace(/[-_]/g, "");
         const aliases = {

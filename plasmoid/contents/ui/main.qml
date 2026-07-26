@@ -198,7 +198,8 @@ PlasmoidItem {
                 groq: "Groq",
                 llmproxy: "LLM Proxy",
                 deepgram: "Deepgram",
-                devin: "Devin"
+                devin: "Devin",
+                demo: "Demo"
             };
             return names[provider] || String(provider || "CodexBar");
         }
@@ -297,7 +298,8 @@ PlasmoidItem {
                 groq: "#b86c55",
                 openrouter: "#4d88ad",
                 llmproxy: "#4a9173",
-                devin: "#6769ad"
+                devin: "#6769ad",
+                demo: "#8b766e"
             };
             return colors[provider] || Kirigami.Theme.highlightColor;
         }
