@@ -7,6 +7,15 @@
 - Package ID: `org.slopfire.codexbar-plasmoid`
 - Root element: `PlasmoidItem` (never plain `Item`)
 
+## After every change
+
+```bash
+./scripts/agent-check.sh          # preferred: static + virtual Plasma, no host UI
+./scripts/install-plasmoid.sh     # required by repo policy after features
+```
+
+See root `AGENTS.md` for the full agent playbook.
+
 ## Import Conventions
 
 Use Plasma 6 style — no version numbers except PlasmaComponents:
@@ -36,19 +45,14 @@ import org.kde.plasma.plasmoid
 - Use `i18n()` for all user-visible strings.
 - Never mix `anchors.fill` and `Layout.fillWidth` on the same item.
 
-## Validation Checklist
+## Isolation rules
 
-Run before declaring any plasmoid work complete:
-
-```bash
-qmllint plasmoid/contents/ui/*.qml plasmoid/contents/config/config.qml
-bash -n scripts/install-plasmoid.sh scripts/run-windowed.sh
-node --check plasmoid/contents/code/codexbar-plasmoid-helper.mjs
-```
+- Prefer `./scripts/run-virtual-plasma.sh` / `./scripts/agent-check.sh` over host windows.
+- Do **not** restart the user’s `plasmashell` for routine tests.
+- Latest virtual logs: `/tmp/codexbar-virtual-latest/app.log`
+- Mock CLI: `./scripts/setup-mock-cli.sh` → `/tmp/codexbar-plasma-mock/codexbar`
 
 ## Skills Available
-
-All agents in this project have access to these skills:
 
 | Skill | When to use |
 |-------|-------------|

@@ -1,12 +1,90 @@
 # Agent instructions
 
-after implementing a feature always install with ./scripts/install-plasmoid.sh
+This file is the **entrypoint** for agents working in this repository.
+
+## Do this after every feature
+
+```sh
+./scripts/agent-check.sh          # static + virtual Plasma (no host UI)
+./scripts/install-plasmoid.sh     # install/upgrade into the user Plasma prefix
+```
+
+Quick static-only (no KWin):
+
+```sh
+./scripts/agent-check.sh --quick
+```
+
+Install as part of the check:
+
+```sh
+./scripts/agent-check.sh --install
+```
+
+## Do not interrupt the host desktop
+
+| Prefer | Avoid |
+|--------|--------|
+| `./scripts/agent-check.sh` | Restarting `plasmashell` |
+| `./scripts/run-virtual-plasma.sh` | Scattering host `plasmawindowed` windows |
+| Logs under `/tmp/codexbar-virtual-latest/` | Screenshots unless the user asks |
+
+Host-visible `plasmawindowed` / computer-use only when you need AT-SPI interaction.
+
+## One-liners
+
+```sh
+# Full agent validation (default)
+./scripts/agent-check.sh
+
+# Virtual plasmoid only (package path, no install required)
+./scripts/run-virtual-plasma.sh --timeout 20
+cat /tmp/codexbar-virtual-latest/app.log
+
+# Form factors (plugin must be installed)
+./scripts/install-plasmoid.sh
+./scripts/run-virtual-plasma.sh --viewer planar --timeout 15
+./scripts/run-virtual-plasma.sh --viewer horizontal --timeout 15
+
+# Deterministic helper data
+./scripts/setup-mock-cli.sh
+PATH=/tmp/codexbar-plasma-mock:$PATH \
+  node plasmoid/contents/code/codexbar-plasmoid-helper.mjs --provider all --timeout 5
+
+# Host window (interrupts user slightly)
+./scripts/run-windowed.sh
+```
+
+## Package facts
+
+| | |
+|--|--|
+| Plugin id | `org.slopfire.codexbar-plasmoid` |
+| Package dir | `plasmoid/` |
+| Root QML | `PlasmoidItem` in `plasmoid/contents/ui/main.qml` |
+| Shared env | `scripts/lib/repo-env.sh` |
+
+**Plasma 6 launch rules**
+
+- `plasmawindowed /abs/path/to/plasmoid` — OK  
+- `plasmoidviewer -a org.slopfire.codexbar-plasmoid` after install — OK  
+- `plasmoidviewer /path/to/package` — **wrong** (path is not a package arg)
+
+## Skills (project)
+
+| Skill | When |
+|-------|------|
+| `kde-plasmoid-workflow` | Install / virtual run / package layout |
+| `codexbar-cli-bridge` | Helper JSON contract, mock CLI |
+| `kde-plasma-api` | PlasmoidItem, Kirigami, config |
+| `qml-qt-quick-reference` | QML / JS patterns |
+| `kde-dev-tools` | kpackagetool6, qmllint, paths |
+
+Also see `.agents/AGENTS.md` for QML conventions.
 
 ## Context7
 
 Use `bunx ctx7@latest` for all Context7 CLI requests. Do not use `npx` or `npm exec` for Context7.
-
-Examples:
 
 ```sh
 bunx ctx7@latest library <name> "<question>"

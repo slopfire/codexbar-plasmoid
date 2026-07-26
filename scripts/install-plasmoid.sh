@@ -2,9 +2,11 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-package_dir="$repo_root/plasmoid"
-old_ids=("org.kde.codexbar" "org.splazma.codexbar")
-new_id="org.slopfire.codexbar-plasmoid"
+# shellcheck source=lib/repo-env.sh
+source "$repo_root/scripts/lib/repo-env.sh"
+package_dir="$CODEXBAR_PACKAGE_DIR"
+old_ids=("${CODEXBAR_OLD_PLUGIN_IDS[@]}")
+new_id="$CODEXBAR_PLUGIN_ID"
 
 if ! command -v kpackagetool6 >/dev/null 2>&1; then
   echo "kpackagetool6 is required to install the Plasma widget." >&2

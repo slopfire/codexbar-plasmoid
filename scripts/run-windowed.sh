@@ -2,7 +2,9 @@
 set -euo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-package_dir="$repo_root/plasmoid"
+# shellcheck source=lib/repo-env.sh
+source "$repo_root/scripts/lib/repo-env.sh"
+package_dir="$CODEXBAR_PACKAGE_DIR"
 
 "$repo_root/scripts/build-native-cli.sh"
 
@@ -11,4 +13,5 @@ if ! command -v plasmawindowed >/dev/null 2>&1; then
   exit 1
 fi
 
+# Prefer virtual for agents: ./scripts/run-virtual-plasma.sh
 exec plasmawindowed "$package_dir"

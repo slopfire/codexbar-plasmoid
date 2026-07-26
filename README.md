@@ -41,6 +41,12 @@ For local preview without installing:
 ./scripts/run-windowed.sh
 ```
 
+Agent / CI-style checks (virtual KWin, no host desktop interruption):
+
+```sh
+./scripts/agent-check.sh
+```
+
 ## Package for release
 
 Build a store-ready archive (includes the native helper, validates with `kpackagetool6`):

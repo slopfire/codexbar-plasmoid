@@ -148,15 +148,24 @@ On command failure:
 
 ## Validation
 
-Run:
+Preferred:
 
 ```sh
-node --check plasmoid/contents/code/codexbar-plasmoid-helper.mjs
-PATH=/tmp/codexbar-plasma-mock:$PATH plasmoid/contents/code/codexbar-plasmoid-helper.mjs --provider all --timeout 5
-qmllint plasmoid/contents/ui/*.qml plasmoid/contents/config/config.qml
+./scripts/agent-check.sh
 ```
 
-When changing visible data fields, verify with KWin MCP using mock data that includes at least two providers, usage rows, credits, status, cost summaries, and daily history.
+Helper-focused:
+
+```sh
+./scripts/setup-mock-cli.sh
+node --check plasmoid/contents/code/codexbar-plasmoid-helper.mjs
+PATH=/tmp/codexbar-plasma-mock:$PATH \
+  node plasmoid/contents/code/codexbar-plasmoid-helper.mjs --provider all --timeout 5
+```
+
+When changing visible data fields, also run virtual Plasma with the mock on `PATH`
+(`./scripts/run-virtual-plasma.sh --timeout 20`) and confirm the app log has no QML
+errors. Use host computer-use only if interactive a11y is required.
 
 ## References
 
