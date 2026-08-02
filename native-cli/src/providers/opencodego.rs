@@ -7,6 +7,7 @@ use crate::providers::opencode_shared::{
     extract_account_email, fetch_usage_page, fetch_workspace_id, parse_usage,
 };
 use anyhow::Result;
+use std::collections::HashSet;
 use std::path::Path;
 
 /// Fetch OpenCode Go **subscription** usage, discovering every signed-in account
@@ -34,7 +35,7 @@ pub fn fetch(http: &HttpClient, home: &Path) -> Vec<ProviderPayload> {
             .cloned()
             .collect();
         if !successes.is_empty() {
-            return successes;
+            return deduplicate_accounts(successes);
         }
         // Prefer the real web failure (plan not enabled, session expired, …)
         // over inventing subscription bars from local API spend.
@@ -57,6 +58,34 @@ pub fn fetch(http: &HttpClient, home: &Path) -> Vec<ProviderPayload> {
             .map(|error| error.to_string())
             .unwrap_or_else(|| "OpenCode Go not detected.".to_string()),
     )]
+}
+
+/// Browser discovery can find the same signed-in account in several cookie
+/// stores. Keep one payload per account (or workspace when the email is absent)
+/// so a Chrome + Zen login does not create duplicate provider cards.
+fn deduplicate_accounts(payloads: Vec<ProviderPayload>) -> Vec<ProviderPayload> {
+    let mut seen = HashSet::new();
+    payloads
+        .into_iter()
+        .filter(|payload| {
+            let key = payload
+                .account
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| format!("account:{}", value.to_lowercase()))
+                .or_else(|| {
+                    payload
+                        .site_url
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| format!("workspace:{}", value.to_lowercase()))
+                })
+                .unwrap_or_else(|| format!("source:{}", payload.source.to_lowercase()));
+            seen.insert(key)
+        })
+        .collect()
 }
 
 fn fetch_one_web(
@@ -160,4 +189,58 @@ fn fetch_one_web_inner(
     payload.source = source_label.to_string();
     payload.site_url = Some(format!("https://opencode.ai/workspace/{workspace}/go"));
     Ok(payload)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::deduplicate_accounts;
+    use crate::output::ProviderPayload;
+
+    fn payload(account: Option<&str>, source: &str, site_url: Option<&str>) -> ProviderPayload {
+        let mut payload = ProviderPayload::error("opencodego", "unused");
+        payload.error = None;
+        payload.account = account.map(str::to_string);
+        payload.source = source.to_string();
+        payload.site_url = site_url.map(str::to_string);
+        payload
+    }
+
+    #[test]
+    fn deduplicates_same_account_across_browser_profiles() {
+        let entries = deduplicate_accounts(vec![
+            payload(Some("user@example.com"), "Chrome (Default)", None),
+            payload(Some("USER@example.com"), "Zen (profile)", None),
+        ]);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "Chrome (Default)");
+    }
+
+    #[test]
+    fn keeps_distinct_accounts() {
+        let entries = deduplicate_accounts(vec![
+            payload(Some("one@example.com"), "Chrome (Default)", None),
+            payload(Some("two@example.com"), "Zen (profile)", None),
+        ]);
+
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn falls_back_to_workspace_when_account_is_missing() {
+        let entries = deduplicate_accounts(vec![
+            payload(
+                None,
+                "Chrome (Default)",
+                Some("https://opencode.ai/workspace/wrk_1/go"),
+            ),
+            payload(
+                None,
+                "Zen (profile)",
+                Some("https://opencode.ai/workspace/wrk_1/go"),
+            ),
+        ]);
+
+        assert_eq!(entries.len(), 1);
+    }
 }
