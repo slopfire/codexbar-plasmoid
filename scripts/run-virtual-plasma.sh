@@ -167,27 +167,21 @@ cleanup() {
   if [[ -n "\${KWIN_PID:-}" ]] && kill -0 "\$KWIN_PID" 2>/dev/null; then
     kill "\$KWIN_PID" 2>/dev/null || true
   fi
-  if [[ -n "\${AT_SPI_PID:-}" ]] && kill -0 "\$AT_SPI_PID" 2>/dev/null; then
-    kill "\$AT_SPI_PID" 2>/dev/null || true
-  fi
-  wait "\${APP_PID:-}" "\${KWIN_PID:-}" "\${AT_SPI_PID:-}" 2>/dev/null || true
+  wait "\${APP_PID:-}" "\${KWIN_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT TERM INT HUP
 
-# Isolated AT-SPI so we do not attach to the host a11y bus
-export ATSPI_DBUS_IMPLEMENTATION=dbus-daemon
-if [[ -x /usr/libexec/at-spi-bus-launcher ]]; then
-  /usr/libexec/at-spi-bus-launcher --launch-immediately &
-elif [[ -x /usr/lib/at-spi-bus-launcher ]]; then
-  /usr/lib/at-spi-bus-launcher --launch-immediately &
-fi
-AT_SPI_PID=\$!
-sleep 0.2
+# Virtual checks are log-driven and cannot be reached by host AT-SPI clients.
+# Disable accessibility for the entire isolated session instead of launching a
+# registry that SELinux may refuse to execute and that no check consumes.
+export QT_ACCESSIBILITY=0
+export NO_AT_BRIDGE=1
+unset AT_SPI_BUS_ADDRESS
 
 dbus-update-activation-environment --systemd \
-  WAYLAND_DISPLAY=${socket_name} QT_QPA_PLATFORM=wayland 2>/dev/null || \
+  WAYLAND_DISPLAY=${socket_name} QT_QPA_PLATFORM=wayland QT_ACCESSIBILITY=0 NO_AT_BRIDGE=1 2>/dev/null || \
   dbus-update-activation-environment \
-  WAYLAND_DISPLAY=${socket_name} QT_QPA_PLATFORM=wayland 2>/dev/null || true
+  WAYLAND_DISPLAY=${socket_name} QT_QPA_PLATFORM=wayland QT_ACCESSIBILITY=0 NO_AT_BRIDGE=1 2>/dev/null || true
 
 # KWin --virtual must not nest as a client of the host compositor
 env -u WAYLAND_DISPLAY -u QT_QPA_PLATFORM \

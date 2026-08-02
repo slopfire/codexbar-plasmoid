@@ -68,7 +68,11 @@ section "qmllint"
 if command -v qmllint >/dev/null 2>&1; then
   qml_err=0
   shopt -s nullglob
-  qml_files=(plasmoid/contents/ui/*.qml plasmoid/contents/config/config.qml)
+  qml_files=(
+    plasmoid/contents/ui/*.qml
+    plasmoid/contents/config/config.qml
+    tests/config-smoke-plasmoid/contents/ui/main.qml
+  )
   for f in "${qml_files[@]}"; do
     set +e
     qmllint "$f" >/tmp/agent-check-qmllint.out 2>&1
@@ -166,6 +170,18 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
   fi
 else
   skp "mock helper smoke"
+fi
+
+# --- isolated configuration page ---
+section "isolated config UI"
+if [[ "$use_mock" -ne 1 ]]; then
+  skp "config account-picker smoke (--no-mock)"
+elif [[ ! -x "$repo_root/scripts/run-config-smoke.sh" ]]; then
+  skp "run-config-smoke.sh is not executable"
+elif "$repo_root/scripts/run-config-smoke.sh" >/tmp/agent-check-config-smoke.out 2>&1; then
+  ok "Providers account picker (no host window)"
+else
+  bad "Providers account picker ($(tail -c 500 /tmp/agent-check-config-smoke.out | tr '\n' ' '))"
 fi
 
 # --- install (optional) ---

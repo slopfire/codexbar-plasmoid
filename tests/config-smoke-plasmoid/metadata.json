@@ -1,0 +1,12 @@
+{
+  "KPackageStructure": "Plasma/Applet",
+  "KPlugin": {
+    "Id": "org.slopfire.codexbar-config-smoke",
+    "Name": "CodexBar Config Smoke",
+    "Description": "Isolated Providers settings smoke harness",
+    "Icon": "utilities-terminal",
+    "License": "MIT",
+    "Version": "1.0.0"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0"
+}
