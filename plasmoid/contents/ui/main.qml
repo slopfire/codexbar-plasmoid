@@ -31,7 +31,6 @@ PlasmoidItem {
     property string previousSiteLaunchCommand: ""
     // True while top chips are being reordered so model rebuilds wait.
     property bool providerReorderActive: false
-    property string previousProviderSyncCommand: ""
     property string previousSelectionStoreCommand: ""
     readonly property var entries: snapshot.entries || []
     readonly property var effectiveSelectedEntryIds: multiProviderSelectionEnabled
@@ -142,7 +141,6 @@ PlasmoidItem {
                 "--auto-update", quote(plasmoid.configuration.autoUpdateCli ? "true" : "false"),
                 "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest"),
                 "--cache-seconds", quote(plasmoid.configuration.shareProviderFetches === false ? 0 : root.refreshInterval),
-                "--sync-providers", quote(plasmoid.configuration.syncProviders === true ? "true" : "false"),
                 "--force", quote(forceRefresh ? "true" : "false")
             ];
             return parts.join(" ");
@@ -680,6 +678,22 @@ PlasmoidItem {
             const mergedEntries = (parsed.entries || []).map(function(entry) {
                 if (!entry || !entry.error) {
                     receivedAnySuccess = receivedAnySuccess || !!entry;
+                    const previous = lastSuccessfulEntryFor(entry);
+                    const currentRows = entry && entry.rows ? entry.rows : [];
+                    const previousRows = previous && previous.rows ? previous.rows : [];
+                    // A transient provider response can still be reported as
+                    // successful while omitting every rate-limit window. Keep
+                    // the known limit rows so limit-based providers do not get
+                    // reinterpreted as credit/balance providers.
+                    if (entry && currentRows.length === 0 && previousRows.length > 0) {
+                        const retained = {};
+                        for (const key in entry) {
+                            retained[key] = entry[key];
+                        }
+                        retained.rows = previousRows;
+                        retainedAny = true;
+                        return retained;
+                    }
                     return entry;
                 }
                 const previous = lastSuccessfulEntryFor(entry);
@@ -695,7 +709,7 @@ PlasmoidItem {
                 return retained;
             });
 
-            rememberSuccessfulEntries(parsed.entries || []);
+            rememberSuccessfulEntries(mergedEntries);
             if (!retainedAny) {
                 return parsed;
             }
@@ -775,18 +789,6 @@ PlasmoidItem {
         interval: 0
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName);
-        }
-    }
-
-    Plasma5Support.DataSource {
-        id: providerSyncRunner
-        engine: "executable"
-        connectedSources: []
-        interval: 0
-        onNewData: function(sourceName, data) {
-            disconnectSource(sourceName);
-            // Shared-provider writes are best-effort; local config already holds
-            // the new order for this widget instance.
         }
     }
 
@@ -1326,24 +1328,6 @@ PlasmoidItem {
         if (serialized !== String(plasmoid.configuration.providerConfigs || "")) {
             plasmoid.configuration.providerConfigs = serialized;
         }
-        if (plasmoid.configuration.syncProviders === true) {
-            writeSharedProviders(serialized);
-        }
-    }
-
-    function providerSyncScriptPath() {
-        return codexBar.localPath(Qt.resolvedUrl("../code/codexbar-provider-sync.mjs"));
-    }
-
-    function writeSharedProviders(serializedProviders) {
-        const command = codexBar.quote(providerSyncScriptPath())
-            + " --action write --providers "
-            + codexBar.quote(serializedProviders || plasmoid.configuration.providerConfigs || "[]");
-        if (previousProviderSyncCommand.length > 0) {
-            providerSyncRunner.disconnectSource(previousProviderSyncCommand);
-        }
-        previousProviderSyncCommand = command;
-        providerSyncRunner.connectSource(command);
     }
 
     function checkCliUpdate() {

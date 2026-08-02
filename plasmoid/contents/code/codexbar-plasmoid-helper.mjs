@@ -1367,10 +1367,26 @@ function loadSharedProviderConfigs(fallback) {
 
 function resolveSource(providerId, requestedSource) {
   const sourceMode = clean(requestedSource) || "auto";
+  const normalized = normalizeProviderId(providerId);
+
+  // Grok SuperGrok weekly limits need the native helper on Linux:
+  // - codexbar `cli` hits a broken agent-stdio billing RPC ("Method not found")
+  // - `oauth` is not a supported Grok source upstream
+  // - `web` often yields cost-only local fallbacks without rate-limit windows
+  // Without this remap, a saved source of "cli" shows spend charts but no
+  // Weekly SuperGrok Limit bar (the plasmoid cost path still works).
+  if (
+    normalized === "grok"
+    && process.platform !== "darwin"
+    && (sourceMode === "auto" || sourceMode === "cli" || sourceMode === "oauth" || sourceMode === "web")
+  ) {
+    return "native";
+  }
+
   if (process.platform === "darwin" || sourceMode !== "auto") {
     return sourceMode;
   }
-  const fallback = linuxAutoFallbacks[normalizeProviderId(providerId)];
+  const fallback = linuxAutoFallbacks[normalized];
   return fallback || sourceMode;
 }
 

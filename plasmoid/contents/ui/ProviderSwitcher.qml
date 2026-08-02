@@ -80,6 +80,18 @@ Item {
         return Math.ceil(tabIconSize + tabIconGap + textW + tabHPad * 2 + 2);
     }
 
+    function visualModelItemAt(index) {
+        if (visualModel.items.count > index) {
+            return visualModel.items.get(index).model;
+        }
+        return index >= 0 && index < entryModel.count ? entryModel.get(index) : null;
+    }
+
+    function providerAtVisualIndex(index) {
+        const item = visualModelItemAt(index);
+        return item ? String(item.provider || "") : "";
+    }
+
     // Manual wrap layout (one DelegateModel, absolute positions):
     // - tabs:  content min-width, flex-grow to fill each row (edge to edge)
     // - cards: equal-width grid columns, left-aligned (like the reference)
@@ -136,7 +148,7 @@ Item {
         // Tabs: pack by content min-width, flex-grow each row full width.
         const mins = [];
         for (let i = 0; i < count; ++i) {
-            mins.push(tabMinWidthFor(entryModel.get(i).provider));
+            mins.push(tabMinWidthFor(providerAtVisualIndex(i)));
         }
         let index = 0;
         let y = 0;
@@ -266,10 +278,10 @@ Item {
         Qt.callLater(recomputeLayout);
     }
 
-    function orderedEntriesFromModel() {
+    function orderedEntriesFromVisualModel() {
         const ordered = [];
-        for (let index = 0; index < entryModel.count; index += 1) {
-            const entry = entryFromModelItem(entryModel.get(index));
+        for (let index = 0; index < visualModel.items.count; index += 1) {
+            const entry = entryFromModelItem(visualModelItemAt(index));
             if (entry) {
                 ordered.push(entry);
             }
@@ -278,7 +290,7 @@ Item {
     }
 
     function commitOrder() {
-        const ordered = orderedEntriesFromModel();
+        const ordered = orderedEntriesFromVisualModel();
         reorderActive = true;
         orderCommitted(ordered);
         reorderActive = false;
@@ -339,7 +351,12 @@ Item {
                             return;
                         }
                         switcher.reorderActive = true;
-                        entryModel.move(fromIndex, toIndex, 1);
+                        // DelegateModel.itemsIndex belongs to the visual group,
+                        // not to the backing ListModel. Moving the source model
+                        // with that index can desynchronize the two orders after
+                        // a resize. Keep drag order visual until commitOrder()
+                        // persists it to the source snapshot.
+                        visualModel.items.move(fromIndex, toIndex);
                         switcher.recomputeLayout();
                     }
 
@@ -348,6 +365,7 @@ Item {
 
                             property int visualIndex: dropDelegate.visualIndex
                             property bool dragActive: dragArea.drag.active
+                            property bool dragWasActive: false
                             property bool suppressClick: false
 
                             width: dropDelegate.width
@@ -386,10 +404,14 @@ Item {
                             onDragActiveChanged: {
                                 if (dragActive) {
                                     switcher.reorderActive = true;
+                                    chip.dragWasActive = true;
                                     chip.suppressClick = true;
                                     return;
                                 }
-                                switcher.commitOrder();
+                                if (chip.dragWasActive) {
+                                    chip.dragWasActive = false;
+                                    switcher.commitOrder();
+                                }
                             }
 
                             Rectangle {

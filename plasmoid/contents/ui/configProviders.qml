@@ -12,6 +12,8 @@ Kirigami.ScrollablePage {
     property string cfg_provider: "codex"
     property string cfg_source: "auto"
     property string cfg_providerConfigs: ""
+    property string cfg_cliPath: "codexbar"
+    property int cfg_requestTimeoutSeconds: 45
     property alias cfg_allowMultiProviderSelection: allowMultiProviderSelection.checked
     property alias cfg_providerSwitcherStyle: providerSwitcherStyle.currentValue
     // Hidden: keep switcher selection across Configure → Apply. Without cfg_
@@ -22,11 +24,14 @@ Kirigami.ScrollablePage {
     property string cfg_account: ""
     property int cfg_accountIndex: 0
     property bool cfg_allAccounts: false
-    property alias cfg_syncProviders: syncProviders.checked
     property string antigravityAuthStatus: ""
     property bool antigravityAuthBusy: false
-    property bool providerSyncApplying: false
+    property bool providerSyncBusy: false
     property string providerSyncStatus: ""
+    property var discoveredAccounts: ({})
+    property bool accountDiscoveryBusy: false
+    property string accountDiscoveryStatus: ""
+    property string accountDiscoveryCommand: ""
 
     readonly property var sourceLabels: ({
         auto: i18n("Auto"),
@@ -46,6 +51,13 @@ Kirigami.ScrollablePage {
         native: i18n("Bundled Linux helper"),
         "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)"),
         local: i18n("Built-in sample data (no CLI)")
+    })
+    // Grok SuperGrok weekly limits only come from the native helper on Linux.
+    readonly property var grokSourceNotes: ({
+        auto: i18n("Uses Linux Helper for SuperGrok weekly limits"),
+        native: i18n("SuperGrok weekly limit + local token spend"),
+        cli: i18n("Broken for SuperGrok limits on Linux; use Linux Helper"),
+        web: i18n("Prefer Linux Helper for SuperGrok weekly limits")
     })
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },
@@ -97,9 +109,7 @@ Kirigami.ScrollablePage {
 
     Component.onCompleted: {
         loadProviders();
-        if (syncProviders.checked) {
-            Qt.callLater(readSharedProviders);
-        }
+        Qt.callLater(discoverAccounts);
     }
 
     ColumnLayout {
@@ -132,25 +142,33 @@ Kirigami.ScrollablePage {
                 wrapMode: Text.Wrap
             }
 
-            QtControls.CheckBox {
-                id: syncProviders
+            RowLayout {
                 Layout.fillWidth: true
-                text: i18n("Sync providers between widgets")
-                onClicked: {
-                    if (checked) {
-                        page.readSharedProviders();
-                    } else {
-                        page.providerSyncStatus = "";
-                    }
+
+                QtControls.Button {
+                    text: i18n("Sync Read")
+                    icon.name: "download"
+                    enabled: !page.providerSyncBusy
+                    onClicked: page.readSharedProviders()
+                }
+
+                QtControls.Button {
+                    text: i18n("Sync Write")
+                    icon.name: "upload"
+                    enabled: !page.providerSyncBusy
+                    onClicked: page.writeSharedProviders()
+                }
+
+                Item {
+                    Layout.fillWidth: true
                 }
             }
 
             QtControls.Label {
                 Layout.fillWidth: true
-                visible: syncProviders.checked
                 text: page.providerSyncStatus.length > 0
                     ? page.providerSyncStatus
-                    : i18n("Provider order, sources, accounts, and enabled state are shared. Tray appearance stays local.")
+                    : i18n("Read imports shared provider settings; Write publishes the current provider settings. Tray appearance stays local.")
                 color: Kirigami.Theme.disabledTextColor
                 wrapMode: Text.Wrap
             }
@@ -354,7 +372,7 @@ Kirigami.ScrollablePage {
 
                                         QtControls.Label {
                                             Layout.fillWidth: true
-                                            text: page.sourceNotes[providerDelegate.source] || ""
+                                            text: page.sourceNoteFor(providerDelegate.provider, providerDelegate.source)
                                             color: Kirigami.Theme.disabledTextColor
                                             elide: Text.ElideRight
                                         }
@@ -517,59 +535,62 @@ Kirigami.ScrollablePage {
                                         }
                                     }
 
-                                    // Other providers: account filter toggle
-                                    QtControls.Button {
-                                        id: accountToggle
+                                    ColumnLayout {
                                         Layout.fillWidth: true
                                         visible: providerDelegate.provider !== "devin"
                                                  && providerDelegate.provider !== "demo"
-                                        checkable: true
-                                        checked: providerDelegate.account.length > 0 || providerDelegate.accountIndex > 0 || providerDelegate.allAccounts
-                                        text: checked ? i18n("Account filter enabled") : i18n("Account filter")
-                                        icon.name: "user-identity"
-                                        onToggled: {
-                                            if (!checked) {
-                                                page.setProviderProperty(providerDelegate.index, "account", "");
-                                                page.setProviderProperty(providerDelegate.index, "accountIndex", 0);
-                                                page.setProviderProperty(providerDelegate.index, "allAccounts", false);
-                                            }
-                                        }
-                                    }
+                                        spacing: Kirigami.Units.smallSpacing
 
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        visible: providerDelegate.provider !== "devin"
-                                                 && providerDelegate.provider !== "demo"
-                                                 && accountToggle.checked
-
-                                        QtControls.TextField {
+                                        RowLayout {
                                             Layout.fillWidth: true
-                                            text: providerDelegate.account
-                                            placeholderText: i18n("Account name")
-                                            enabled: !providerDelegate.allAccounts
-                                            onEditingFinished: page.setProviderProperty(providerDelegate.index, "account", text)
-                                        }
 
-                                        QtControls.SpinBox {
-                                            from: 0
-                                            to: 99
-                                            value: providerDelegate.accountIndex
-                                            editable: true
-                                            enabled: !providerDelegate.allAccounts && providerDelegate.account.length === 0
-                                            textFromValue: function(value) {
-                                                return value === 0 ? i18n("Any") : i18n("#%1", value);
+                                            QtControls.Label {
+                                                text: i18n("Account:")
                                             }
-                                            valueFromText: function(text) {
-                                                const parsed = parseInt(text, 10);
-                                                return Number.isFinite(parsed) ? parsed : 0;
-                                            }
-                                            onValueModified: page.setProviderProperty(providerDelegate.index, "accountIndex", value)
-                                        }
 
-                                        QtControls.CheckBox {
-                                            text: i18n("All accounts")
-                                            checked: providerDelegate.allAccounts
-                                            onToggled: page.setProviderProperty(providerDelegate.index, "allAccounts", checked)
+                                            QtControls.ComboBox {
+                                                id: accountPicker
+                                                Layout.fillWidth: true
+                                                textRole: "text"
+                                                valueRole: "value"
+                                                model: page.accountChoices(
+                                                    providerDelegate.provider,
+                                                    providerDelegate.account,
+                                                    providerDelegate.accountIndex
+                                                )
+                                                currentIndex: page.accountChoiceIndex(
+                                                    model,
+                                                    providerDelegate.account,
+                                                    providerDelegate.accountIndex,
+                                                    providerDelegate.allAccounts
+                                                )
+                                                onActivated: function(row) {
+                                                    const choice = model[row];
+                                                    if (!choice) {
+                                                        return;
+                                                    }
+                                                    page.applyAccountChoice(providerDelegate.index, choice);
+                                                }
+                                            }
+
+                                            QtControls.BusyIndicator {
+                                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                                running: page.accountDiscoveryBusy
+                                                visible: running
+                                            }
+
+                                            QtControls.ToolButton {
+                                                icon.name: "view-refresh"
+                                                text: i18n("Detect accounts again")
+                                                display: QtControls.AbstractButton.IconOnly
+                                                enabled: !page.accountDiscoveryBusy
+                                                onClicked: page.discoverAccounts()
+                                                QtControls.ToolTip.visible: hovered
+                                                QtControls.ToolTip.text: page.accountDiscoveryStatus.length > 0
+                                                    ? page.accountDiscoveryStatus
+                                                    : i18n("Detect accounts again")
+                                            }
                                         }
                                     }
 
@@ -847,9 +868,6 @@ Kirigami.ScrollablePage {
     function syncConfig() {
         cfg_providerConfigs = serializeProviders();
         cfg_provider = enabledProviders().join(",");
-        if (syncProviders.checked && !providerSyncApplying) {
-            writeSharedProviders();
-        }
     }
 
     function providerSyncScriptPath() {
@@ -864,11 +882,13 @@ Kirigami.ScrollablePage {
     }
 
     function readSharedProviders() {
+        providerSyncBusy = true;
         providerSyncStatus = i18n("Loading shared providers…");
         providerSyncRunner.connectSource(shellQuote(providerSyncScriptPath()) + " --action read");
     }
 
     function writeSharedProviders() {
+        providerSyncBusy = true;
         providerSyncStatus = i18n("Saving shared providers…");
         providerSyncRunner.connectSource(
             shellQuote(providerSyncScriptPath())
@@ -890,7 +910,6 @@ Kirigami.ScrollablePage {
         }
 
         const parsed = parseProviderConfigs(JSON.stringify(sharedProviders || []));
-        providerSyncApplying = true;
         providerModel.clear();
         for (let index = 0; index < parsed.length; index += 1) {
             const item = parsed[index];
@@ -905,7 +924,6 @@ Kirigami.ScrollablePage {
         }
         cfg_providerConfigs = serializeProviders();
         cfg_provider = enabledProviders().join(",");
-        providerSyncApplying = false;
     }
 
     function parseProviderConfigs(raw) {
@@ -1080,6 +1098,66 @@ Kirigami.ScrollablePage {
         return 0;
     }
 
+    function accountChoices(providerId, configuredAccount, configuredIndex) {
+        const choices = [
+            { text: i18n("Active account"), value: "", kind: "active" }
+        ];
+        const provider = normalizedProviderId(providerId);
+        const detected = discoveredAccounts[provider] || [];
+        const seen = {};
+        for (let index = 0; index < detected.length; index += 1) {
+            const account = String(detected[index] || "").trim();
+            const key = account.toLowerCase();
+            if (!account || seen[key]) {
+                continue;
+            }
+            seen[key] = true;
+            choices.push({ text: account, value: account, kind: "account" });
+        }
+
+        const savedAccount = String(configuredAccount || "").trim();
+        if (savedAccount.length > 0 && !seen[savedAccount.toLowerCase()]) {
+            choices.push({ text: savedAccount, value: savedAccount, kind: "account" });
+        } else if (savedAccount.length === 0 && Number(configuredIndex || 0) > 0) {
+            choices.push({
+                text: i18n("Account #%1 (saved)", Number(configuredIndex)),
+                value: String(Number(configuredIndex)),
+                kind: "index"
+            });
+        }
+        choices.push({ text: i18n("All accounts"), value: "*", kind: "all" });
+        return choices;
+    }
+
+    function accountChoiceIndex(choices, configuredAccount, configuredIndex, allAccounts) {
+        const wantedKind = allAccounts
+            ? "all"
+            : (String(configuredAccount || "").trim().length > 0
+                ? "account"
+                : (Number(configuredIndex || 0) > 0 ? "index" : "active"));
+        const wantedValue = wantedKind === "account"
+            ? String(configuredAccount || "").trim()
+            : (wantedKind === "index" ? String(Number(configuredIndex)) : "");
+        for (let index = 0; index < choices.length; index += 1) {
+            const choice = choices[index];
+            if (choice.kind === wantedKind
+                    && (wantedKind !== "account" && wantedKind !== "index"
+                        || (wantedKind === "account"
+                            ? String(choice.value).toLowerCase() === wantedValue.toLowerCase()
+                            : String(choice.value) === wantedValue))) {
+                return index;
+            }
+        }
+        return 0;
+    }
+
+    function applyAccountChoice(providerIndex, choice) {
+        const kind = String(choice.kind || "active");
+        setProviderProperty(providerIndex, "allAccounts", kind === "all");
+        setProviderProperty(providerIndex, "account", kind === "account" ? String(choice.value || "") : "");
+        setProviderProperty(providerIndex, "accountIndex", kind === "index" ? Number(choice.value || 0) : 0);
+    }
+
     function sourceModel(providerId) {
         const provider = catalogFor(providerId);
         return provider.sources.map(function(source) {
@@ -1095,6 +1173,13 @@ Kirigami.ScrollablePage {
             }
         }
         return 0;
+    }
+
+    function sourceNoteFor(providerId, source) {
+        if (String(providerId || "") === "grok" && page.grokSourceNotes[source]) {
+            return page.grokSourceNotes[source];
+        }
+        return page.sourceNotes[source] || "";
     }
 
     function firstMissingProvider() {
@@ -1193,6 +1278,102 @@ Kirigami.ScrollablePage {
         return "'" + String(value).replace(/'/g, "'\\''") + "'";
     }
 
+    function accountDiscoveryHelperPath() {
+        let path = Qt.resolvedUrl("../code/codexbar-plasmoid-helper.mjs").toString();
+        if (path.startsWith("file://")) {
+            path = decodeURIComponent(path.slice("file://".length));
+            if (path.startsWith("//")) {
+                path = path.slice(1);
+            }
+        }
+        return path;
+    }
+
+    function accountDiscoveryConfigs() {
+        const configs = [];
+        for (let index = 0; index < providerModel.count; index += 1) {
+            const item = providerModel.get(index);
+            const provider = normalizedProviderId(item.provider);
+            if (!item.enabled || provider === "devin" || provider === "demo") {
+                continue;
+            }
+            configs.push({
+                provider: item.provider,
+                source: item.source,
+                enabled: true,
+                account: "",
+                accountIndex: 0,
+                allAccounts: true,
+                apiKey: item.apiKey,
+                includeCost: false
+            });
+        }
+        return configs;
+    }
+
+    function discoverAccounts() {
+        if (accountDiscoveryBusy) {
+            return;
+        }
+        const configs = accountDiscoveryConfigs();
+        if (configs.length === 0) {
+            accountDiscoveryStatus = i18n("Enable a provider to detect its accounts");
+            return;
+        }
+        const command = shellQuote(accountDiscoveryHelperPath())
+            + " --cli " + shellQuote(cfg_cliPath || "codexbar")
+            + " --providers " + shellQuote(JSON.stringify(configs))
+            + " --provider all"
+            + " --source auto"
+            + " --timeout " + shellQuote(Math.max(5, Number(cfg_requestTimeoutSeconds || 45)))
+            + " --status false"
+            + " --cost false"
+            + " --credits false"
+            + " --anonymize-emails false"
+            + " --auto-update false"
+            + " --cache-seconds 0"
+            + " --force true";
+        if (accountDiscoveryCommand.length > 0) {
+            accountDiscoveryRunner.disconnectSource(accountDiscoveryCommand);
+        }
+        accountDiscoveryCommand = command;
+        accountDiscoveryBusy = true;
+        accountDiscoveryStatus = i18n("Detecting accounts…");
+        accountDiscoveryRunner.connectSource(command);
+    }
+
+    function applyDiscoveredAccountEntries(entries) {
+        const next = {};
+        let count = 0;
+        const list = Array.isArray(entries) ? entries : [];
+        for (let index = 0; index < list.length; index += 1) {
+            const entry = list[index] || {};
+            const provider = normalizedProviderId(entry.provider);
+            const account = String(entry.account || "").trim();
+            if (!provider || !account || entry.error) {
+                continue;
+            }
+            if (!next[provider]) {
+                next[provider] = [];
+            }
+            let duplicate = false;
+            for (let accountIndex = 0; accountIndex < next[provider].length; accountIndex += 1) {
+                if (String(next[provider][accountIndex]).toLowerCase() === account.toLowerCase()) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                next[provider].push(account);
+                count += 1;
+            }
+        }
+        discoveredAccounts = next;
+        accountDiscoveryStatus = count > 0
+            ? i18np("One account detected", "%1 accounts detected", count)
+            : i18n("No named accounts detected");
+    }
+
     function runAntigravityLogin() {
         if (page.antigravityAuthBusy) {
             return;
@@ -1226,11 +1407,43 @@ Kirigami.ScrollablePage {
     }
 
     Plasma5Support.DataSource {
+        id: accountDiscoveryRunner
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            if (sourceName !== page.accountDiscoveryCommand) {
+                return;
+            }
+            page.accountDiscoveryBusy = false;
+            const output = String(data.stdout || data["stdout"] || "").trim();
+            if (!output.length) {
+                const stderr = String(data.stderr || data["stderr"] || "").trim();
+                page.accountDiscoveryStatus = stderr.length > 0
+                    ? stderr.split("\n")[0]
+                    : i18n("Account detection returned no data");
+                return;
+            }
+            try {
+                const result = JSON.parse(output);
+                if (result.ok === false) {
+                    page.accountDiscoveryStatus = String(result.error || i18n("Account detection failed"));
+                    return;
+                }
+                page.applyDiscoveredAccountEntries(result.entries || []);
+            } catch (error) {
+                page.accountDiscoveryStatus = i18n("Account detection failed");
+            }
+        }
+    }
+
+    Plasma5Support.DataSource {
         id: providerSyncRunner
         engine: "executable"
         connectedSources: []
         onNewData: function(sourceName, data) {
             disconnectSource(sourceName);
+            page.providerSyncBusy = false;
             const output = String(data.stdout || data["stdout"] || "").trim();
             if (!output.length) {
                 page.providerSyncStatus = i18n("Provider sync returned no data");
@@ -1245,9 +1458,9 @@ Kirigami.ScrollablePage {
                 if (sourceName.indexOf("--action read") !== -1) {
                     if (result.exists && Array.isArray(result.providers) && result.providers.length > 0) {
                         page.applySharedProviders(result.providers);
-                        page.providerSyncStatus = i18n("Using shared providers");
+                        page.providerSyncStatus = i18n("Shared providers loaded");
                     } else {
-                        page.writeSharedProviders();
+                        page.providerSyncStatus = i18n("No shared providers found");
                     }
                 } else {
                     page.providerSyncStatus = i18n("Shared providers saved");
@@ -1294,4 +1507,3 @@ Kirigami.ScrollablePage {
         }
     }
 }
-
