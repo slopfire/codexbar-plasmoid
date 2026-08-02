@@ -347,18 +347,17 @@ $EDITOR plasmoid/contents/ui/main.qml
 qmllint plasmoid/contents/ui/*.qml plasmoid/contents/config/config.qml
 kpackagetool6 --type Plasma/Applet --install plasmoid --packageroot /tmp/test
 
-# 3. Quick preview (no install needed)
-./scripts/run-windowed.sh
+# 3. Isolated preview (no install or host window)
+./scripts/run-virtual-plasma.sh --timeout 15
+./scripts/run-config-smoke.sh
 
-# 4. Full install + panel test
+# 4. Full install (do not restart the host shell for routine checks)
 ./scripts/install-plasmoid.sh
-rm -rf ~/.cache/plasmashell/qmlcache/
-kquitapp6 plasmashell && plasmashell &
 
-# 5. Debug session
+# 5. Isolated debug session
 QT_LOGGING_RULES="qt.qml.*=true;kf.plasma.*=true" \
   QML_IMPORT_TRACE=1 \
-  plasmawindowed /absolute/path/to/plasmoid 2>&1 | tee debug.log
+  ./scripts/run-virtual-plasma.sh --timeout 20
 
 # 6. Find icon names
 cuttlefish

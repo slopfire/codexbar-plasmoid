@@ -38,13 +38,14 @@ Then add **CodexBar** from the Plasma widget explorer (System Information).
 For local preview without installing:
 
 ```sh
-./scripts/run-windowed.sh
+./scripts/run-windowed.sh --allow-host-window
 ```
 
 Agent / CI-style checks (virtual KWin, no host desktop interruption):
 
 ```sh
 ./scripts/agent-check.sh
+./scripts/run-config-smoke.sh
 ```
 
 ## Package for release
@@ -107,7 +108,7 @@ Open the widget configuration from Plasma and adjust:
 
 - CLI path
 - enabled providers and each provider's source, account, and all-accounts mode
-- optional provider-setting synchronization between widget instances
+- explicit provider-setting read/write synchronization between widget instances
 - refresh interval and CLI timeout
 - shared provider refreshes between widget instances
 - status, credits, cost, and history visibility
@@ -148,9 +149,9 @@ Matching provider refreshes are shared by default between widget instances. Widg
 account, and fetch options reuse a protected per-provider cache for one refresh interval, so several widgets do not run the
 same CodexBar usage and cost checks repeatedly. Manual refresh bypasses an older cached result, while simultaneous manual
 refreshes still collapse into one provider check. Presentation settings and provider-chip selections remain per widget.
-Enable **Sync providers between widgets** on each widget that should use the shared provider order, enabled state, source,
-account selection, all-accounts mode, and API keys. The first enabled widget publishes its current providers; later widgets
-adopt the shared list. Provider colors, tray-bar choices, and selected provider chips remain local to each widget.
+Use **Sync Write** to publish the current provider order, enabled state, source, account selection, all-accounts mode, and API
+keys. Use **Sync Read** in another widget to import that shared list. Synchronization only happens when either button is pressed;
+provider colors, tray-bar choices, and selected provider chips remain local to each widget.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
 providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→yellow→red), or theme text color.
 New widget instances default to all-provider usage bars with the first bar emphasized, theme-text tinting, and no metric text.

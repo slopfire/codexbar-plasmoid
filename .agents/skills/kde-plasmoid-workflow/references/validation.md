@@ -53,12 +53,18 @@ Mock CLI for helper/UI data:
 PATH=/tmp/codexbar-plasma-mock:$PATH ./scripts/run-virtual-plasma.sh --timeout 20
 ```
 
-## Host windowed runtime (a11y / computer-use)
-
-Only when you need AT-SPI interaction on the real desktop (opens a host window):
+Providers settings and account-picker discovery, also isolated:
 
 ```sh
-PATH=… plasmawindowed /home/sfire/Projects/slopfire/codexbar-plasmoid/plasmoid
+./scripts/run-config-smoke.sh
+```
+
+## Host windowed runtime (a11y / computer-use)
+
+Only after the user explicitly approves a host window in the current turn:
+
+```sh
+./scripts/run-windowed.sh --allow-host-window --accessibility
 ```
 
 With **computer-use-linux** (no screenshots unless the user asks):

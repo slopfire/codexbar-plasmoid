@@ -100,12 +100,14 @@ Form factors (install first):
 ./scripts/run-virtual-plasma.sh --viewer horizontal --timeout 20
 ```
 
-5. **Host-visible** windowed run only when a11y/computer-use interaction is needed (opens a real window):
+5. **Host-visible** windowed runs require explicit user approval in the current
+turn. Agents must otherwise use the virtual and config-smoke paths above.
 
 ```sh
-./scripts/run-windowed.sh
-# or:
-plasmawindowed /home/sfire/Projects/slopfire/codexbar-plasmoid/plasmoid
+./scripts/run-config-smoke.sh
+
+# Only after explicit user approval:
+./scripts/run-windowed.sh --allow-host-window --accessibility
 ```
 
 Use skill **computer-use-linux** (no screenshots unless asked). Expand compact → full before asserting dashboard labels.
@@ -118,7 +120,8 @@ Use skill **computer-use-linux** (no screenshots unless asked). Expand compact �
 |---------|--------|
 | `./scripts/run-virtual-plasma.sh` | Isolated `dbus-run-session` + `kwin_wayland --virtual`. **No host window.** Best default for agents. |
 | `./scripts/run-nested-viewer.sh` | Nested windowed KWin — one host window. |
-| `./scripts/run-windowed.sh` | Builds native CLI then `plasmawindowed` on the **host**. |
+| `./scripts/run-config-smoke.sh` | Loads Providers settings in virtual KWin and checks account discovery; no host window. |
+| `./scripts/run-windowed.sh --allow-host-window` | Explicitly approved human-only host preview. |
 | `plasmawindowed ./plasmoid` | May fail (`package plasmoid does not exist`); use **absolute** path. |
 | `plasmoidviewer /path/to/package` | **Wrong** on Plasma 6 — path is not a package arg. Use `-a org.slopfire.codexbar-plasmoid` after install. |
 

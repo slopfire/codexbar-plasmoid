@@ -29,7 +29,9 @@ Install as part of the check:
 | `./scripts/run-virtual-plasma.sh` | Scattering host `plasmawindowed` windows |
 | Logs under `/tmp/codexbar-virtual-latest/` | Screenshots unless the user asks |
 
-Host-visible `plasmawindowed` / computer-use only when you need AT-SPI interaction.
+Never open host-visible `plasmawindowed` / computer-use during agent work unless
+the user explicitly approves a host window in the current turn. The wrapper
+enforces this with `--allow-host-window`.
 
 ## One-liners
 
@@ -51,8 +53,11 @@ cat /tmp/codexbar-virtual-latest/app.log
 PATH=/tmp/codexbar-plasma-mock:$PATH \
   node plasmoid/contents/code/codexbar-plasmoid-helper.mjs --provider all --timeout 5
 
-# Host window (interrupts user slightly)
-./scripts/run-windowed.sh
+# Providers settings + account discovery (virtual KWin, no host window)
+./scripts/run-config-smoke.sh
+
+# Human-approved host window only
+./scripts/run-windowed.sh --allow-host-window
 ```
 
 ## Package facts
