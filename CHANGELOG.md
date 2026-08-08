@@ -2,6 +2,22 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.5 — 2026-08-08
+
+### Features
+
+- Improve provider account configuration in settings
+- Add built-in demo provider for offline UI testing
+
+### Fixes
+
+- Deduplicate OpenCode Go accounts
+
+### Maintenance
+
+- Add isolated virtual Plasma validation and config smoke tests
+
+
 ## 0.1.4 — 2026-07-25
 
 ### Maintenance
