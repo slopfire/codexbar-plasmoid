@@ -81,6 +81,7 @@ PATH=/tmp/codexbar-plasma-mock:$PATH \
 |-------|------|
 | `kde-plasmoid-workflow` | Install / virtual run / package layout |
 | `codexbar-cli-bridge` | Helper JSON contract, mock CLI |
+| `codexbar-release` | Version bump, package, KDE Store publish, push |
 | `kde-plasma-api` | PlasmoidItem, Kirigami, config |
 | `qml-qt-quick-reference` | QML / JS patterns |
 | `kde-dev-tools` | kpackagetool6, qmllint, paths |

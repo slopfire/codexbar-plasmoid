@@ -61,3 +61,4 @@ import org.kde.plasma.plasmoid
 | `kde-dev-tools` | kpackagetool6, plasmawindowed, qmllint, debugging, paths |
 | `kde-plasmoid-workflow` | Project-specific install/test/verify workflow |
 | `codexbar-cli-bridge` | CLI data contract, helper script, provider data shape |
+| `codexbar-release` | Version bump, package `.plasmoid`, KDE Store publish, push |

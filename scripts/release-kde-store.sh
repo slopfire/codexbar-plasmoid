@@ -47,29 +47,170 @@ for command in curl python3 uv; do
 done
 
 discover_chrome_cookie() {
-  uv run --quiet --with browser-cookie3 python3 - "${HOME:?}" <<'PY'
-import browser_cookie3
+  # Prefer browser-cookie3; fall back to keyring + AES-CBC decrypt for Chrome v10/v11
+  # cookies when browser-cookie3 cannot unlock the profile (common on Wayland/KDE).
+  # Never prints partial failures that include secret material.
+  uv run --quiet --with browser-cookie3 --with pycryptodome --with secretstorage python3 - "${HOME:?}" <<'PY'
+import hashlib
 import pathlib
+import shutil
+import sqlite3
 import sys
+import tempfile
 
 home = pathlib.Path(sys.argv[1])
 user_data = home / ".config" / "google-chrome"
 profiles = [user_data / "Default", *sorted(user_data.glob("Profile *"))]
 
+
+def cookie_header(cookies):
+    return "; ".join(f"{name}={value}" for name, value in cookies if value)
+
+
+def try_browser_cookie3(database: pathlib.Path) -> str | None:
+    try:
+        import browser_cookie3
+    except Exception:
+        return None
+    try:
+        jar = browser_cookie3.chrome(cookie_file=str(database), domain_name="kde.org")
+    except Exception:
+        return None
+    pairs = [(cookie.name, cookie.value) for cookie in jar if cookie.value]
+    if any(name == "__ocs_id" for name, _ in pairs):
+        return cookie_header(pairs)
+    return None
+
+
+def chrome_safe_storage_passwords() -> list[bytes]:
+    passwords: list[bytes] = []
+    try:
+        import secretstorage
+    except Exception:
+        return passwords
+    try:
+        bus = secretstorage.dbus_init()
+        for collection in secretstorage.get_all_collections(bus):
+            try:
+                items = collection.get_all_items()
+            except Exception:
+                continue
+            for item in items:
+                try:
+                    label = item.get_label() or ""
+                except Exception:
+                    continue
+                if "Chrome" not in label and "chrome" not in label:
+                    continue
+                try:
+                    secret = bytes(item.get_secret())
+                except Exception:
+                    continue
+                if secret and secret not in passwords:
+                    passwords.append(secret)
+    except Exception:
+        return passwords
+    return passwords
+
+
+def decrypt_chrome_value(encrypted: bytes, key: bytes) -> str | None:
+    if not encrypted:
+        return None
+    prefix = encrypted[:3]
+    if prefix not in (b"v10", b"v11"):
+        try:
+            return encrypted.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    try:
+        from Cryptodome.Cipher import AES
+    except Exception:
+        return None
+    data = encrypted[3:]
+    try:
+        decrypted = AES.new(key, AES.MODE_CBC, b" " * 16).decrypt(data)
+    except Exception:
+        return None
+    if not decrypted:
+        return None
+    pad = decrypted[-1]
+    if 1 <= pad <= 16 and decrypted.endswith(bytes([pad]) * pad):
+        decrypted = decrypted[:-pad]
+    candidates = []
+    # Newer Chrome builds may prefix a 32-byte host hash before the payload.
+    if len(decrypted) > 32:
+        candidates.append(decrypted[32:])
+    candidates.append(decrypted)
+    if len(decrypted) > 32:
+        candidates.append(decrypted[:-32])
+    for candidate in candidates:
+        try:
+            text = candidate.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if text:
+            return text
+    return None
+
+
+def try_keyring_decrypt(database: pathlib.Path) -> str | None:
+    passwords = chrome_safe_storage_passwords()
+    if not passwords:
+        return None
+    tmp_dir = pathlib.Path(tempfile.mkdtemp(prefix="codexbar-chrome-cookies."))
+    try:
+        copy = tmp_dir / "Cookies"
+        shutil.copy2(database, copy)
+        uri = f"file:{copy}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
+        try:
+            rows = conn.execute(
+                """
+                SELECT host_key, name, value, encrypted_value
+                FROM cookies
+                WHERE host_key LIKE '%kde.org%'
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+        for password in passwords:
+            key = hashlib.pbkdf2_hmac("sha1", password, b"saltysalt", 1, dklen=16)
+            pairs: list[tuple[str, str]] = []
+            for _host, name, value, encrypted in rows:
+                text = value or ""
+                if not text and encrypted is not None:
+                    text = decrypt_chrome_value(bytes(encrypted), key) or ""
+                if text:
+                    pairs.append((name, text))
+            if any(name == "__ocs_id" for name, _ in pairs):
+                # Include remember_token / verified when present for edit-page auth.
+                return cookie_header(pairs)
+    except Exception:
+        return None
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    return None
+
+
+candidates: list[str] = []
 for profile in profiles:
     database = profile / "Cookies"
     if not database.is_file():
         continue
-    try:
-        jar = browser_cookie3.chrome(cookie_file=str(database), domain_name="kde.org")
-    except Exception:
-        continue
-    cookies = [cookie for cookie in jar if cookie.value]
-    if any(cookie.name == "__ocs_id" for cookie in cookies):
-        print("; ".join(f"{cookie.name}={cookie.value}" for cookie in cookies))
-        raise SystemExit(0)
+    for header in (try_browser_cookie3(database), try_keyring_decrypt(database)):
+        if not header:
+            continue
+        if "__ocs_id=" not in header:
+            continue
+        candidates.append(header)
 
-raise SystemExit(1)
+if not candidates:
+    raise SystemExit(1)
+
+# Prefer sessions that still carry remember_token (survives better across edit GETs).
+candidates.sort(key=lambda h: (("remember_token=" in h), ("verified=" in h), len(h)), reverse=True)
+print(candidates[0])
+raise SystemExit(0)
 PY
 }
 

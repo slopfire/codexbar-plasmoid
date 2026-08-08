@@ -64,8 +64,18 @@ release commit, run this from a clean Git working tree:
 ./scripts/package-plasmoid.sh --bump
 ```
 
-Output lands in `dist/codexbar-plasmoid-v<version>-plasma6.plasmoid`. Upload that file to
-[store.kde.org](https://store.kde.org) under Plasma 6 applets, with `assets/screenshot.png` as the listing screenshot.
+Output lands in `dist/codexbar-plasmoid-v<version>-plasma6.plasmoid`. Upload with a
+local signed-in Chrome session (cookies stay on the machine; nothing secret is
+committed):
+
+```sh
+./scripts/release-kde-store.sh
+```
+
+Or upload `dist/*.plasmoid` manually on
+[store.kde.org](https://store.kde.org/p/2365275) under Plasma 6 applets, with
+`assets/screenshot.png` as the listing screenshot. Agent release procedure:
+`.agents/skills/codexbar-release/SKILL.md`.
 
 ## Automatic CLI Updates
 

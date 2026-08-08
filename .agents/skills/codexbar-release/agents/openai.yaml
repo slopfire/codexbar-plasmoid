@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodexBar Release"
+  short_description: "Package, changelog, KDE Store publish, and push — without leaking secrets."
+  default_prompt: "Publish a new CodexBar plasmoid release using the codexbar-release skill. Keep cookies and credentials out of the public repo."
