@@ -2,6 +2,13 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.6 — 2026-08-11
+
+### Fixes
+
+- Install the CodexBarCore resource bundle with managed CLI updates so OpenRouter and other plugin providers load
+- Parse credit balances from CodexBar 0.48+ plugin usage details and login-method strings
+
 ## 0.1.5 — 2026-08-08
 
 ### Features
