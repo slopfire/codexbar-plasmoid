@@ -473,6 +473,86 @@ function cleanupStaleUpdateDirs(targetDir) {
   }
 }
 
+// Upstream CodexBar 0.48+ ships JS provider plugins (OpenRouter, OpenAI, …)
+// inside CodexBar_CodexBarCore.bundle next to the CLI. Without that directory
+// the binary still starts, but plugin providers fail with:
+// "CodexBarCore resource bundle is missing next to the executable".
+const BINARY_ENTRY_NAMES = new Set(["CodexBarCLI", "codexbar"]);
+const CORE_RESOURCE_BUNDLE = "CodexBar_CodexBarCore.bundle";
+
+function coreResourceBundlePath(targetDir) {
+  return path.join(targetDir, CORE_RESOURCE_BUNDLE);
+}
+
+function hasCoreResourceBundle(targetDir) {
+  try {
+    return fs.statSync(coreResourceBundlePath(targetDir)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function needsCompanionRepair(targetDir, targetBinary) {
+  // Incomplete installs from older updaters kept only the binary + VERSION.
+  // Force a re-extract when the managed CLI is present but the core resource
+  // bundle is missing so plugin-backed providers (openrouter, openai, …) work.
+  if (!fs.existsSync(targetBinary)) {
+    return false;
+  }
+  return !hasCoreResourceBundle(targetDir);
+}
+
+function copyPathRecursive(src, dest) {
+  const st = fs.lstatSync(src);
+  if (st.isSymbolicLink()) {
+    try {
+      fs.unlinkSync(dest);
+    } catch {}
+    fs.symlinkSync(fs.readlinkSync(src), dest);
+    return;
+  }
+  if (st.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true, mode: 0o755 });
+    for (const entry of fs.readdirSync(src)) {
+      copyPathRecursive(path.join(src, entry), path.join(dest, entry));
+    }
+    return;
+  }
+  fs.copyFileSync(src, dest);
+  try {
+    fs.chmodSync(dest, st.mode);
+  } catch {}
+}
+
+function installCompanionAssets(extractDir, targetDir) {
+  // Install everything the release tarball ships next to the binary: VERSION,
+  // CodexBar_CodexBarCore.bundle (JS provider plugins), and any future
+  // sidecar files. Skip the binary entries themselves — those are installed
+  // separately as the managed `codexbar` executable.
+  let entries = [];
+  try {
+    entries = fs.readdirSync(extractDir);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    if (BINARY_ENTRY_NAMES.has(name)) {
+      continue;
+    }
+    const src = path.join(extractDir, name);
+    const dest = path.join(targetDir, name);
+    const tmpDest = `${dest}.tmp.${process.pid}`;
+    try {
+      fs.rmSync(tmpDest, { recursive: true, force: true });
+    } catch {}
+    copyPathRecursive(src, tmpDest);
+    try {
+      fs.rmSync(dest, { recursive: true, force: true });
+    } catch {}
+    fs.renameSync(tmpDest, dest);
+  }
+}
+
 async function performUpdate(metadata, options = {}) {
   const targetDir = options.targetDir || managedDir();
   const targetBinary = path.join(targetDir, "codexbar");
@@ -530,14 +610,10 @@ async function performUpdate(metadata, options = {}) {
 
     // Atomic replacement via rename.
     fs.renameSync(extractedBinary, targetBinary);
-    // The CLI reads its version from a `VERSION` file next to the executable,
-    // so install it alongside the managed binary (the tarball ships one).
-    const versionFile = path.join(extractDir, "VERSION");
-    if (fs.existsSync(versionFile)) {
-      const tmpVersion = `${path.join(targetDir, "VERSION")}.tmp.${process.pid}`;
-      fs.copyFileSync(versionFile, tmpVersion);
-      fs.renameSync(tmpVersion, path.join(targetDir, "VERSION"));
-    }
+    // Install VERSION, CodexBar_CodexBarCore.bundle (JS provider plugins),
+    // and any other sidecar files the tarball ships next to the binary.
+    // Older updaters only kept the binary, which breaks OpenRouter/OpenAI/etc.
+    installCompanionAssets(extractDir, targetDir);
     return { version: versionMatch[1], targetBinary };
   } finally {
     try {
@@ -602,8 +678,11 @@ export async function updateIfNeeded(options = {}) {
   await ensureSqlite(targetDir, targetBinary);
   const installedVersion = getInstalledVersion(targetBinary);
   const status = buildStatus(metadata, installedVersion, targetBinary);
+  // Repair installs that only kept the binary (pre-bundle updater) even when
+  // the reported CLI version already matches the latest release.
+  const repairCompanions = needsCompanionRepair(targetDir, targetBinary);
 
-  if (!status.needsUpdate && !force) {
+  if (!status.needsUpdate && !force && !repairCompanions) {
     return {
       ok: true,
       ...status,
@@ -621,6 +700,7 @@ export async function updateIfNeeded(options = {}) {
     targetBinary: result.targetBinary,
     needsUpdate: false,
     updated: true,
+    repairedCompanions: repairCompanions && !status.needsUpdate && !force,
     error: null,
   };
 }

@@ -912,9 +912,20 @@ function normalizeProvider(item, cost) {
   const rawOrganization = usage.accountOrganization || identity.accountOrganization || null;
   const organization = anonymizeEmails ? anonymizeIdentity(rawOrganization) : rawOrganization;
 
+  // Credits can arrive in several shapes depending on CLI / plugin version:
+  // - item.credits.remaining / usage.openRouterUsage.balance (legacy)
+  // - usage.primary.resetDescription like "$8.56 remaining"
+  // - usage.details[{title:"Credits", rows:[{label:"Remaining", value:"$8.56"}]}]
+  // - usage.loginMethod / identity.loginMethod like "Balance: $8.56" (0.48+ plugins)
   let creditsRemaining = numberOrNull(item.credits?.remaining ?? usage.openRouterUsage?.balance);
+  if (creditsRemaining === null) {
+    creditsRemaining = creditsFromUsageDetails(usage);
+  }
   if (creditsRemaining === null && source === "api" && usage.primary?.resetDescription) {
     creditsRemaining = parseBalanceFromDescription(usage.primary.resetDescription);
+  }
+  if (creditsRemaining === null) {
+    creditsRemaining = parseBalanceFromDescription(usage.loginMethod || identity.loginMethod);
   }
 
   const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
@@ -1094,11 +1105,35 @@ function parseBalanceFromDescription(description) {
   if (typeof description !== "string") {
     return null;
   }
-  const match = description.match(/^\$([\d,.]+)/);
+  // Accept "$8.56 …", "Balance: $8.56", "Remaining $8.56", or a bare amount.
+  const match = description.match(/\$\s*([\d,]+(?:\.\d+)?)/) || description.match(/^([\d,]+(?:\.\d+)?)\s*$/);
   if (!match) {
     return null;
   }
   return numberOrNull(match[1].replace(/,/g, ""));
+}
+
+/**
+ * CodexBar 0.48+ JS provider plugins (OpenRouter, OpenAI, …) put credit
+ * balances in usage.details instead of usage.primary / openRouterUsage.
+ */
+function creditsFromUsageDetails(usage) {
+  for (const section of asArray(usage?.details)) {
+    const title = clean(section?.title).toLowerCase();
+    if (title && title !== "credits" && title !== "balance" && !title.includes("credit")) {
+      continue;
+    }
+    for (const row of asArray(section?.rows)) {
+      const label = clean(row?.label).toLowerCase();
+      if (label === "remaining" || label === "balance" || label === "credits remaining") {
+        const parsed = parseBalanceFromDescription(typeof row?.value === "string" ? row.value : String(row?.value ?? ""));
+        if (parsed !== null) {
+          return parsed;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function dailyUsagePoints(dashboard, cost) {
