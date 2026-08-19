@@ -213,8 +213,14 @@ async function main() {
 
   try {
     const usage = runUsage();
-    const cost = includeCost ? runCost() : [];
-    const snapshot = normalizeSnapshot(usage, cost);
+    let cost = [];
+    let costError = null;
+    if (includeCost) {
+      const costResult = runCost();
+      cost = costResult.items;
+      costError = costResult.costError;
+    }
+    const snapshot = normalizeSnapshot(usage, cost, costError);
     snapshot.cliUpdate = updateResult;
     process.stdout.write(`${JSON.stringify(snapshot)}\n`);
   } catch (error) {
@@ -499,17 +505,32 @@ function runCost() {
     .filter((config) => config.includeCost !== false);
 
   if (configs.length === 0) {
-    return [];
+    return { items: [], costError: null };
   }
 
-  const results = [];
+  const items = [];
+  const costErrors = [];
+  const collectCostResults = (payload) => {
+    for (const item of asArray(payload)) {
+      if (item && typeof item === "object" && !item.error) {
+        items.push(item);
+        continue;
+      }
+      const message = item && typeof item === "object" && item.error
+        ? (clean(item.error.message) || "CodexBar cost command failed")
+        : "";
+      if (message && !costErrors.includes(message)) {
+        costErrors.push(message);
+      }
+    }
+  };
   const seenProviders = new Set();
 
   const codexbarProviders = uniqueProviderIds(configs.filter((config) =>
     CODEXBAR_COST_PROVIDERS.has(normalizeProviderId(config.provider))
   ));
   if (codexbarProviders.length > 0) {
-    results.push(...fetchCostWithCommand(
+    collectCostResults(fetchCostWithCommand(
       currentCliPath(),
       codexbarProviders.length === 1 ? codexbarProviders[0] : "all",
       "codexbar",
@@ -523,7 +544,7 @@ function runCost() {
     NATIVE_COST_PROVIDERS.has(normalizeProviderId(config.provider))
   ));
   for (const providerId of nativeProvidersForCost) {
-    results.push(...fetchCostWithCommand(nativeCliPath, providerId, "native"));
+    collectCostResults(fetchCostWithCommand(nativeCliPath, providerId, "native"));
     seenProviders.add(providerId);
   }
 
@@ -532,12 +553,12 @@ function runCost() {
   if (provider === "all" && configs.every((config) => !config._fromConfigs)) {
     for (const providerId of NATIVE_COST_PROVIDERS) {
       if (!seenProviders.has(providerId)) {
-        results.push(...fetchCostWithCommand(nativeCliPath, providerId, "native"));
+        collectCostResults(fetchCostWithCommand(nativeCliPath, providerId, "native"));
       }
     }
   }
 
-  return results.filter((item) => item && !item.error);
+  return { items, costError: costErrors.length > 0 ? costErrors.join(" | ") : null };
 }
 
 function uniqueProviderIds(configs) {
@@ -571,7 +592,8 @@ function fetchCostWithCommand(command, providerId, backend) {
       backend,
     }, () => {
       try {
-        return runJSON(command, commandArgs, providerId, "");
+        const extraEnv = backend === "codexbar" ? { SWIFT_TESTING: "1" } : {};
+        return runJSON(command, commandArgs, providerId, "", "", extraEnv);
       } catch (error) {
         return [{
           provider: "cost",
@@ -579,7 +601,7 @@ function fetchCostWithCommand(command, providerId, backend) {
         }];
       }
     });
-    return asArray(payload).filter((item) => item && typeof item === "object" && !item.error);
+    return asArray(payload);
   } catch (error) {
     return [{
       provider: "cost",
@@ -744,13 +766,13 @@ function commandExists(command) {
   });
 }
 
-function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "") {
+function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "", extraEnv = {}) {
   const invocation = resolveCommandInvocation(command);
   let stdout = "";
   try {
     stdout = execFileSync(invocation.command, [...invocation.prefix, ...commandArgs], {
       encoding: "utf8",
-      env: cliEnvForProvider(providerId, apiKey, account),
+      env: { ...cliEnvForProvider(providerId, apiKey, account), ...(extraEnv || {}) },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: timeoutMs,
       windowsHide: true,
@@ -769,7 +791,7 @@ function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "
   return JSON.parse(trimmed);
 }
 
-function normalizeSnapshot(usagePayload, costPayload) {
+function normalizeSnapshot(usagePayload, costPayload, costError = null) {
   const costByProvider = new Map();
   for (const item of asArray(costPayload)) {
     if (!item || typeof item.provider !== "string" || item.error) {
@@ -850,7 +872,7 @@ function normalizeSnapshot(usagePayload, costPayload) {
     generatedAt: new Date().toISOString(),
     requestedProvider: provider,
     entries: filteredEntries,
-    costError: null,
+    costError: clean(costError) || null,
   };
 }
 
@@ -1474,6 +1496,19 @@ function resolveNativeCliPath() {
   return "codexbar-plasmoid";
 }
 
+/**
+ * Builds the environment for one CLI subprocess.
+ *
+ * Swift cost scans run through Foundation on Linux; if no test-environment
+ * key is present, CostUsageCustomPricing.isRunningTests falls through to
+ * Bundle.allBundles and that CoreFoundation enumeration SIGSEGVs. Cost
+ * callers pass SWIFT_TESTING=1 through runJSON's extraEnv so isRunningTests
+ * returns before enumerating bundles. SWIFT_TESTING is intentionally used
+ * instead of XCTestConfigurationFilePath: ProviderHTTPClient only recognizes
+ * the XCTest* keys, and setting one of those would switch cost requests to
+ * URLSession.shared. While SWIFT_TESTING is active, CodexBar skips the user
+ * custom-pricing.json overlays; bundled list prices still apply.
+ */
 function cliEnvForProvider(providerId, apiKey, account = "") {
   const env = { ...process.env };
   const normalized = normalizeProviderId(providerId);
@@ -1617,6 +1652,9 @@ function errorSnapshot(error) {
 }
 
 function shortError(error, command = currentCliPath()) {
+  if (error?.signal === "SIGSEGV") {
+    return "CodexBar CLI crashed with SIGSEGV during the command";
+  }
   const stderr = clean(error?.stderr?.toString?.());
   if (stderr) {
     return stderr.split("\n").slice(-4).join("\n");
