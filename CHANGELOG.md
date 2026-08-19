@@ -2,6 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.7 — 2026-08-19
+
+### Fixes
+
+- Stop the CodexBar CLI from crashing on Linux while scanning Codex and Claude cost
+
 ## 0.1.6 — 2026-08-11
 
 ### Fixes
