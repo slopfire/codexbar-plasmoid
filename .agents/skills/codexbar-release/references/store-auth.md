@@ -1,78 +1,98 @@
-# store.kde.org authentication
+# store.kde.org authentication & upload
 
-Upload script: `scripts/release-kde-store.sh`  
-Product: `https://store.kde.org/p/2365275` (Plasma 6 applets)
+Scripts:
+
+- `scripts/release-kde-store.sh` — package + upload (entry point)
+- `scripts/lib/kde-store-auth.py` — Chrome session → cookie **file** only
+- `scripts/lib/kde-store-browser-upload.py` — Files UI upload via isolated Chrome CDP
+
+Product: `https://store.kde.org/p/2365275`
+
+## Agent rule
+
+**Do not decrypt or print cookies yourself.** Run the release script. If it asks for OAuth, tell the operator to finish the Chrome tab, then re-run the script. See `privacy.md`.
 
 ## Preferred order
 
-1. **Already signed-in Chrome** on this machine, then:
+```sh
+./scripts/release-kde-store.sh
+```
 
-   ```sh
-   ./scripts/release-kde-store.sh
-   ```
+Auth discovery (inside the script, never printed):
 
-   The script discovers cookies from local Chrome profiles without writing them into the repo.
+1. `KDE_STORE_COOKIE_FILE` — Netscape cookie file **outside** the repo  
+2. `KDE_STORE_COOKIE` — header string in the environment (copied into a temp file immediately)  
+3. Local Chrome profile via `kde-store-auth.py write-cookie-file`
 
-2. **Operator-provided env** (local shell only, never commit):
+## Upload paths (in order)
 
-   ```sh
-   # Header style (name=value; name2=value2) — do not print this line in logs
-   export KDE_STORE_COOKIE='…'
-   ./scripts/release-kde-store.sh
-   ```
+### 1. curl product endpoints
 
-   or a cookie file **outside** the repository:
+1. `POST /p/2365275/addpploadfile/` multipart field `file_upload`  
+2. `POST /p/2365275/updatepploadfile/` with `file_id`, `file_version`, `ocs_compatible=1`
 
-   ```sh
-   export KDE_STORE_COOKIE_FILE=/path/outside/repo/store.cookies
-   ./scripts/release-kde-store.sh
-   unset KDE_STORE_COOKIE_FILE
-   ```
+### 2. Browser Files UI (automatic fallback)
 
-3. **Interactive refresh**: open the product edit URL in Chrome, complete OpenDesktop/GitHub OAuth if prompted, retry the script.
+`addpploadfile` often returns HTTP 200 with `{"status":"error","error_text":""}` even when the session is valid. The site’s **Files** dropzone still works.
 
-## Success signals
+Fallback (`kde-store-browser-upload.py`):
 
-- `GET /p/2365275/edit/` stays on the edit UI (“welcome to your store backend”), not `/login` or opendesktop login.
-- Upload script prints `Released CodexBar <version> to https://store.kde.org/p/2365275`.
-- Public product page lists `codexbar-plasmoid-v<version>-plasma6.plasmoid` and shows version `<version>`.
+1. Isolated Chrome (`--user-data-dir` under `$TMPDIR`, remote debugging)  
+2. Inject cookies from the temp cookie file via CDP (`Network.setCookie`) — **not** logged  
+3. If edit page is login: OpenDesktop → GitHub OAuth; click Continue / Authorize (needs a signed-in GitHub session in Chrome)  
+4. Edit product → **Files** (`#add-product-form-h-2`)  
+5. Accept Terms → `DOM.setFileInputFiles` on `input[data-file-upload]` → **Add File(s)**  
+6. Wait until the row has `data-ppload-file-id` **and** a 32-char MD5  
+7. `updatepploadfile` with version + `ocs_compatible=1`  
+8. Basics → set `#version` → **Save**  
+9. Destroy CDP Chrome + user-data-dir  
+
+Stdout is status-only, e.g. `upload:complete file_id=… md5=…` (artifact md5 is public).
+
+### 3. Manual operator fallback
+
+If automation still fails:
+
+1. Open `https://store.kde.org/p/2365275/edit/` while signed in  
+2. **Files** → accept terms → upload `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid` once  
+3. Set file version to `X.Y.Z` (and leave OCS compatible on)  
+4. **Basics** → product Version `X.Y.Z` → **Save**  
+5. Delete accidental duplicates from failed retries  
+
+## Session checks
+
+```sh
+# Status only: prints "authorized" or "unauthorized" (exit 1 if unauthorized)
+uv run --quiet --with pycryptodome --with secretstorage --with browser-cookie3 \
+  python3 scripts/lib/kde-store-auth.py check-edit
+```
+
+Success signals after release:
+
+- Script ends with `Released CodexBar X.Y.Z to https://store.kde.org/p/2365275`  
+- OCS lists the file (soft check):  
+  `https://api.opendesktop.org/ocs/v1/content/data/2365275`  
+  → `downloadnameN=codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`  
+- Backend Basics version is `X.Y.Z` (OCS top-level `<version>` can lag)
 
 ## Failure modes → actions
 
 | Symptom | Likely cause | Action |
 |---------|--------------|--------|
-| Script: no signed-in session found | Chrome locked cookies / logged out / decrypt failure | Sign into store in Chrome; retry. Script also tries keyring-backed decrypt fallback. |
-| HTTP 302 on upload or edit | Session expired | Open edit URL in Chrome, finish OAuth, retry |
-| HTTP 2xx but `{"status":"error"}` on `addpploadfile` | Endpoint expects browser/pling upload flow or stale CSRF/session | Use browser UI Files step: accept terms → add `.plasmoid` → set file version → save product version |
-| Cookie decrypt errors from tooling | Wrong Safe Storage key or CBC payload prefix | Rely on the script fallback; do not copy keyring secrets into the repo |
-| Duplicate versioned files on the listing | Multiple uploads during retries | Delete extras in the store Files UI; keep one clean `…-vX.Y.Z-plasma6.plasmoid` |
+| `no_chrome_store_session` | Not signed in / cookie decrypt failed | Sign into store in Chrome; retry |
+| `unauthorized` / HTTP 302 on edit | Expired session | Open edit URL, finish GitHub OAuth, retry |
+| curl `addpploadfile` → `status=error` empty text | Endpoint flaky vs Files UI | Script auto-falls back to browser upload |
+| `auth_failed_sign_in_chrome` | OAuth not completed | Operator finishes OAuth in the tab; re-run |
+| OCS missing new file briefly | Index lag | Wait; confirm on edit Files tab by MD5 |
+| Duplicate `…-vX.Y.Z-…` rows | Retried uploads | Delete extras in Files UI |
 
-## Browser UI fallback (no secret capture)
-
-When the script cannot upload but the operator can use a browser:
-
-1. Open `https://store.kde.org/p/2365275/edit/` while signed in.
-2. Go to **Files**.
-3. Accept terms if required.
-4. Upload `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid` only once.
-5. Set the file version / OCS compatible flag to `X.Y.Z`.
-6. Set product **Version** field to `X.Y.Z` and save Basics.
-7. Confirm the public page listing.
-8. Remove accidental duplicate uploads from failed retries.
-
-If using automated browser control:
-
-- Prefer an isolated `--user-data-dir` under `/tmp`, not the operator’s daily profile directory inside the repo.
-- Inject sessions only in memory / CDP for that process.
-- Delete the user-data-dir when finished.
-- Never write cookie JSON into `.agents/` or project files.
-
-## Hygiene after auth debugging
+## Hygiene
 
 ```sh
 unset KDE_STORE_COOKIE KDE_STORE_COOKIE_FILE
-rm -f /tmp/*kde*cookie* /tmp/*ocs*header* /tmp/chrome-session-cookies.json 2>/dev/null || true
-rm -rf /tmp/chrome-kde-release 2>/dev/null || true
+rm -f "${TMPDIR:-/tmp}"/codexbar-kde-store*.cookies \
+      "${TMPDIR:-/tmp}"/codexbar-chrome-cookies.* 2>/dev/null || true
+rm -rf "${TMPDIR:-/tmp}"/codexbar-kde-cdp.* 2>/dev/null || true
 ```
 
-Do not describe cookie contents in the handoff note—only whether auth succeeded.
+The release script trap removes its own cookie file; still clean up if a run was killed mid-flight.

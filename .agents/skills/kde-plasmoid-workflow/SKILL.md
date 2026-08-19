@@ -82,6 +82,10 @@ kpackagetool6 --type Plasma/Applet --install plasmoid --packageroot /tmp/codexba
 # Stable log pointers:
 #   /tmp/codexbar-virtual-latest/app.log
 #   /tmp/codexbar-virtual-latest/session.log
+
+# Pixels of the isolated session (skill virt-gui-verify):
+virt-shot --keep -- plasmawindowed "$(pwd)/plasmoid"
+# read /tmp/virt-shot.jpg ; virt-shot --stop
 ```
 
 Longer interactive virtual session:
@@ -110,7 +114,7 @@ turn. Agents must otherwise use the virtual and config-smoke paths above.
 ./scripts/run-windowed.sh --allow-host-window --accessibility
 ```
 
-Use skill **computer-use-linux** (no screenshots unless asked). Expand compact → full before asserting dashboard labels.
+Do **not** use computer-use-linux for this. Visual: `virt-shot`. Expand compact → full in the isolated viewer before asserting dashboard labels.
 
 6. After implementing a feature, install with `./scripts/install-plasmoid.sh` (see `AGENTS.md`).
 

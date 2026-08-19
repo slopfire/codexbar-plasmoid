@@ -20,24 +20,24 @@ Do **not** use it for routine widget development (that is `kde-plasmoid-workflow
 
 This repository is **public**. Treat every file you write here as world-readable.
 
-| Never put in the repo, commits, PRs, skills, or logs | OK to record |
-|-----------------------------------------------------|--------------|
-| Cookie headers / `KDE_STORE_COOKIE` values | Product id `2365275` (public listing) |
+**Cookies and session tokens must never enter the agent transcript** (tool args, stdout you re-quote, chat, commits). Run only the release scripts; they keep auth in mode-0600 temp files and print status words only.
+
+| Never | OK |
+|-------|-----|
+| Cookie headers / values / Netscape dumps | Product id `2365275` |
 | `__ocs_id`, `remember_token`, OAuth codes | Script names and flags |
-| Passwords, API keys, personal emails beyond existing public metadata | Version numbers, sha256 of the archive |
-| Decrypted Chrome cookie dumps, Netscape cookie files | High-level auth *method* names |
-| Full `Authorization` headers or session JSON | “Signed in as store owner” without secrets |
+| Keyring / Safe Storage secrets | Version, archive **md5/sha256** |
+| One-off decrypt scripts that `print` cookies | “Session authorized” / “OAuth needed” |
 
-Hard rules for agents:
+Hard rules:
 
-1. **Never** commit under `dist/`, cookie files, `/tmp/*cookie*`, or browser profile copies.
-2. **Never** paste cookie values, tokens, or passwords into chat, commit messages, or skill files.
-3. Prefer env vars in the **local shell only**: `KDE_STORE_COOKIE`, `KDE_STORE_COOKIE_FILE`.
-4. If a command would print secrets, redirect or redact; delete temp auth files when done.
-5. Auth recovery may use the operator’s local Chrome keyring **on this machine only** — do not export keyring secrets into the tree.
-6. When stuck on auth, ask the operator to sign into store.kde.org in Chrome rather than scraping credentials from password managers.
+1. **Never** commit `dist/`, cookie files, `/tmp/*cookie*`, or browser profile copies.
+2. **Never** decrypt Chrome cookies in ad-hoc agent commands — use `scripts/lib/kde-store-auth.py` only (file out, status on stdout).
+3. Prefer `./scripts/release-kde-store.sh` over hand-rolled `curl` with `-b`.
+4. Delete temp auth artifacts when done (script trap + hygiene in `references/privacy.md`).
+5. When stuck on auth, ask the operator to sign into `store.kde.org` in Chrome — do not scrape password managers.
 
-Read `references/privacy.md` before any store authentication work.
+Read `references/privacy.md` before any store work. Upload details: `references/store-auth.md`.
 
 ## Release facts
 
@@ -51,6 +51,7 @@ Read `references/privacy.md` before any store authentication work.
 | Version sources (must match) | `plasmoid/metadata.json`, `native-cli/Cargo.toml`, `native-cli/Cargo.lock` (`codexbar-plasmoid` package only), README install examples, `CHANGELOG.md` |
 | Release commit files | those five paths only |
 | Native helper | built by packaging into gitignored `plasmoid/contents/code/codexbar-plasmoid` |
+| Upload entrypoint | `./scripts/release-kde-store.sh` |
 
 ## Preconditions
 
@@ -60,7 +61,7 @@ git log -5 --oneline
 ./scripts/agent-check.sh --quick   # or full ./scripts/agent-check.sh if UI/helper changed
 ```
 
-Required tools: `git`, `python3`, `zip`, `cargo`, `kpackagetool6`, `curl`, `uv`, Chrome (for store session).
+Required tools: `git`, `python3`, `zip`, `cargo`, `kpackagetool6`, `curl`, `uv`, Chrome (store session / CDP fallback).
 
 ## Happy path (feature release)
 
@@ -69,7 +70,6 @@ Prefer a **real changelog**, then package, upload, push.
 ### 1. Collect user-facing notes
 
 ```sh
-# since previous release commit
 git log --oneline --grep='chore(release)' -1
 git log <last-release-commit>..HEAD --oneline --no-merges
 ```
@@ -97,7 +97,7 @@ Update **all** of:
 
 - `plasmoid/metadata.json` → `KPlugin.Version`
 - `native-cli/Cargo.toml` → package `version`
-- `native-cli/Cargo.lock` → only the `name = "codexbar-plasmoid"` package stanza (leave unrelated crates alone, e.g. `inout 0.1.4`)
+- `native-cli/Cargo.lock` → only the `name = "codexbar-plasmoid"` package stanza (leave unrelated crates alone)
 - `README.md` install/upgrade archive filenames
 - `CHANGELOG.md` heading for `X.Y.Z`
 
@@ -107,12 +107,7 @@ Update **all** of:
 ./scripts/package-plasmoid.sh
 ```
 
-Expect:
-
-- native helper rebuild
-- `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`
-- printed **size** + **sha256**
-- temp `kpackagetool6 --install` success
+Expect: native helper rebuild, `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`, size + sha256, temp `kpackagetool6 --install` success.
 
 ### 4. Commit release metadata
 
@@ -121,27 +116,25 @@ git add plasmoid/metadata.json native-cli/Cargo.toml native-cli/Cargo.lock READM
 git commit --no-gpg-sign -m "chore(release): bump version to X.Y.Z"
 ```
 
-Do not stage the native binary (gitignored).
+Do not stage the native binary (gitignored). Feature/fix commits land **before** this bump commit.
 
 ### 5. Publish to KDE Store
-
-Primary:
 
 ```sh
 ./scripts/release-kde-store.sh
 ```
 
-This re-packages the **current** metadata version (no bump) and uploads.
+What the script does (agents do not reimplement this):
 
-Auth order inside the script:
+1. Auth → temp cookie file only (`kde-store-auth.py` or env/file override)  
+2. Checks edit-page authorization (status only)  
+3. Tries `curl` `addpploadfile` + `updatepploadfile`  
+4. On empty JSON error / failure → **browser Files UI** via CDP (`kde-store-browser-upload.py`)  
+5. Soft-verifies OCS lists `codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`  
+6. Prints `Released CodexBar X.Y.Z to https://store.kde.org/p/2365275`  
+7. Deletes the cookie file on exit  
 
-1. `KDE_STORE_COOKIE_FILE` (Netscape or header cookie file outside the repo)
-2. `KDE_STORE_COOKIE` (header string in the environment)
-3. Local Chrome profile cookie discovery (see `references/store-auth.md`)
-
-On success: `Released CodexBar X.Y.Z to https://store.kde.org/p/2365275`.
-
-If auth fails, follow `references/store-auth.md`. Do **not** commit workaround dumps.
+If the script says OAuth is required: ask the operator to finish the Chrome tab, then **re-run the same script**. Do not start decrypting cookies in the agent shell.
 
 ### 6. Push
 
@@ -149,64 +142,40 @@ If auth fails, follow `references/store-auth.md`. Do **not** commit workaround d
 git push origin HEAD
 ```
 
-Default branch is `master`. No git tag is required by current process (releases are store + commit based).
+Default branch is `master`. No git tag unless the operator asks.
 
 ### 7. Verify
 
-- Archive still at `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`
-- `plasmoid/metadata.json` version = changelog = commit message
-- Store product page shows **version X.Y.Z** and a file named like  
-  `codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`  
-  (public page is JS-rendered; use a logged-in or headless browser if curl HTML lacks filenames)
-- `git status` clean and not ahead of origin
+- Archive at `dist/codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`  
+- Metadata version = changelog = release commit  
+- OCS download entry for that filename (top-level OCS `<version>` may lag)  
+- `git status` clean and not ahead of origin  
 
 ## Maintenance-only path (`--bump`)
 
-For empty “version bump only” releases from a **clean** tree:
-
-```sh
-./scripts/package-plasmoid.sh --bump
-# optional: edit CHANGELOG.md if the auto "Maintenance / Bump release version" stub is too thin,
-# then amend or make a tiny follow-up commit before upload
-./scripts/release-kde-store.sh
-git push origin HEAD
-```
-
-`--bump` patch-increments semver, syncs the five release files, packages, validates, and commits.  
-It **fails** if the working tree is dirty or the changelog already contains the new heading.
-
-Combined form (bump + upload in one shot):
+Clean tree only:
 
 ```sh
 ./scripts/release-kde-store.sh --bump
 git push origin HEAD
 ```
 
-## Store upload behavior (implementation notes)
-
-`scripts/release-kde-store.sh`:
-
-1. Builds via `package-plasmoid.sh`
-2. `POST` multipart to `/p/2365275/addpploadfile/` as `file_upload`
-3. `POST` `/p/2365275/updatepploadfile/` with `file_id`, `file_version`, `ocs_compatible=1`
-
-The website UI may instead upload through a pling.com file server first; the script uses the product endpoints. If those return generic `{"status":"error"}` while the browser UI works, use the authenticated browser fallback in `references/store-auth.md` without recording session material.
+Or package bump without upload: `./scripts/package-plasmoid.sh --bump` then `./scripts/release-kde-store.sh`.
 
 ## Changelog quality bar
 
-- User-facing outcomes, not commit hashes or agent tooling trivia
-- Group under Features / Fixes / Maintenance
-- Keep agent-only workflow changes out unless they affect package consumers
+- User-facing outcomes, not commit hashes or agent tooling trivia  
+- Features / Fixes / Maintenance  
+- Skip agent-only workflow noise unless package consumers care  
 
 ## Anti-patterns
 
-- Bumping only `metadata.json` and forgetting Cargo/README/changelog
-- Rewriting unrelated `Cargo.lock` versions that merely equal the old patch
-- Committing `dist/` or `*.plasmoid`
-- Restarting the operator’s plasmashell to “test the release”
-- Opening host `plasmawindowed` without explicit approval (use `agent-check` / virtual plasma before release)
-- Echoing `KDE_STORE_COOKIE` into CI, dotenv files inside the repo, or skill references
-- Creating GitHub Releases/tags unless the operator asks (not part of the default loop today)
+- Bumping only `metadata.json`  
+- Rewriting unrelated `Cargo.lock` stanzas that share the old patch version  
+- Committing `dist/` or `*.plasmoid`  
+- Restarting plasmashell or host `plasmawindowed` for release validation  
+- **Decrypting store cookies in agent one-liners** or pasting them into tool calls  
+- Creating GitHub Releases/tags unless asked  
 
 ## Related skills
 

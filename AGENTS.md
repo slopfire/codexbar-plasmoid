@@ -27,11 +27,13 @@ Install as part of the check:
 |--------|--------|
 | `./scripts/agent-check.sh` | Restarting `plasmashell` |
 | `./scripts/run-virtual-plasma.sh` | Scattering host `plasmawindowed` windows |
-| Logs under `/tmp/codexbar-virtual-latest/` | Screenshots unless the user asks |
+| Logs under `/tmp/codexbar-virtual-latest/` | Host computer-use / live screenshots |
+| `virt-shot` for a JPEG of the virtual session | Opening host `plasmawindowed` |
 
 Never open host-visible `plasmawindowed` / computer-use during agent work unless
 the user explicitly approves a host window in the current turn. The wrapper
-enforces this with `--allow-host-window`.
+enforces this with `--allow-host-window`. Visual check of the isolated session:
+skill **virt-gui-verify** (`virt-shot`).
 
 ## One-liners
 
@@ -87,15 +89,6 @@ PATH=/tmp/codexbar-plasma-mock:$PATH \
 | `kde-dev-tools` | kpackagetool6, qmllint, paths |
 
 Also see `.agents/AGENTS.md` for QML conventions.
-
-## Context7
-
-Use `bunx ctx7@latest` for all Context7 CLI requests. Do not use `npx` or `npm exec` for Context7.
-
-```sh
-bunx ctx7@latest library <name> "<question>"
-bunx ctx7@latest docs <library-id> "<question>"
-```
 
 ## CodeGraph
 

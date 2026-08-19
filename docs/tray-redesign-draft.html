@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CodexBar tray — redesign draft</title>
+  <style>
+    :root {
+      --bg: #12141a;
+      --bg-elev: #1a1d26;
+      --bg-panel: #2a241f;
+      --bg-card: #1e222c;
+      --line: rgba(255,255,255,.08);
+      --text: #eceff4;
+      --muted: #9aa3b2;
+      --faint: #6b7380;
+      --accent: #7eb8c4;
+      --codex: #4b929b;
+      --grok: #3d8d76;
+      --openrouter: #4d88ad;
+      --devin: #6769ad;
+      --antigravity: #55976b;
+      --warn: #e6c35c;
+      --hot: #e07040;
+      --crit: #e24b4b;
+      --ok: #6bcf8e;
+      --track: rgba(255,255,255,.18);
+      --stroke: rgba(255,255,255,.28);
+      --panel-h: 36px;
+      --bar-w: 18px;
+      --shadow: 0 18px 50px rgba(0,0,0,.35);
+      --mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+      --sans: "Inter", "Noto Sans", "IBM Plex Sans", system-ui, sans-serif;
+    }
+    html[data-theme="light"] {
+      --bg: #e8eaef;
+      --bg-elev: #f4f5f8;
+      --bg-panel: #d9dde6;
+      --bg-card: #ffffff;
+      --line: rgba(20,24,32,.1);
+      --text: #1b1f27;
+      --muted: #4d5563;
+      --faint: #7a8290;
+      --track: rgba(20,24,32,.16);
+      --stroke: rgba(20,24,32,.28);
+      --shadow: 0 14px 40px rgba(30,36,50,.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #243044 0%, transparent 55%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 28px 120px; }
+    header.hero { margin-bottom: 36px; }
+    .kicker {
+      font: 600 11px/1 var(--mono);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    h1 { font-size: 34px; letter-spacing: -.03em; margin: 8px 0 10px; font-weight: 650; }
+    .lede { max-width: 72ch; color: var(--muted); font-size: 16px; }
+    nav.toc {
+      display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0;
+    }
+    nav.toc a {
+      text-decoration: none;
+      color: var(--text);
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+    }
+    .toolbar {
+      position: sticky; top: 0; z-index: 20;
+      display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+      padding: 10px 0 12px;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+      margin: 0 -8px 32px;
+      padding-left: 8px; padding-right: 8px;
+    }
+    .toolbar label { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+    .toolbar select, .toolbar button {
+      background: var(--bg-card); color: var(--text);
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: 5px 9px; font: 12px var(--sans);
+    }
+    section { margin: 48px 0; }
+    h2 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 8px; }
+    h3 { font-size: 15px; margin: 0 0 6px; }
+    .sub { color: var(--muted); margin: 0 0 18px; max-width: 80ch; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+    .grid-2 { display: grid; grid-template-columns: 1.1fr .9fr; gap: 18px; }
+    @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card p, .card li { color: var(--muted); font-size: 13.5px; }
+    .card ul { margin: 8px 0 0; padding-left: 18px; }
+    .tag {
+      display: inline-block; font: 600 10px/1 var(--mono);
+      letter-spacing: .04em; text-transform: uppercase;
+      padding: 3px 7px; border-radius: 999px; margin-right: 6px;
+      background: rgba(126,184,196,.14); color: var(--accent);
+    }
+    .tag.easy { background: rgba(107,207,142,.14); color: var(--ok); }
+    .tag.med { background: rgba(230,195,92,.14); color: var(--warn); }
+    .tag.hard { background: rgba(226,75,75,.14); color: var(--crit); }
+    .tag.keep { background: rgba(255,255,255,.08); color: var(--muted); }
+
+    /* Plasma panel mock */
+    .desk {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.04), transparent 40%),
+        #3a322b;
+      border-radius: 12px;
+      padding: 28px 16px 0;
+      border: 1px solid rgba(255,255,255,.06);
+      overflow: hidden;
+    }
+    html[data-theme="light"] .desk { background: #cfd6e2; }
+    .panel {
+      height: var(--panel-h);
+      background: var(--bg-panel);
+      display: flex; align-items: center; gap: 10px;
+      padding: 0 10px;
+      box-shadow: 0 -8px 24px rgba(0,0,0,.25);
+    }
+    .systray { display: flex; align-items: center; gap: 8px; margin-left: auto; color: rgba(255,255,255,.72); font-size: 12px; }
+    html[data-theme="light"] .systray { color: rgba(20,24,32,.65); }
+    .systray .dot { width: 14px; height: 14px; border-radius: 50%; background: #3b82f6; }
+    .systray .clock { font-variant-numeric: tabular-nums; }
+
+    .tray {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: calc(var(--panel-h) - 8px);
+      padding: 0 4px;
+    }
+    .groups { display: flex; align-items: center; gap: 5px; height: 100%; }
+    .group {
+      width: var(--bar-w);
+      height: calc(var(--panel-h) - 14px);
+      display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    }
+    .bar {
+      flex: 1; min-height: 4px;
+      border-radius: 99px;
+      background: var(--track);
+      box-shadow: inset 0 0 0 1px var(--stroke);
+      overflow: hidden; position: relative;
+    }
+    .bar.fat { flex: 1.6; }
+    .bar.thin { flex: .85; }
+    .bar.solo { flex: 0 0 46%; }
+    .fill {
+      height: 100%; border-radius: inherit;
+      background: #d9c35a;
+    }
+    .credits {
+      height: 100%;
+      border-radius: 6px;
+      display: grid; place-items: center;
+      font: 700 10px/1 var(--sans);
+      color: #1a1a1a;
+      box-shadow: inset 0 0 0 1px var(--stroke);
+    }
+    .metric {
+      font: 700 15px/1 var(--sans);
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric small { font-weight: 500; font-size: 10px; color: var(--faint); margin-left: 1px; }
+    .metric-col { display: flex; flex-direction: column; justify-content: center; line-height: 1.05; }
+    .metric-col .who { font-size: 9px; color: var(--faint); }
+
+    .icon {
+      width: 16px; height: 16px; flex: 0 0 16px;
+      display: grid; place-items: center;
+    }
+    .icon svg { width: 100%; height: 100%; display: block; }
+    .avatar {
+      width: 16px; height: 16px; border-radius: 50%;
+      display: grid; place-items: center;
+      font: 700 8px/1 var(--sans); color: #0d1117;
+    }
+    .pip { width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: calc(var(--panel-h) - 10px);
+      padding: 0 8px 0 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    html[data-theme="light"] .chip { background: rgba(255,255,255,.55); }
+
+    .ring {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: conic-gradient(var(--c, #e07040) calc(var(--p) * 1%), var(--track) 0);
+      display: grid; place-items: center;
+    }
+    .ring::after {
+      content: ""; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--bg-panel);
+    }
+
+    .vu { display: flex; align-items: flex-end; gap: 2px; height: 70%; }
+    .vu i {
+      display: block; width: 4px; border-radius: 2px 2px 1px 1px;
+      background: var(--c, #d9c35a);
+    }
+
+    .cells { display: flex; gap: 2px; align-items: center; height: 10px; }
+    .cells i {
+      width: 7px; height: 10px; border-radius: 2px;
+      background: var(--track); box-shadow: inset 0 0 0 1px var(--stroke);
+    }
+    .cells i.on { background: var(--c, #d9c35a); box-shadow: none; }
+
+    .stack-avatars { display: flex; }
+    .stack-avatars .avatar { margin-left: -5px; box-shadow: 0 0 0 1px var(--bg-panel); }
+    .stack-avatars .avatar:first-child { margin-left: 0; }
+
+    .legend {
+      display: flex; gap: 2px; justify-content: space-between;
+      font: 600 7px/1 var(--mono); color: var(--faint); letter-spacing: .02em;
+    }
+
+    .vpanel {
+      width: 44px; min-height: 160px;
+      background: var(--bg-panel);
+      border-radius: 10px;
+      padding: 10px 6px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+    .why { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .why div { background: rgba(255,255,255,.03); border-radius: 8px; padding: 8px 10px; }
+    .why b { display: block; font-size: 11px; color: var(--text); margin-bottom: 2px; }
+    .why span { font-size: 12px; color: var(--muted); }
+
+    table.facts { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.facts th, table.facts td {
+      text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    table.facts th { color: var(--faint); font-weight: 600; width: 28%; }
+    code { font-family: var(--mono); font-size: 12px; }
+
+    .anatomy { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .callouts { display: flex; gap: 18px; font-size: 11px; color: var(--faint); padding-left: 4px; }
+    .callouts span { position: relative; }
+    .callouts span::before {
+      content: ""; position: absolute; left: 50%; top: -10px; width: 1px; height: 8px;
+      background: var(--faint);
+    }
+
+    .state-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .state-row figure { margin: 0; }
+    .state-row figcaption { font-size: 11px; color: var(--faint); margin-top: 6px; text-align: center; }
+
+    .rec { border-left: 3px solid var(--accent); padding-left: 14px; }
+
+    .mixer .tray { background: rgba(0,0,0,.15); border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="kicker">CodexBar · Plasma 6 · compact representation</div>
+      <h1>Tray redesign draft</h1>
+      <p class="lede">
+        The panel widget is doing a lot of work in about 70×32 pixels: several providers,
+        one or two remaining-limit bars each, an optional metric, and a color that tries
+        to mean both <em>who</em> and <em>how empty</em>. This page recreates the current
+        tray, names what it actually encodes, then walks through a pile of redesigns —
+        from cheap label tweaks to denser “chip” layouts. Nothing here is implemented.
+      </p>
+      <nav class="toc">
+        <a href="#now">Current</a>
+        <a href="#anatomy">Anatomy</a>
+        <a href="#problems">Problems</a>
+        <a href="#principles">Principles</a>
+        <a href="#gallery">Redesigns</a>
+        <a href="#states">States</a>
+        <a href="#vertical">Vertical</a>
+        <a href="#interact">Interaction</a>
+        <a href="#pick">Shortlist</a>
+      </nav>
+    </header>
+
+    <div class="toolbar">
+      <label>Theme
+        <select id="theme">
+          <option value="dark">Dark panel</option>
+          <option value="light">Light panel</option>
+        </select>
+      </label>
+      <label>Panel height
+        <select id="height">
+          <option value="28">28px (thin)</option>
+          <option value="36" selected>36px (typical)</option>
+          <option value="44">44px (comfortable)</option>
+        </select>
+      </label>
+      <label>Bar width
+        <select id="barw">
+          <option value="14">14px</option>
+          <option value="18" selected>18px (current default)</option>
+          <option value="24">24px</option>
+          <option value="32">32px</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- CURRENT -->
+    <section id="now">
+      <h2>What ships today</h2>
+      <p class="sub">
+        Recreated from <code>CompactRepresentation.qml</code> + <code>CompactUsageBars.qml</code>
+        and the screenshot you sent. Defaults in <code>main.xml</code>: display
+        <code>bars-first</code>, bars for <code>all</code> providers, tint
+        <code>theme</code> (your panel is clearly on <strong>threshold</strong> tint + metric on).
+      </p>
+
+      <div class="desk">
+        <div class="panel">
+          <span style="opacity:.45;font-size:12px;padding-left:4px">Applications</span>
+          <div class="tray" title="current compact widget">
+            <div class="groups">
+              <div class="group" title="Codex weekly ~35%">
+                <div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div>
+              </div>
+              <div class="group" title="OpenRouter credits pill / high remaining">
+                <div class="bar solo"><div class="fill" style="width:100%;background:#c8c4bb"></div></div>
+              </div>
+              <div class="group" title="Grok session + weekly">
+                <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+              </div>
+            </div>
+            <div class="metric">6.5</div>
+          </div>
+          <div class="systray">
+            <span class="dot"></span>
+            <span>🔊</span>
+            <span class="clock">14:02</span>
+          </div>
+        </div>
+      </div>
+      <div class="anatomy" style="margin-top:10px">
+        <div class="callouts" style="padding-left:12px">
+          <span>provider A · 1 bar, half height</span>
+          <span>credits / full remaining</span>
+          <span>provider C · first-larger stack</span>
+          <span>compact metric</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ANATOMY -->
+    <section id="anatomy">
+      <h2>What the tray can show</h2>
+      <p class="sub">The compact face is assembled in QML from a small, already-normalized contract. Redesigns should reuse this rather than invent new fetches.</p>
+      <div class="grid-2">
+        <div class="card">
+          <table class="facts">
+            <tr><th>Bar groups</th><td>One group per selected provider. 1–4 stacked lanes. Width default <code>18px</code>.</td></tr>
+            <tr><th>Lane styles</th><td><code>first</code> larger · equal · descending · last larger · alternating.</td></tr>
+            <tr><th>Fill</th><td><code>percentLeft</code> 0–100, exact width, 1px hairline if almost empty.</td></tr>
+            <tr><th>Credits fallback</th><td>If a provider has no usage rows, it becomes a tinted pill with the number inside.</td></tr>
+            <tr><th>Metric text</th><td>Lowest remaining · session · weekly · credits · today cost. Default <em>off</em>. Shown only when the applet is wide enough and not vertical.</td></tr>
+            <tr><th>Tint</th><td>Provider hue · threshold white→yellow→red · theme text.</td></tr>
+            <tr><th>Icon mode</th><td>Masked provider SVG, no bars.</td></tr>
+            <tr><th>Error</th><td>Replaces the visual with <code>data-warning</code>.</td></tr>
+            <tr><th>Loading</th><td>BusyIndicator exists but is hardcoded <code>visible: false</code>.</td></tr>
+            <tr><th>Click</th><td>Toggles the full dashboard. Tooltip is <code>value · relativeTime</code>.</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Sample data used on this page</h3>
+          <p>Matches the screenshot language: one pinched limit, one credits-like pill, one healthy two-lane stack, metric <strong>6.5</strong>.</p>
+          <ul>
+            <li><b>Codex</b> — weekly 35% remaining · teal brand <code>#4b929b</code></li>
+            <li><b>OpenRouter</b> — credits 6.5, no usage rows · steel <code>#4d88ad</code></li>
+            <li><b>Grok</b> — session 72% / weekly 88% · green <code>#3d8d76</code></li>
+            <li><b>Devin</b> (extra) — daily 12% · violet <code>#6769ad</code></li>
+            <li>Threshold at 35% → orange; at 12% → red; at 88% → pale yellow.</li>
+          </ul>
+          <p>Metric <code>6.5</code> is almost certainly <em>credits remaining</em> on the primary entry (one decimal under 10). It is <em>not</em> labeled, so it can equally be read as dollars or percent.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBLEMS -->
+    <section id="problems">
+      <h2>What the current face gets wrong</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>1. Identity is gone</h3>
+          <p>Three capsules, no icons, no letters. Threshold tint is a good remaining signal and a terrible “which provider?” signal. The orange thing reads as a status LED or a mute button, not “Codex weekly is 35%”.</p>
+        </div>
+        <div class="card">
+          <h3>2. Credits and remaining share a shape</h3>
+          <p>A full remaining bar and a credits pill are both rounded rectangles. One encodes a fraction, the other a currency. On an 18px slot the credits number often does not fit, so you get an anonymous gray lozenge — then a second <code>6.5</code> beside it.</p>
+        </div>
+        <div class="card">
+          <h3>3. The metric has no unit</h3>
+          <p><code>6.5</code> could be credits, dollars, or a percent with a dropped sign. <code>compactValue()</code> already knows how to print <code>35%</code> or <code>$6.5</code> — the credits path just stringifies one decimal.</p>
+        </div>
+        <div class="card">
+          <h3>4. Two stacked bars look like signal, not windows</h3>
+          <p>Session vs weekly is the most useful pair in the product, but in 18×22px they become a Wi‑Fi glyph. <code>bars-first</code> making the top lane fatter is an arbitrary emphasis, not a legend.</p>
+        </div>
+        <div class="card">
+          <h3>5. Primary metric ≠ bar set</h3>
+          <p>Bars can be <em>all providers</em>. The number is always the <em>primary</em> entry. So you can stare at Grok’s yellow stack while the 6.5 belongs to OpenRouter. That mismatch is the screenshot.</p>
+        </div>
+        <div class="card">
+          <h3>6. Status, stale, loading are missing</h3>
+          <p>Expanded view has a status badge. Compact does not. The spinner is wired off. Stale only desaturates bar chrome. Outages and “Antigravity not running” never reach the panel.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRINCIPLES -->
+    <section id="principles">
+      <h2>Constraints to design against</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Hard</h3>
+          <ul>
+            <li>Typical panel 28–44px tall. Vertical panels ~36–48px wide.</li>
+            <li>Width is rented from the whole tray. Every extra 20px is a political act.</li>
+            <li>Must follow Kirigami theme (no hardcoded dark-only chrome on the real widget).</li>
+            <li>1–N providers, 0–4 limits each, plus credits-only vendors.</li>
+            <li>Click already means “open dashboard”. Don’t steal it for cycle-provider unless we add a modifier or a split hit target.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Design rules that hold up at 32px</h3>
+          <ul>
+            <li><b>One job at a glance:</b> “am I about to get rate-limited?” beats “pretty equalizer”.</li>
+            <li><b>Name the thing</b> that is red. Color without identity is an alarm with no source.</li>
+            <li><b>One encoding per channel.</b> Hue = who <em>or</em> how-empty, not both. Use fill for remaining; use a pip or icon for identity; use a unit for the number.</li>
+            <li><b>Feature the worst.</b> Healthy 88% can recede. 12% should shout.</li>
+            <li><b>Credits are not a bar.</b> They are a quantity. Treat them as type, not fill.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery">
+      <h2>Redesigns</h2>
+      <p class="sub">Each concept is drawn at real panel scale. Tags are implementation effort against the current QML, not design quality.</p>
+
+      <!-- 0 current playground -->
+      <article class="card mixer" style="margin-bottom:16px">
+        <div><span class="tag keep">current</span><h3>0 · As shipped, with the knobs you already have</h3></div>
+        <p>The existing settings already fork the face more than the screenshots suggest. The problem is not lack of modes — it is that every mode still looks like unlabeled candy.</p>
+        <div class="desk" style="margin-top:12px">
+          <div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+                <div class="group"><div class="bar solo"><div class="fill" style="width:100%;background:#c8c4bb"></div></div></div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+              <div class="metric">6.5</div>
+            </div>
+            <div class="systray"><span class="clock">threshold + metric</span></div>
+          </div>
+        </div>
+        <div class="desk" style="margin-top:8px">
+          <div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:var(--codex)"></div></div></div>
+                <div class="group"><div class="credits" style="background:var(--openrouter);color:#fff;font-size:8px">6.5</div></div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:var(--grok)"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:var(--grok)"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="systray"><span class="clock">provider tint, metric off</span></div>
+          </div>
+        </div>
+        <p class="note">Provider tint restores identity by hue — but only if the user memorized teal=Codex, green=Grok. New users cannot. Theme tint (the XML default) makes every bar the same gray/white.</p>
+      </article>
+
+      <div class="grid">
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>1 · Letter ticks</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group" style="width:calc(var(--bar-w) + 2px)">
+                  <div class="legend"><span>C</span></div>
+                  <div class="bar"><div class="fill" style="width:35%;background:#e07040"></div></div>
+                </div>
+                <div class="group" style="width:calc(var(--bar-w) + 2px)">
+                  <div class="legend"><span>$</span></div>
+                  <div class="credits" style="background:#c8c4bb;height:55%">6</div>
+                </div>
+                <div class="group" style="width:calc(var(--bar-w) + 2px)">
+                  <div class="legend"><span>G</span></div>
+                  <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="systray"><span class="clock">+4px height budget</span></div>
+          </div></div>
+          <p class="note">A 7px mono initial on top of each group. Keep threshold color for remaining. Cheap, ugly-honest, immediately scannable. Swap letters for 8px masked icons if the panel is ≥36px.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>2 · Icon + one bar</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:7px">
+              <span class="icon" title="Codex" style="color:#fff">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2"/></svg>
+              </span>
+              <div class="group" style="width:22px"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+              <span class="avatar" style="background:var(--openrouter);color:#fff">OR</span>
+              <div class="metric" style="font-size:13px">6.5</div>
+              <span class="icon" title="Grok" style="opacity:.9">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M4 16c4-7 12-7 16 0"/><circle cx="12" cy="9" r="2" fill="#fff"/></svg>
+              </span>
+              <div class="group" style="width:22px">
+                <div class="bar"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Pair every group with its existing provider SVG (already on disk, already used in icon mode). Costs ~16px per provider. Drop the second Grok lane if width is tight.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>3 · Unit the number</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+              <div class="metric-col">
+                <div class="metric">6.5<small> cr</small></div>
+                <div class="who">openrouter</div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Smallest useful change: <code>6.5 cr</code> / <code>$6.50</code> / <code>35%</code>, and a 9px caption of <em>which</em> entry the metric belongs to. Fixes the primary-vs-bars lie without a new layout.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>4 · Lane marks S / W</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group" style="width:26px">
+                  <div class="bar" style="display:flex;align-items:center">
+                    <div class="fill" style="width:35%;background:#e07040"></div>
+                    <span style="position:absolute;right:3px;font:700 7px var(--mono);color:#111">W</span>
+                  </div>
+                </div>
+                <div class="group" style="width:26px;gap:3px">
+                  <div class="bar" style="position:relative">
+                    <div class="fill" style="width:72%;background:#e6c35c"></div>
+                    <span style="position:absolute;right:3px;top:50%;transform:translateY(-50%);font:700 7px var(--mono);color:#111">S</span>
+                  </div>
+                  <div class="bar" style="position:relative">
+                    <div class="fill" style="width:88%;background:#efe08a"></div>
+                    <span style="position:absolute;right:3px;top:50%;transform:translateY(-50%);font:700 7px var(--mono);color:#111">W</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Session / weekly / opus need a one-glyph legend more than they need unequal lane weights. Widen groups to ~24–28px so a letter can sit in the unfilled track.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>5 · Fused chip</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="chip">
+                <span class="avatar" style="background:var(--codex);color:#fff">C</span>
+                <div class="group" style="height:16px;width:28px">
+                  <div class="bar"><div class="fill" style="width:35%;background:#e07040"></div></div>
+                </div>
+                <span class="avatar" style="background:var(--openrouter);color:#fff">$</span>
+                <div class="metric" style="font-size:13px">6.5</div>
+                <span class="avatar" style="background:var(--grok);color:#fff">G</span>
+                <div class="group" style="height:16px;width:22px">
+                  <div class="bar"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">One rounded hit target, like a Plasma battery chip. Groups the glyph so it stops looking like three unrelated tray applets. Plays well next to network / audio.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>6 · Worst-first + pips</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <span class="avatar" style="background:var(--codex);color:#fff">C</span>
+              <div class="metric-col">
+                <div class="metric" style="color:#e07040">35<small>%</small></div>
+                <div class="who">weekly · 4d</div>
+              </div>
+              <div class="group" style="width:36px;height:10px;flex-direction:row;gap:3px">
+                <i class="pip" style="background:#e07040" title="codex"></i>
+                <i class="pip" style="background:var(--ok)" title="openrouter"></i>
+                <i class="pip" style="background:#e6c35c" title="grok"></i>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">The panel answers one question: <em>the thing most likely to bite you</em>. Other providers collapse to traffic-light pips. Click still opens the full list. Scales to 8 providers without becoming a barcode.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>7 · Featured + overflow</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="chip" style="padding-right:10px">
+                <span class="avatar" style="background:var(--codex);color:#fff">C</span>
+                <div class="group" style="width:40px;height:12px">
+                  <div class="bar"><div class="fill" style="width:35%;background:#e07040"></div></div>
+                </div>
+                <div class="metric">35%</div>
+              </div>
+              <div class="stack-avatars">
+                <span class="avatar" style="background:var(--openrouter);color:#fff">$</span>
+                <span class="avatar" style="background:var(--grok);color:#fff">G</span>
+                <span class="avatar" style="background:var(--devin);color:#fff">D</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Primary (or currently worst) gets a real bar + number. Everyone else is an overlapping avatar. Hover/tooltip lists them. Matches how the expanded switcher already thinks about “selected vs rest”.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>8 · Remaining ring</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <div class="ring" style="--p:35;--c:#e07040"></div>
+              <div class="metric-col">
+                <div class="metric">35%</div>
+                <div class="who">codex weekly</div>
+              </div>
+              <div class="ring" style="--p:88;--c:#c8c4bb"></div>
+            </div>
+          </div></div>
+          <p class="note">A 22px ring is readable at a glance and doesn’t collide with “Wi‑Fi bars”. Weak for comparing two windows (session vs weekly). Strong as a <em>single</em> lowest-remaining glyph. Can wrap the provider icon in the hole.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>9 · Icon wearing a ring</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:10px">
+              <div style="position:relative;width:24px;height:24px">
+                <div class="ring" style="--p:35;--c:#e07040;width:24px;height:24px"></div>
+                <span class="avatar" style="position:absolute;inset:5px;width:14px;height:14px;background:var(--codex);color:#fff;font-size:7px">C</span>
+              </div>
+              <div style="position:relative;width:24px;height:24px">
+                <div class="ring" style="--p:100;--c:var(--openrouter);width:24px;height:24px"></div>
+                <span class="avatar" style="position:absolute;inset:5px;width:14px;height:14px;background:var(--openrouter);color:#fff;font-size:7px">$</span>
+              </div>
+              <div style="position:relative;width:24px;height:24px">
+                <div class="ring" style="--p:72;--c:#e6c35c;width:24px;height:24px"></div>
+                <span class="avatar" style="position:absolute;inset:5px;width:14px;height:14px;background:var(--grok);color:#fff;font-size:7px">G</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Icon mode and bar mode stop being mutually exclusive. Each provider is a badge. Lowest remaining is still encoded in the arc (and can flash when &lt;15%). Very “system tray native”.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>10 · Battery cells</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:10px">
+              <div>
+                <div class="who" style="margin-bottom:3px">codex</div>
+                <div class="cells">
+                  <i class="on" style="--c:#e07040"></i><i class="on" style="--c:#e07040"></i>
+                  <i></i><i></i><i></i>
+                </div>
+              </div>
+              <div>
+                <div class="who" style="margin-bottom:3px">grok</div>
+                <div class="cells">
+                  <i class="on" style="--c:#efe08a"></i><i class="on" style="--c:#efe08a"></i>
+                  <i class="on" style="--c:#efe08a"></i><i class="on" style="--c:#efe08a"></i>
+                  <i></i>
+                </div>
+              </div>
+              <div class="metric">6.5</div>
+            </div>
+          </div></div>
+          <p class="note">Five discrete cells ≈ 20% steps. Less precise than a continuous bar, much more readable at 10px tall. People already know this glyph from phones. Map 0–10% to a red outline on an empty pack.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>11 · Vertical equalizer</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:10px">
+              <div class="vu" title="codex 35">
+                <i style="height:35%;--c:#e07040"></i>
+              </div>
+              <div class="vu" title="or credits">
+                <i style="height:100%;--c:#c8c4bb"></i>
+              </div>
+              <div class="vu" title="grok s/w">
+                <i style="height:72%;--c:#e6c35c"></i>
+                <i style="height:88%;--c:#efe08a"></i>
+              </div>
+              <div class="metric">6.5</div>
+            </div>
+          </div></div>
+          <p class="note">Remaining grows <em>up</em>, which matches “how much tank is left” better than a left-to-right fill in a 18×6px capsule. Session/weekly become two neighboring columns — actually distinguishable. Watch contrast on light panels.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>12 · Traffic lights only</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:6px">
+              <i class="pip" style="width:9px;height:9px;background:#e07040"></i>
+              <i class="pip" style="width:9px;height:9px;background:var(--ok)"></i>
+              <i class="pip" style="width:9px;height:9px;background:#e6c35c"></i>
+              <div class="metric" style="margin-left:4px">35%</div>
+            </div>
+          </div></div>
+          <p class="note">Maximum quiet. Good as a “zen” density preset: green / yellow / red from the existing threshold function, plus the single lowest percent. Loses session-vs-weekly. Excellent for people with 6+ providers.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>13 · Split metric · bars</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <div class="metric-col">
+                <div class="metric">6.5</div>
+                <div class="who">credits</div>
+              </div>
+              <div style="width:1px;height:60%;background:var(--stroke)"></div>
+              <div class="groups">
+                <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+                <div class="group">
+                  <div class="bar"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Put the number <em>first</em> and give it a caption, then a hairline, then only <em>limit</em> bars. Credits leave the bar row entirely. This is the layout the screenshot accidentally almost has, cleaned up.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag hard">harder</span><h3>14 · Tiny labeled chips</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:5px">
+              <div class="chip" style="padding:0 7px;gap:5px">
+                <span class="who" style="color:var(--text)">C</span>
+                <b style="font-size:12px;color:#e07040">35%</b>
+              </div>
+              <div class="chip" style="padding:0 7px;gap:5px">
+                <span class="who" style="color:var(--text)">OR</span>
+                <b style="font-size:12px">6.5</b>
+              </div>
+              <div class="chip" style="padding:0 7px;gap:5px">
+                <span class="who" style="color:var(--text)">G</span>
+                <b style="font-size:12px">72%</b>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Each provider is its own pill with a number. Drops bars. Extremely readable, wider (~150px for three). Offer as a “comfortable” display mode, not the default for 8 providers.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>15 · Two-line panel (44px)</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="flex-direction:column;align-items:stretch;gap:2px;padding:3px 6px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <span class="who">codex 35% · grok 72%</span>
+                <span class="metric" style="font-size:12px;margin-left:auto">6.5 cr</span>
+              </div>
+              <div style="display:flex;gap:4px;height:7px">
+                <div class="bar" style="flex:1"><div class="fill" style="width:35%;background:#e07040"></div></div>
+                <div class="bar" style="flex:1"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                <div class="bar" style="flex:1"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">When the user has given us height, use it. Top row is type, bottom row is a shared track with one segment per limit. Only enable this when <code>compact.height ≥ 40</code> — the QML already special-cases that for the provider name.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>16 · Alarm only when it matters</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <span class="icon" style="opacity:.75">
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M12 8v8" stroke="currentColor" stroke-width="2"/></svg>
+              </span>
+              <div class="metric" style="opacity:.7;font-weight:600;font-size:13px">ok</div>
+            </div>
+            <div class="systray"><span class="clock">all &gt; 40%</span></div>
+          </div></div>
+          <div class="desk" style="margin-top:8px"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <span class="pip" style="width:8px;height:8px;background:#e24b4b;box-shadow:0 0 0 3px rgba(226,75,75,.25)"></span>
+              <div class="metric" style="color:#e24b4b">12%</div>
+              <span class="who">devin · daily</span>
+            </div>
+            <div class="systray"><span class="clock">something is dying</span></div>
+          </div></div>
+          <p class="note">A calm default (“ok” / provider icon) that mutates into the worst-first layout only below a threshold. Respects a status bar that should be quiet most of the day. Pair with a config: <em>always detailed / alert when low / icon only</em>.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag hard">harder</span><h3>17 · Sparkline of today</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <svg width="52" height="18" viewBox="0 0 52 18">
+                <polyline fill="none" stroke="#7eb8c4" stroke-width="1.6"
+                  points="0,14 6,13 12,12 18,9 24,10 30,7 36,8 42,4 48,6 52,3"/>
+              </svg>
+              <div class="metric-col">
+                <div class="metric" style="font-size:13px">$6.5</div>
+                <div class="who">today</div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">We already fetch <code>dailyUsage</code> for the expanded chart. A 50px sparkline makes the tray about <em>spend velocity</em> instead of remaining. Wrong as the only face (rate limits still bite), good as a compact-metric option next to “today cost”.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>18 · Hue = who, heat = border</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group" style="outline:1px solid #e07040;outline-offset:1px;border-radius:5px;padding:1px">
+                  <div class="bar solo"><div class="fill" style="width:35%;background:var(--codex)"></div></div>
+                </div>
+                <div class="group">
+                  <div class="credits" style="background:var(--openrouter);color:#fff;font-size:8px">6.5</div>
+                </div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:var(--grok)"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:var(--grok)"></div></div>
+                </div>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Stop asking one color to mean two things. Fill stays on the provider palette (identity). A 1px heat stroke appears only when remaining &lt; 40%. The orange Codex in the screenshot becomes “teal bar, hot frame” — both channels survive.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag med">medium</span><h3>19 · Sorted by pain</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray">
+              <div class="groups">
+                <div class="group" title="devin 12% first">
+                  <div class="bar solo"><div class="fill" style="width:12%;background:#e24b4b"></div></div>
+                </div>
+                <div class="group" title="codex 35%">
+                  <div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div>
+                </div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+              <div class="metric" style="color:#e24b4b">12%</div>
+            </div>
+          </div></div>
+          <p class="note">Today <code>compactBarItems()</code> follows provider config order. Sorting groups by lowest <code>percentLeft</code> makes the leftmost thing the one you should look at. Combine with #6. Keep a “pin this provider first” escape hatch so order isn’t jumpy every refresh.</p>
+        </article>
+
+        <article class="card">
+          <div><span class="tag easy">easy</span><h3>20 · Credits as type, never a bar</h3></div>
+          <div class="desk"><div class="panel">
+            <div class="tray" style="gap:8px">
+              <div class="groups">
+                <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+                <div class="group">
+                  <div class="bar fat"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+                  <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+                </div>
+              </div>
+              <div class="chip" style="height:20px;padding:0 7px;gap:4px">
+                <span style="font:700 9px var(--mono);opacity:.6">OR</span>
+                <span class="metric" style="font-size:12px">6.5</span>
+              </div>
+            </div>
+          </div></div>
+          <p class="note">Kill the credits-as-filled-rectangle branch in <code>CompactUsageBars</code>. If a provider only has a balance, render a small type chip. The gray lozenge in the screenshot is the current fallback failing at 18px.</p>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- STATES -->
+    <section id="states">
+      <h2>States the tray should have an answer for</h2>
+      <p class="sub">Most of these already exist in the data model. Compact currently only really draws “some bars” and “error icon”.</p>
+      <div class="card">
+        <div class="state-row">
+          <figure>
+            <div class="panel" style="width:220px;border-radius:8px">
+              <div class="tray">
+                <div class="groups">
+                  <div class="group"><div class="bar solo"><div class="fill" style="width:82%;background:#f2efd8"></div></div></div>
+                  <div class="group">
+                    <div class="bar fat"><div class="fill" style="width:90%;background:#f2efd8"></div></div>
+                    <div class="bar"><div class="fill" style="width:96%;background:#f7f4e4"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption>Healthy — recede</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:220px;border-radius:8px">
+              <div class="tray">
+                <div class="groups">
+                  <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+                </div>
+                <div class="metric" style="color:#e07040">35%</div>
+              </div>
+            </div>
+            <figcaption>Warning — name it</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:220px;border-radius:8px">
+              <div class="tray">
+                <span class="pip" style="width:8px;height:8px;background:#e24b4b;box-shadow:0 0 0 3px rgba(226,75,75,.3)"></span>
+                <div class="metric" style="color:#e24b4b">3%</div>
+                <span class="who">session</span>
+              </div>
+            </div>
+            <figcaption>Critical — drop chrome</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:220px;border-radius:8px">
+              <div class="tray">
+                <div class="groups" style="opacity:.45">
+                  <div class="group"><div class="bar solo"><div class="fill" style="width:35%;background:#bbb"></div></div></div>
+                </div>
+                <span class="who">12m ago</span>
+              </div>
+            </div>
+            <figcaption>Stale — keep last, mark age</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:180px;border-radius:8px">
+              <div class="tray">
+                <span style="width:12px;height:12px;border:2px solid var(--stroke);border-top-color:var(--accent);border-radius:50%;display:inline-block"></span>
+              </div>
+            </div>
+            <figcaption>Loading — turn the spinner on</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:200px;border-radius:8px">
+              <div class="tray">
+                <span style="color:#e24b4b;font-size:14px">⚠</span>
+                <span class="who">auth</span>
+              </div>
+            </div>
+            <figcaption>Error — icon + one word</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:210px;border-radius:8px">
+              <div class="tray">
+                <span class="pip" style="background:#e6c35c"></span>
+                <span class="who">degraded</span>
+              </div>
+            </div>
+            <figcaption>Provider outage — status pip</figcaption>
+          </figure>
+          <figure>
+            <div class="panel" style="width:180px;border-radius:8px">
+              <div class="tray"><span class="who">no data</span></div>
+            </div>
+            <figcaption>Empty</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- VERTICAL -->
+    <section id="vertical">
+      <h2>Vertical panel is a different object</h2>
+      <p class="sub">
+        <code>isVertical</code> currently only hides the metric and tightens spacing.
+        The layout stays a horizontal <code>RowLayout</code>, so a 44×160 dock just
+        clips a sideways tray. Redesign it as a column.
+      </p>
+      <div class="grid">
+        <div class="card" style="display:flex;gap:16px;align-items:flex-start">
+          <div class="vpanel" title="now">
+            <div class="group" style="width:22px;height:22px"><div class="bar solo"><div class="fill" style="width:35%;background:#e07040"></div></div></div>
+            <div class="group" style="width:22px;height:22px"><div class="bar solo"><div class="fill" style="width:100%;background:#c8c4bb"></div></div></div>
+            <div class="group" style="width:22px;height:28px">
+              <div class="bar"><div class="fill" style="width:72%;background:#e6c35c"></div></div>
+              <div class="bar"><div class="fill" style="width:88%;background:#efe08a"></div></div>
+            </div>
+          </div>
+          <div>
+            <h3>A · Stack the current groups</h3>
+            <p>Same capsules, column instead of row. Least invention. Still unlabeled.</p>
+          </div>
+        </div>
+        <div class="card" style="display:flex;gap:16px;align-items:flex-start">
+          <div class="vpanel">
+            <span class="avatar" style="background:var(--codex);color:#fff">C</span>
+            <div class="bar" style="width:8px;height:36px;flex:none">
+              <div class="fill" style="width:100%;height:35%;position:absolute;bottom:0;background:#e07040"></div>
+            </div>
+            <span class="avatar" style="background:var(--openrouter);color:#fff">$</span>
+            <div class="metric" style="font-size:11px">6.5</div>
+            <span class="avatar" style="background:var(--grok);color:#fff">G</span>
+            <div class="bar" style="width:8px;height:36px;flex:none">
+              <div class="fill" style="width:100%;height:80%;position:absolute;bottom:0;background:#e6c35c"></div>
+            </div>
+          </div>
+          <div>
+            <h3>B · Icon + vertical tank</h3>
+            <p>Fill grows up. Identity sits on the icon. Natural for a side dock.</p>
+          </div>
+        </div>
+        <div class="card" style="display:flex;gap:16px;align-items:flex-start">
+          <div class="vpanel">
+            <div class="ring" style="--p:35;--c:#e07040"></div>
+            <div class="metric" style="font-size:12px;color:#e07040">35</div>
+            <i class="pip" style="background:var(--ok)"></i>
+            <i class="pip" style="background:#e6c35c"></i>
+          </div>
+          <div>
+            <h3>C · One ring + pips</h3>
+            <p>Worst remaining as a ring, others as dots. Same idea as #6, rotated.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- INTERACTION -->
+    <section id="interact">
+      <h2>Interaction ideas (the pixels are only half of it)</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Tooltip is the cheap dashboard</h3>
+          <p>Today: <code>6.5 · now</code>. Spend the tooltip.</p>
+          <ul>
+            <li><b>Codex</b> weekly 35% · resets 4d 20h</li>
+            <li><b>Grok</b> session 72% · weekly 88%</li>
+            <li><b>OpenRouter</b> 6.5 cr</li>
+            <li>Updated just now</li>
+          </ul>
+          <p>Plasma tooltips can be rich (we already import PlasmaComponents). This unblocks a quieter face.</p>
+        </div>
+        <div class="card">
+          <h3>Hit targets</h3>
+          <ul>
+            <li>Click empty chrome → expand (keep).</li>
+            <li>Click a group / pip → expand <em>and</em> select that provider in the switcher.</li>
+            <li>Wheel over the widget → cycle primary / compact metric. Optional, off by default.</li>
+            <li>Middle-click → refresh. Matches a lot of tray applets.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Density presets, not 6 combo boxes</h3>
+          <p>Tray settings currently expose metric × show-text × display × which-providers × tint × width. Users pick combinations that fight each other (threshold tint + no labels + metric on the wrong entry).</p>
+          <ul>
+            <li><b>Quiet</b> — icon / ring, tooltip does the work</li>
+            <li><b>Alert</b> — worst-first, pips for the rest</li>
+            <li><b>All limits</b> — today’s labeled bar groups</li>
+            <li>Advanced stays, but collapsed.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Motion, used once</h3>
+          <ul>
+            <li>Do not animate fill on every 30s poll.</li>
+            <li>Do pulse the critical pip when a limit crosses 15%.</li>
+            <li>Crossfade stale → fresh so a refresh doesn’t flicker the tray.</li>
+            <li>Turn the existing BusyIndicator on for the first load only.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SHORTLIST -->
+    <section id="pick">
+      <h2>What I would actually try first</h2>
+      <p class="sub">Not a vote for one true tray. A sequence that improves the screenshot without throwing away the bar language people already configured.</p>
+
+      <div class="card rec" style="margin-bottom:14px">
+        <h3>Ship soon — keep the bars, stop lying</h3>
+        <ul>
+          <li><b>#3 Unit + caption</b> on the metric (<code>6.5 cr</code>, <code>35%</code>, whose entry).</li>
+          <li><b>#20 Credits as type</b>, never an unlabeled lozenge.</li>
+          <li><b>#1 Letter ticks</b> or 12px icons on each group.</li>
+          <li><b>#18 Split encodings</b>: provider fill, heat only as a stroke under 40%.</li>
+          <li><b>Tooltip rewrite</b> to a per-provider remaining list.</li>
+          <li><b>Turn loading / stale / status</b> into real compact states. The spinner is already in the tree.</li>
+        </ul>
+        <p>Resulting face, at the same width as today:</p>
+        <div class="desk" style="margin-top:10px"><div class="panel">
+          <div class="tray">
+            <div class="groups">
+              <div class="group" style="width:22px;outline:1px solid #e07040;outline-offset:1px;border-radius:5px;padding:1px 0">
+                <div class="legend"><span>C</span></div>
+                <div class="bar"><div class="fill" style="width:35%;background:var(--codex)"></div></div>
+              </div>
+              <div class="group" style="width:22px">
+                <div class="legend"><span>G</span></div>
+                <div class="bar fat"><div class="fill" style="width:72%;background:var(--grok)"></div></div>
+                <div class="bar"><div class="fill" style="width:88%;background:var(--grok)"></div></div>
+              </div>
+            </div>
+            <div class="chip" style="height:20px;padding:0 7px;gap:4px">
+              <span style="font:700 9px var(--mono);opacity:.65">OR</span>
+              <span class="metric" style="font-size:12px">6.5</span>
+            </div>
+          </div>
+          <div class="systray"><span class="clock">proposed default</span></div>
+        </div></div>
+      </div>
+
+      <div class="grid">
+        <div class="card rec">
+          <h3>Next — a named “Alert” mode</h3>
+          <p>Concept <b>#6 + #16 + #19</b>. Default for people with many providers. Quiet while everything is healthy; worst remaining + pips when something dips. Does not replace All-limits, sits beside it as a density preset.</p>
+        </div>
+        <div class="card rec">
+          <h3>When we touch layout code anyway</h3>
+          <p>Concept <b>#5 fused chip</b> so the widget reads as one applet, <b>vertical column</b> for docks, and <b>middle-click refresh / click-group to select</b>. Ring-on-icon (#9) is the icon-mode upgrade if someone still wants a 24px-wide tray.</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <h3>Things I would not do</h3>
+        <ul>
+          <li>More unlabeled bar-weight styles. Five is already too many if none of them carry a legend.</li>
+          <li>Threshold tint as the default without identity. It photographs well and teaches the wrong lesson.</li>
+          <li>Putting today-cost and remaining in the same number slot without a unit.</li>
+          <li>Animating the equalizer on every poll.</li>
+          <li>Trying to show 4 lanes × 6 providers at 18px. That is a dashboard. Use pips.</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer style="margin-top:56px;color:var(--faint);font-size:12px">
+      Draft only · reads <code>CompactRepresentation.qml</code>, <code>CompactUsageBars.qml</code>,
+      <code>configTray.qml</code>, <code>main.qml</code> compact helpers ·
+      not wired into the plasmoid · open this file in a browser and flip the theme / height controls.
+    </footer>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const theme = document.getElementById("theme");
+    const height = document.getElementById("height");
+    const barw = document.getElementById("barw");
+    theme.addEventListener("change", () => root.dataset.theme = theme.value === "light" ? "light" : "");
+    height.addEventListener("change", () => root.style.setProperty("--panel-h", height.value + "px"));
+    barw.addEventListener("change", () => root.style.setProperty("--bar-w", barw.value + "px"));
+  </script>
+</body>
+</html>
