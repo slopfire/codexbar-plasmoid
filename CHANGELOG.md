@@ -2,6 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.8 — 2026-09-04
+
+### Fixes
+
+- Restore configured colors for provider icons in the dashboard, provider tabs, and panel
+
 ## 0.1.7 — 2026-08-19
 
 ### Fixes
