@@ -479,12 +479,11 @@ Item {
                                 anchors.centerIn: parent
                                 spacing: switcher.tabIconGap
 
-                                Kirigami.Icon {
+                                ProviderIcon {
                                     width: switcher.tabIconSize
                                     height: switcher.tabIconSize
                                     anchors.verticalCenter: parent.verticalCenter
                                     source: switcher.providerIconSource(dropDelegate.provider)
-                                    isMask: true
                                     color: Kirigami.Theme.textColor
                                 }
 

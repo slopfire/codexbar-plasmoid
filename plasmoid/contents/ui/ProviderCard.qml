@@ -44,7 +44,7 @@ PlasmaComponents3.Frame {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
-            Kirigami.Icon {
+            ProviderIcon {
                 id: providerIcon
                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
@@ -56,7 +56,6 @@ PlasmaComponents3.Frame {
                     }
                     return Qt.resolvedUrl("../images/ProviderIcon-codex.svg");
                 }
-                isMask: true
                 color: card.accentColor
 
                 MouseArea {

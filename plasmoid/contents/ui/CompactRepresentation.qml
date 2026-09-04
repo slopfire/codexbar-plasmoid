@@ -126,7 +126,7 @@ Control {
             Layout.alignment: Qt.AlignVCenter
             Layout.fillWidth: !compact.showText
 
-            Kirigami.Icon {
+            ProviderIcon {
                 anchors.centerIn: parent
                 width: parent.width
                 height: parent.height
@@ -161,7 +161,6 @@ Control {
                 height: parent.height
                 visible: compact.errorText.length === 0 && !compact.showBars
                 source: compact.providerIconSource
-                isMask: true
                 color: Kirigami.Theme.textColor
             }
         }
