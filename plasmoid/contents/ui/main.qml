@@ -358,10 +358,34 @@ PlasmoidItem {
             return Qt.rgba(1, yG * u, yB * u, 1);
         }
 
-        function compactBarColor(provider, percentLeft) {
+        // Pace tint: will the remaining budget last until the window resets?
+        // White = comfortable reserve, yellow = on track but tight, red = the
+        // CLI projects the window runs dry before reset. Uses the same palette
+        // as the remaining-limit gradient. Rows without a pace report fall
+        // back to that gradient.
+        function paceColor(row, percentLeft) {
+            const pace = row && row.pace ? row.pace : null;
+            if (!pace || (pace.willLastToReset === null && pace.deltaPercent === null)) {
+                return remainingLimitColor(percentLeft);
+            }
+            if (pace.willLastToReset === false) {
+                return Qt.rgba(1, 0, 0, 1);
+            }
+            const delta = Number(pace.deltaPercent);
+            // deltaPercent < 0 means budget in reserve versus the expected burn.
+            if (Number.isFinite(delta) && delta > -10) {
+                return Qt.rgba(1.0, 0.92, 0.45, 1);
+            }
+            return Qt.rgba(1, 1, 1, 1);
+        }
+
+        function compactBarColor(provider, percentLeft, row) {
             const tint = plasmoid.configuration.compactBarsTint || "provider";
             if (tint === "threshold") {
                 return remainingLimitColor(percentLeft);
+            }
+            if (tint === "pace") {
+                return paceColor(row, percentLeft);
             }
             if (tint === "theme") {
                 return Kirigami.Theme.textColor;
@@ -571,7 +595,7 @@ PlasmoidItem {
                     id: String(row.id || ["primary", "secondary", "tertiary"][index] || ""),
                     title: String(row.title || ""),
                     percentLeft: Math.max(0, Math.min(100, percentLeft)),
-                    color: compactBarColor(entry.provider, percentLeft)
+                    color: compactBarColor(entry.provider, percentLeft, row)
                 });
             }
             if (output.length === 0 && filteredRows.length > 0) {

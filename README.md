@@ -163,7 +163,7 @@ Use **Sync Write** to publish the current provider order, enabled state, source,
 keys. Use **Sync Read** in another widget to import that shared list. Synchronization only happens when either button is pressed;
 provider colors, tray-bar choices, and selected provider chips remain local to each widget.
 Compact mode can show either the provider icon or usage bars; usage bars can represent the default provider, the selected
-providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→yellow→red), or theme text color.
+providers, or all providers, and can be tinted by provider color, remaining-limit gradient (white→yellow→red), pace to reset (white when the budget comfortably outlasts the window, yellow when tight, red when CodexBar projects it runs dry before reset), or theme text color.
 New widget instances default to all-provider usage bars with the first bar emphasized, theme-text tinting, and no metric text.
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the

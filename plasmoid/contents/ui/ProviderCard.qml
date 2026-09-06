@@ -108,6 +108,9 @@ PlasmaComponents3.Frame {
                 title: modelData.title
                 percentLeft: modelData.percentLeft
                 resetsAt: modelData.resetsAt || ""
+                windowMinutes: Number(modelData.windowMinutes) || 0
+                pace: modelData.pace || null
+                usePaceTint: (plasmoid.configuration.compactBarsTint || "provider") === "pace"
                 accentColor: card.accentColor
             }
         }
