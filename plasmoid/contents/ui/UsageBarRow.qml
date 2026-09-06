@@ -16,6 +16,10 @@ ColumnLayout {
     // summary, ... }) or null.
     property var pace: null
     property color accentColor: Kirigami.Theme.highlightColor
+    // When true and a pace report is present, the fill uses the pace palette
+    // (white = comfortable reserve, yellow = tight, red = runs dry before
+    // reset) so the popup matches tray bars tinted by pace.
+    property bool usePaceTint: false
     // Wall clock, ticked once a minute so the time marker keeps moving between
     // refreshes.
     property real nowMs: Date.now()
@@ -39,6 +43,18 @@ ColumnLayout {
         const value = Number(percentLeft);
         if (!Number.isFinite(value)) {
             return accentColor;
+        }
+        if (row.usePaceTint && row.pace
+                && (row.pace.willLastToReset !== null || row.pace.deltaPercent !== null)) {
+            if (row.pace.willLastToReset === false) {
+                return Qt.rgba(1, 0, 0, 1);
+            }
+            const delta = Number(row.pace.deltaPercent);
+            // deltaPercent < 0 means budget in reserve versus the expected burn.
+            if (Number.isFinite(delta) && delta > -10) {
+                return Qt.rgba(1.0, 0.92, 0.45, 1);
+            }
+            return Qt.rgba(1, 1, 1, 1);
         }
         const t = Math.max(0, Math.min(100, value)) / 100;
         // muted yellow around 55% remaining; pure red by 10%
