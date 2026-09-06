@@ -927,7 +927,7 @@ function normalizeProvider(item, cost) {
   const dashboard = item.openaiDashboard || {};
   const identity = usage.identity || {};
   const source = item.source || "unknown";
-  const rows = usageRows(providerId, usage, source);
+  const rows = usageRows(providerId, usage, source, item.pace || {});
   const dailyUsage = annotateLimitResets(dailyUsagePoints(dashboard, cost), rows);
   const rawAccount = item.account || usage.accountEmail || identity.accountEmail || null;
   const account = anonymizeEmails ? anonymizeIdentity(rawAccount) : rawAccount;
@@ -1088,13 +1088,39 @@ function configuredProviderSiteUrl(providerId) {
   }
 }
 
-function usageRows(providerId, usage, source) {
+/**
+ * CodexBar's per-window pace report: whether the remaining budget lasts until
+ * the window resets at the current burn rate. Null when the CLI has none.
+ */
+function normalizePace(pace) {
+  if (!pace || typeof pace !== "object") {
+    return null;
+  }
+  const willLastToReset = typeof pace.willLastToReset === "boolean" ? pace.willLastToReset : null;
+  const deltaPercent = numberOrNull(pace.deltaPercent);
+  if (willLastToReset === null && deltaPercent === null) {
+    return null;
+  }
+  return {
+    stage: typeof pace.stage === "string" ? pace.stage : null,
+    willLastToReset,
+    // Negative = budget in reserve versus the expected burn; positive = deficit.
+    deltaPercent,
+    expectedUsedPercent: numberOrNull(pace.expectedUsedPercent),
+    etaSeconds: numberOrNull(pace.etaSeconds),
+    summary: typeof pace.summary === "string" ? pace.summary : null,
+  };
+}
+
+function usageRows(providerId, usage, source, pace = {}) {
   if (Array.isArray(usage.usageRows)) {
     return usage.usageRows.map((row) => ({
       id: String(row.id || row.title || "usage"),
       title: String(row.title || "Usage"),
       percentLeft: numberOrNull(row.percentLeft),
       resetsAt: row.resetsAt || null,
+      windowMinutes: numberOrNull(row.windowMinutes),
+      pace: normalizePace(row.pace),
     })).filter((row) => row.percentLeft !== null);
   }
 
@@ -1119,7 +1145,14 @@ function usageRows(providerId, usage, source) {
     if (source === "api" && !resetsAt && percentLeft !== null) {
       return null;
     }
-    return { id, title, percentLeft, resetsAt };
+    return {
+      id,
+      title,
+      percentLeft,
+      resetsAt,
+      windowMinutes: numberOrNull(window?.windowMinutes),
+      pace: normalizePace(pace?.[id]),
+    };
   }).filter((row) => row !== null && row.percentLeft !== null);
 }
 

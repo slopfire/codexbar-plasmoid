@@ -43,6 +43,11 @@ done
 iso_now="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-26T12:00:00Z")"
 day0="$(date -u +"%Y-%m-%d" 2>/dev/null || echo "2026-07-26")"
 day1="$(date -u -d 'yesterday' +"%Y-%m-%d" 2>/dev/null || echo "2026-07-25")"
+# Future reset times so the time-remaining marker and pace tint have something to show.
+in_2h="$(date -u -d '+2 hours' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-26T14:00:00Z")"
+in_4h="$(date -u -d '+4 hours' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-26T16:00:00Z")"
+in_1d="$(date -u -d '+1 day' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-27T12:00:00Z")"
+in_3d="$(date -u -d '+3 days 12 hours' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-30T00:00:00Z")"
 
 # Shape matches real CLI: top-level provider + nested usage / cost fields.
 usage_json='[
@@ -56,8 +61,8 @@ usage_json='[
       "accountEmail": "mock-codex@example.com",
       "loginMethod": "plus",
       "updatedAt": "'"$iso_now"'",
-      "primary": { "usedPercent": 37, "remainingPercent": 63, "resetsAt": "'"$iso_now"'" },
-      "secondary": { "usedPercent": 20, "remainingPercent": 80, "resetsAt": "'"$iso_now"'" },
+      "primary": { "usedPercent": 37, "remainingPercent": 63, "resetsAt": "'"$in_2h"'", "windowMinutes": 300 },
+      "secondary": { "usedPercent": 20, "remainingPercent": 80, "resetsAt": "'"$in_1d"'", "windowMinutes": 10080 },
       "codeReview": { "remainingPercent": 91 },
       "codexResetCredits": {
         "availableCount": 1,
@@ -72,6 +77,10 @@ usage_json='[
         ]
       }
     },
+    "pace": {
+      "primary": { "stage": "farBehind", "deltaPercent": -23, "expectedUsedPercent": 60, "willLastToReset": true, "summary": "23% in reserve | Expected 60% used | Lasts until reset" },
+      "secondary": { "stage": "farBehind", "deltaPercent": -66, "expectedUsedPercent": 86, "willLastToReset": true, "summary": "66% in reserve | Expected 86% used | Lasts until reset" }
+    },
     "status": { "indicator": "none", "description": "Operational" }
   },
   {
@@ -83,9 +92,13 @@ usage_json='[
       "accountEmail": "mock-claude@example.com",
       "loginMethod": "pro",
       "updatedAt": "'"$iso_now"'",
-      "primary": { "usedPercent": 40, "remainingPercent": 60, "resetsAt": "'"$iso_now"'" },
-      "secondary": { "usedPercent": 55, "remainingPercent": 45, "resetsAt": "'"$iso_now"'" },
+      "primary": { "usedPercent": 40, "remainingPercent": 60, "resetsAt": "'"$in_4h"'", "windowMinutes": 300 },
+      "secondary": { "usedPercent": 55, "remainingPercent": 45, "resetsAt": "'"$in_3d"'", "windowMinutes": 10080 },
       "tertiary": { "usedPercent": 10, "remainingPercent": 90, "resetsAt": "'"$iso_now"'" }
+    },
+    "pace": {
+      "primary": { "stage": "farAhead", "deltaPercent": 20, "expectedUsedPercent": 20, "etaSeconds": 5400, "willLastToReset": false, "summary": "20% in deficit | Expected 20% used | Projected empty in 1h 30m" },
+      "secondary": { "stage": "slightlyBehind", "deltaPercent": -5, "expectedUsedPercent": 50, "willLastToReset": true, "summary": "5% in reserve | Expected 50% used | Lasts until reset" }
     },
     "status": { "indicator": "none", "description": "Operational" }
   }

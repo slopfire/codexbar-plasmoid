@@ -9,7 +9,31 @@ ColumnLayout {
     property string title: ""
     property real percentLeft: 0
     property string resetsAt: ""
+    // Window length in minutes (e.g. 300 for a 5h window). Enables the
+    // time-remaining marker on the bar when both it and resetsAt are known.
+    property real windowMinutes: 0
+    // CodexBar pace report for this window ({ willLastToReset, deltaPercent,
+    // summary, ... }) or null.
+    property var pace: null
     property color accentColor: Kirigami.Theme.highlightColor
+    // Wall clock, ticked once a minute so the time marker keeps moving between
+    // refreshes.
+    property real nowMs: Date.now()
+    // Fraction of the window still ahead (1 = just reset, 0 = about to reset),
+    // or -1 when unknown. Drawn as a marker at the same scale as percentLeft so
+    // the fill reaching past it means the budget outlasts the clock.
+    readonly property real timeLeftFraction: {
+        const minutes = Number(row.windowMinutes);
+        if (!row.resetsAt || !Number.isFinite(minutes) || minutes <= 0) {
+            return -1;
+        }
+        const resetMs = new Date(row.resetsAt).getTime();
+        if (!Number.isFinite(resetMs)) {
+            return -1;
+        }
+        const left = (resetMs - row.nowMs) / (minutes * 60000);
+        return Math.max(0, Math.min(1, left));
+    }
     // Fill color: white when full, muted yellow mid, red when low (red by ~10%).
     readonly property color remainingColor: {
         const value = Number(percentLeft);
@@ -39,10 +63,32 @@ ColumnLayout {
 
     PlasmaComponents3.ToolTip.delay: Qt.styleHints.mousePressAndHoldInterval
     PlasmaComponents3.ToolTip.visible: hoverHandler.hovered && PlasmaComponents3.ToolTip.text !== ""
-    PlasmaComponents3.ToolTip.text: formatResetTime(row.resetsAt)
+    PlasmaComponents3.ToolTip.text: tooltipText()
 
     HoverHandler {
         id: hoverHandler
+    }
+
+    Timer {
+        interval: 60000
+        repeat: true
+        running: row.visible && row.timeLeftFraction >= 0
+        onTriggered: row.nowMs = Date.now()
+    }
+
+    function tooltipText() {
+        const parts = [];
+        const reset = formatResetTime(row.resetsAt);
+        if (reset) {
+            parts.push(reset);
+        }
+        if (row.timeLeftFraction >= 0) {
+            parts.push(i18n("%1% of window remaining", Math.round(row.timeLeftFraction * 100)));
+        }
+        if (row.pace && row.pace.summary) {
+            parts.push(row.pace.summary);
+        }
+        return parts.join("\n");
     }
 
     function formatResetTime(value) {
@@ -106,6 +152,20 @@ ColumnLayout {
             width: parent.width * Math.max(0, Math.min(100, Number(row.percentLeft))) / 100
             radius: parent.radius
             color: row.remainingColor
+        }
+
+        // Time-remaining marker. Fill short of the marker means usage is
+        // outpacing the clock and the window is likely to run dry before reset.
+        Rectangle {
+            id: timeMarker
+            visible: row.timeLeftFraction >= 0
+            width: 2
+            anchors.verticalCenter: parent.verticalCenter
+            height: parent.height + Kirigami.Units.smallSpacing
+            x: Math.max(0, Math.min(parent.width - width, parent.width * row.timeLeftFraction - width / 2))
+            radius: 1
+            color: Kirigami.Theme.textColor
+            opacity: 0.85
         }
     }
 
