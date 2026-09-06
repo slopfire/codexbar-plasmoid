@@ -78,8 +78,7 @@ usage_json='[
       }
     },
     "pace": {
-      "primary": { "stage": "farBehind", "deltaPercent": -23, "expectedUsedPercent": 60, "willLastToReset": true, "summary": "23% in reserve | Expected 60% used | Lasts until reset" },
-      "secondary": { "stage": "farBehind", "deltaPercent": -66, "expectedUsedPercent": 86, "willLastToReset": true, "summary": "66% in reserve | Expected 86% used | Lasts until reset" }
+      "primary": { "stage": "farBehind", "deltaPercent": -23, "expectedUsedPercent": 60, "willLastToReset": true, "summary": "23% in reserve | Expected 60% used | Lasts until reset" }
     },
     "status": { "indicator": "none", "description": "Operational" }
   },
