@@ -1105,6 +1105,19 @@ function usageRows(providerId, usage, source) {
     ["tertiary", labels.tertiary, usage.tertiary],
   ];
 
+  // Scoped windows the CLI reports beyond the standard three, e.g. Claude's
+  // per-model weekly limits ("Fable only"). Shape: { id, title, window }.
+  for (const extra of Array.isArray(usage.extraRateWindows) ? usage.extraRateWindows : []) {
+    if (!extra || typeof extra !== "object" || !extra.window) {
+      continue;
+    }
+    const id = clean(extra.id) || clean(extra.title);
+    if (!id) {
+      continue;
+    }
+    windows.push([id, clean(extra.title) || id, extra.window]);
+  }
+
   return windows.map(([id, title, window]) => {
     const usedPercent = numberOrNull(window?.usedPercent);
     const remainingPercent = numberOrNull(window?.remainingPercent);

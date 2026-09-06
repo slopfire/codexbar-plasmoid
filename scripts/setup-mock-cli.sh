@@ -85,7 +85,10 @@ usage_json='[
       "updatedAt": "'"$iso_now"'",
       "primary": { "usedPercent": 40, "remainingPercent": 60, "resetsAt": "'"$iso_now"'" },
       "secondary": { "usedPercent": 55, "remainingPercent": 45, "resetsAt": "'"$iso_now"'" },
-      "tertiary": { "usedPercent": 10, "remainingPercent": 90, "resetsAt": "'"$iso_now"'" }
+      "tertiary": { "usedPercent": 10, "remainingPercent": 90, "resetsAt": "'"$iso_now"'" },
+      "extraRateWindows": [
+        { "id": "claude-weekly-scoped-fable", "title": "Fable only", "window": { "usedPercent": 67, "resetsAt": "'"$iso_now"'", "windowMinutes": 10080 } }
+      ]
     },
     "status": { "indicator": "none", "description": "Operational" }
   }

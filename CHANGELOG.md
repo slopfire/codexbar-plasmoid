@@ -2,6 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## Unreleased
+
+### Features
+
+- Show CodexBar's extra scoped rate windows (e.g. Claude's per-model weekly limit) as additional usage bars
+
 ## 0.1.8 — 2026-09-04
 
 ### Fixes
