@@ -7,7 +7,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 ### Features
 
 - Show a time-remaining marker on each popup usage bar so you can see at a glance whether the budget outlasts the window
-- Add a "Pace to reset" tray bar tint (green / yellow / red) driven by CodexBar's per-window pace report
+- Add a "Pace to reset" tray bar tint (white / yellow / red) driven by CodexBar's per-window pace report
 - Surface CodexBar's pace summary in the usage bar tooltip
 
 ## 0.1.8 — 2026-09-04

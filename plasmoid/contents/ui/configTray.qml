@@ -79,7 +79,7 @@ Kirigami.ScrollablePage {
                 model: [
                     { text: i18n("Provider colors"), value: "provider" },
                     { text: i18n("Remaining limit (white→yellow→red)"), value: "threshold" },
-                    { text: i18n("Pace to reset (green/yellow/red)"), value: "pace" },
+                    { text: i18n("Pace to reset (white→yellow→red)"), value: "pace" },
                     { text: i18n("Theme text"), value: "theme" }
                 ]
             }
