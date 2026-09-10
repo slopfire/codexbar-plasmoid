@@ -279,6 +279,16 @@ PlasmaComponents3.Frame {
         PlasmaComponents3.Label {
             Layout.fillWidth: true
             visible: !!(card.entry && card.entry.tokenUsage
+                && card.entry.tokenUsage.historyCoverageIsEstablished === false)
+            text: i18n("Local history scan is incomplete. Totals may be missing usage; refresh to continue scanning.")
+            color: Kirigami.Theme.disabledTextColor
+            font: Kirigami.Theme.smallFont
+            wrapMode: Text.WordWrap
+        }
+
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            visible: !!(card.entry && card.entry.tokenUsage
                 && card.entry.tokenUsage.provenance === "listPriceEstimate")
             text: i18n("Costs are list-price estimates, not billed charges.")
             color: Kirigami.Theme.disabledTextColor

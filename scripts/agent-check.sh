@@ -181,6 +181,7 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
               if(!(nativeEntry?.rows||[]).some(r=>r.id === "extra:native-scoped")) process.exit(16);
               const codex = j.entries.find(e=>e.provider === "codex");
               if(codex?.tokenUsage?.provenance !== "listPriceEstimate") process.exit(17);
+              if(codex?.tokenUsage?.historyCoverageIsEstablished !== false) process.exit(18);
               console.log(j.entries.map(e=>e.provider).join(","));
             } catch { process.exit(4); }
           });

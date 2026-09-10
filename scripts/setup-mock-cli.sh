@@ -132,6 +132,7 @@ cost_json='[
   {
     "provider": "codex",
     "provenance": "listPriceEstimate",
+    "historyCoverageIsEstablished": false,
     "sessionCostUSD": 2.45,
     "sessionTokens": 128000,
     "last30DaysCostUSD": 41.2,
