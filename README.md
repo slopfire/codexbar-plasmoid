@@ -251,6 +251,11 @@ plasmoid settings and mapped to the corresponding CodexBar CLI flags. The helper
 configured provider so each provider can use its own source mode. Cost lookup is best effort: a cost failure is displayed
 as `costError` but does not discard successful usage data.
 
+Usage bars show the percentage **remaining**. Local cost totals marked by the CLI
+as `listPriceEstimate` are identified as list-price estimates, not billed charges.
+Codex local token totals include cached input tokens and are separate from the
+account's rate-limit percentage.
+
 ## Linux Helper
 
 Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,

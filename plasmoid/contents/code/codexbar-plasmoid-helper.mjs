@@ -1044,6 +1044,7 @@ function buildTokenUsage(cost, usage) {
         sessionTokens,
         last30DaysCostUSD,
         last30DaysTokens,
+        provenance: clean(cost.provenance || cost.totals?.provenance) || null,
         currencyCode: cost.currencyCode || "USD",
         sessionLabel: cost.sessionLabel || "Today",
         last30DaysLabel: cost.last30DaysLabel || "30d",

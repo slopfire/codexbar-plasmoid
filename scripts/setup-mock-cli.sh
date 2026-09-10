@@ -131,6 +131,7 @@ usage_json='[
 cost_json='[
   {
     "provider": "codex",
+    "provenance": "listPriceEstimate",
     "sessionCostUSD": 2.45,
     "sessionTokens": 128000,
     "last30DaysCostUSD": 41.2,

@@ -276,6 +276,16 @@ PlasmaComponents3.Frame {
             }
         }
 
+        PlasmaComponents3.Label {
+            Layout.fillWidth: true
+            visible: !!(card.entry && card.entry.tokenUsage
+                && card.entry.tokenUsage.provenance === "listPriceEstimate")
+            text: i18n("Costs are list-price estimates, not billed charges.")
+            color: Kirigami.Theme.disabledTextColor
+            font: Kirigami.Theme.smallFont
+            wrapMode: Text.WordWrap
+        }
+
         Loader {
             id: historyLoader
 

@@ -149,7 +149,7 @@ ColumnLayout {
         }
 
         PlasmaComponents3.Label {
-            text: Number.isFinite(Number(row.percentLeft)) ? Math.round(Number(row.percentLeft)) + "%" : "—"
+            text: Number.isFinite(Number(row.percentLeft)) ? i18n("%1% remaining", Math.round(Number(row.percentLeft))) : "—"
             color: Kirigami.Theme.disabledTextColor
             font: Kirigami.Theme.smallFont
         }
