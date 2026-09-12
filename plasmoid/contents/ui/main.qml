@@ -1602,7 +1602,7 @@ PlasmoidItem {
 
                     // The palette and the wall clock live here so tray bars and
                     // popup bars cannot disagree.
-                    fillColorFor: root.usageBarFillColor
+                    fillColorFor: codexBar.usageBarFillColor
                     nowMs: root.nowMs
 
                     required property string entryId
