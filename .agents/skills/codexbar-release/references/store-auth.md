@@ -10,7 +10,7 @@ Product: `https://store.kde.org/p/2365275`
 
 ## Agent rule
 
-**Do not decrypt or print cookies yourself.** Run the release script. If it asks for OAuth, tell the operator to finish the Chrome tab, then re-run the script. See `privacy.md`.
+**Do not decrypt or print cookies yourself.** Run the release script. Treat its cookie authorization check as advisory. If the check fails, inspect the live Chrome edit page. An authenticated backend page is authoritative and can complete the upload without another login. See `privacy.md`.
 
 ## Preferred order
 
@@ -33,7 +33,7 @@ Auth discovery (inside the script, never printed):
 
 ### 2. Browser Files UI (automatic fallback)
 
-`addpploadfile` often returns HTTP 200 with `{"status":"error","error_text":""}` even when the session is valid. The site’s **Files** dropzone still works.
+`check-edit` and `addpploadfile` can reject extracted cookies even when the live Chrome page is authenticated. The site's **Files** dropzone still works. Use the live edit tab when browser automation is available; the isolated CDP uploader remains the script fallback.
 
 Fallback (`kde-store-browser-upload.py`):
 
@@ -80,7 +80,7 @@ Success signals after release:
 | Symptom | Likely cause | Action |
 |---------|--------------|--------|
 | `no_chrome_store_session` | Not signed in / cookie decrypt failed | Sign into store in Chrome; retry |
-| `unauthorized` / HTTP 302 on edit | Expired session | Open edit URL, finish GitHub OAuth, retry |
+| `unauthorized` / HTTP 302 from extracted cookies | Cookie extraction is stale or the session expired | Inspect the live Chrome edit page; use it when authenticated, otherwise finish OAuth |
 | curl `addpploadfile` → `status=error` empty text | Endpoint flaky vs Files UI | Script auto-falls back to browser upload |
 | `auth_failed_sign_in_chrome` | OAuth not completed | Operator finishes OAuth in the tab; re-run |
 | OCS missing new file briefly | Index lag | Wait; confirm on edit Files tab by MD5 |

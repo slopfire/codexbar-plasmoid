@@ -189,11 +189,11 @@ fi
 
 prepare_cookie_file
 
+browser_upload_only=false
 if ! session_authorized; then
   if ! refresh_session_via_chrome; then
-    echo "Store session is not authorized for the product edit page." >&2
-    echo "Open $store_base/p/$product_id/edit/ in Chrome, finish OAuth, then re-run." >&2
-    exit 1
+    echo "Cookie authorization check failed; trying browser Files UI..."
+    browser_upload_only=true
   fi
 fi
 
@@ -216,15 +216,16 @@ upload_archive_curl() {
 curl_upload_ok=false
 file_id=""
 
-upload_status="$(upload_archive_curl)"
-if [[ "$upload_status" == 3* ]]; then
-  if refresh_session_via_chrome; then
-    upload_status="$(upload_archive_curl)"
+if [[ "$browser_upload_only" == false ]]; then
+  upload_status="$(upload_archive_curl)"
+  if [[ "$upload_status" == 3* ]]; then
+    if refresh_session_via_chrome; then
+      upload_status="$(upload_archive_curl)"
+    fi
   fi
-fi
 
-if [[ "$upload_status" == 2* ]]; then
-  if file_id="$(python3 - "$upload_response" <<'PY'
+  if [[ "$upload_status" == 2* ]]; then
+    if file_id="$(python3 - "$upload_response" <<'PY'
 import json
 import sys
 
@@ -238,12 +239,13 @@ if response.get("status") != "ok" or not response.get("file", {}).get("id"):
 print(response["file"]["id"])
 PY
 )"; then
-    curl_upload_ok=true
+      curl_upload_ok=true
+    else
+      echo "curl addpploadfile returned HTTP $upload_status but rejected the payload; trying browser Files UI..."
+    fi
   else
-    echo "curl addpploadfile returned HTTP $upload_status but rejected the payload; trying browser Files UI..."
+    echo "curl addpploadfile failed with HTTP $upload_status; trying browser Files UI..."
   fi
-else
-  echo "curl addpploadfile failed with HTTP $upload_status; trying browser Files UI..."
 fi
 
 if [[ "$curl_upload_ok" == true ]]; then

@@ -14,11 +14,12 @@ These may exist on the operator machine during publish. They are **not** project
 
 ## Cookie isolation (agent-facing)
 
-**Cookies must never enter the agent context.** That means:
+**Cookies must never enter the agent context.** Use the release scripts or an authenticated browser tab without reading, exporting, or logging browser storage.
 
 | Do | Do not |
 |----|--------|
 | Run `./scripts/release-kde-store.sh` and read only its status lines | Write one-off Python/shell that decrypts Chrome cookies and prints them |
+| Use the authenticated store edit page through browser automation | Read or export cookies from the browser page |
 | Let `scripts/lib/kde-store-auth.py` write a **temp file** (mode 0600) | Capture cookie headers into variables that appear in tool logs / command strings the model sees |
 | Pass `-b "$cookie_file"` **inside** scripts | `echo "$KDE_STORE_COOKIE"`, `print(cookie)`, or include cookie values in `curl -v` output to the transcript |
 | Report `auth: chrome-profile` / `authorized` / `unauthorized` | Dump Netscape cookie files, `__ocs_id` values, or `remember_token` |

@@ -33,9 +33,9 @@ Hard rules:
 
 1. **Never** commit `dist/`, cookie files, `/tmp/*cookie*`, or browser profile copies.
 2. **Never** decrypt Chrome cookies in ad-hoc agent commands — use `scripts/lib/kde-store-auth.py` only (file out, status on stdout).
-3. Prefer `./scripts/release-kde-store.sh` over hand-rolled `curl` with `-b`.
+3. Run `./scripts/release-kde-store.sh` first. If its cookie check fails while the Chrome edit page shows the store backend, treat the browser page as authoritative and complete the Files upload there.
 4. Delete temp auth artifacts when done (script trap + hygiene in `references/privacy.md`).
-5. When stuck on auth, ask the operator to sign into `store.kde.org` in Chrome — do not scrape password managers.
+5. Ask the operator to sign in only when Chrome shows a login or OAuth page. A failed extracted-cookie check does not prove that the live browser is signed out.
 
 Read `references/privacy.md` before any store work. Upload details: `references/store-auth.md`.
 
@@ -127,14 +127,14 @@ Do not stage the native binary (gitignored). Feature/fix commits land **before**
 What the script does (agents do not reimplement this):
 
 1. Auth → temp cookie file only (`kde-store-auth.py` or env/file override)  
-2. Checks edit-page authorization (status only)  
-3. Tries `curl` `addpploadfile` + `updatepploadfile`  
-4. On empty JSON error / failure → **browser Files UI** via CDP (`kde-store-browser-upload.py`)  
+2. Checks edit-page authorization as an advisory preflight (status only)
+3. Tries `curl` `addpploadfile` + `updatepploadfile` when the extracted cookies pass the preflight
+4. On an authorization false-negative, empty JSON error, or upload failure, tries the **browser Files UI** (`kde-store-browser-upload.py` or an authenticated Chrome edit tab)
 5. Soft-verifies OCS lists `codexbar-plasmoid-vX.Y.Z-plasma6.plasmoid`  
 6. Prints `Released CodexBar X.Y.Z to https://store.kde.org/p/2365275`  
 7. Deletes the cookie file on exit  
 
-If the script says OAuth is required: ask the operator to finish the Chrome tab, then **re-run the same script**. Do not start decrypting cookies in the agent shell.
+If the script reports an authorization failure, inspect the live Chrome edit page before asking the operator to act. When the page shows the store backend, use its Files tab to upload the archive, set both versions, and save. Ask the operator to finish OAuth only when the browser itself shows an OAuth or login page. Do not decrypt cookies in the agent shell.
 
 ### 6. Push
 
