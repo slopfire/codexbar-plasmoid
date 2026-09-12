@@ -2,7 +2,7 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
-## Unreleased
+## 0.1.9 — 2026-09-12
 
 ### Features
 
@@ -12,6 +12,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Popup usage bars use the pace palette too when the tray tint is set to pace, so both views agree
 - Split popup bars at the pace indicator with rounded ends; add position, bar, provider, and theme colors plus a narrow gaps-only mode in Appearance settings
 - Show CodexBar's extra scoped rate windows (e.g. Claude's per-model weekly limit) as additional usage bars
+- Add ClinePass support with API-key setup and 5-hour, weekly, and monthly quota bars
 
 ### Fixes
 
@@ -21,6 +22,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Give scoped rate windows (e.g. Claude's per-model weekly limit) their own row ids so they cannot shadow a standard window or inherit its pace
 - Show scoped rate windows for native providers too; they were dropped for `usageRows` payloads
 - Keep a manual cost refresh in the same shared cache slot as automatic polling, so its result is reused instead of landing in a refresh-only entry
+- Render provider icons at the display's pixel density so they stay sharp on HiDPI screens
 
 ### Maintenance
 
