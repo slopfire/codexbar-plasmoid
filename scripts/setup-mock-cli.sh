@@ -125,6 +125,35 @@ usage_json='[
       ]
     },
     "status": { "indicator": "none", "description": "Operational" }
+  },
+  {
+    "provider": "clinepass",
+    "account": "mock-clinepass@example.com",
+    "source": "api",
+    "version": "0.0.0-mock",
+    "usage": {
+      "accountEmail": "mock-clinepass@example.com",
+      "loginMethod": "api",
+      "updatedAt": "'"$iso_now"'",
+      "primary": { "usedPercent": 35, "remainingPercent": 65, "resetsAt": "'"$in_2h"'", "windowMinutes": 300 },
+      "secondary": { "usedPercent": 55, "remainingPercent": 45, "resetsAt": "'"$in_3d"'", "windowMinutes": 10080 },
+      "tertiary": { "usedPercent": 75, "remainingPercent": 25, "resetsAt": null, "windowMinutes": 43200 }
+    },
+    "status": { "indicator": "none", "description": "Operational" }
+  },
+  {
+    "provider": "openrouter",
+    "account": "mock-openrouter@example.com",
+    "source": "api",
+    "version": "0.0.0-mock",
+    "usage": {
+      "accountEmail": "mock-openrouter@example.com",
+      "loginMethod": "api",
+      "updatedAt": "'"$iso_now"'",
+      "primary": { "remainingPercent": 40 },
+      "openRouterUsage": { "balance": 12.5 }
+    },
+    "status": { "indicator": "none", "description": "Operational" }
   }
 ]'
 

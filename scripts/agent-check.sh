@@ -182,6 +182,14 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
               const codex = j.entries.find(e=>e.provider === "codex");
               if(codex?.tokenUsage?.provenance !== "listPriceEstimate") process.exit(17);
               if(codex?.tokenUsage?.historyCoverageIsEstablished !== false) process.exit(18);
+              const cpPrimary = rowOf("clinepass", "primary");
+              const cpSecondary = rowOf("clinepass", "secondary");
+              const cpTertiary = rowOf("clinepass", "tertiary");
+              const openRouter = j.entries.find(e=>e.provider==="openrouter");
+              if(cpPrimary?.title !== "5-hour" || cpPrimary?.percentLeft !== 65 || cpPrimary?.windowMinutes !== 300) process.exit(19);
+              if(cpSecondary?.title !== "Weekly" || cpSecondary?.percentLeft !== 45 || cpSecondary?.windowMinutes !== 10080) process.exit(20);
+              if(cpTertiary?.title !== "Monthly" || cpTertiary?.percentLeft !== 25 || cpTertiary?.resetsAt !== null || cpTertiary?.windowMinutes !== 43200 || cpTertiary?.pace !== null) process.exit(21);
+              if(!openRouter || openRouter.rows?.length !== 0 || openRouter.creditsRemaining !== 12.5) process.exit(22);
               console.log(j.entries.map(e=>e.provider).join(","));
             } catch { process.exit(4); }
           });

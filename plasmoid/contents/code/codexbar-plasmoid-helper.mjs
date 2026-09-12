@@ -148,6 +148,7 @@ const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok
 const linuxAutoFallbacks = {
   codex: "cli",
   claude: "cli",
+  clinepass: "api",
   cursor: "native",
   opencode: "native",
   opencodego: "native",
@@ -1248,7 +1249,6 @@ function usageRows(providerId, usage, source, pace = {}) {
   const scoped = extraRateWindowEntries(usage)
     .map(([id, title, window]) => windowUsageRow(id, title, window, null))
     .filter((row) => row.percentLeft !== null);
-
   if (Array.isArray(usage.usageRows)) {
     const native = usage.usageRows.map((row) => ({
       id: String(row.id || row.title || "usage"),
@@ -1271,9 +1271,9 @@ function usageRows(providerId, usage, source, pace = {}) {
 
   const standard = windows.map(([id, title, window]) => {
     const row = windowUsageRow(id, title, window, pace?.[id]);
-    // For API providers, a window without resetsAt is just a balance
-    // placeholder, not a real usage bar. Skip it so the balance summary renders.
-    if (source === "api" && !row.resetsAt && row.percentLeft !== null) {
+    // API balance placeholders have no reset time or window duration. A real
+    // window can omit its reset time, such as ClinePass's monthly quota.
+    if (source === "api" && !row.resetsAt && !(row.windowMinutes > 0) && row.percentLeft !== null) {
       return null;
     }
     return row;
@@ -1514,6 +1514,10 @@ function providerLabels(providerId) {
   switch (providerId) {
     case "claude":
       return { session: "Session", weekly: "Weekly", tertiary: "Opus" };
+    case "clinepass":
+      // Upstream ClinePass reports a 5-hour window, a weekly window, and a
+      // monthly window (primaryBindingQuotaLanes: secondary + tertiary).
+      return { session: "5-hour", weekly: "Weekly", tertiary: "Monthly" };
     case "codex":
       return { session: "Session", weekly: "Weekly", tertiary: "Long window" };
     case "kilo":
@@ -1696,6 +1700,8 @@ function providerApiKeyEnvName(providerId) {
       return "ALIBABA_API_KEY";
     case "alibabatokenplan":
       return "ALIBABA_API_KEY";
+    case "clinepass":
+      return "CLINE_API_KEY";
     case "copilot":
       return "GITHUB_TOKEN";
     case "deepseek":
