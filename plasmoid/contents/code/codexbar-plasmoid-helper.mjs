@@ -594,10 +594,13 @@ function fetchCostWithCommand(command, providerId, backend) {
     "--provider",
     providerId,
   ];
-  // A manual refresh must bypass both our shared cache and the CLI scan debounce.
-  if (forceRefresh && backend === "codexbar") {
-    commandArgs.push("--refresh");
-  }
+  // A manual refresh must bypass the CLI's own scan debounce. The flag is kept
+  // out of the shared cache identity passed to sharedFetch below, so the
+  // refreshed result overwrites the slot every widget polls instead of landing
+  // in a refresh-only slot.
+  const runArgs = forceRefresh && backend === "codexbar"
+    ? [...commandArgs, "--refresh"]
+    : commandArgs;
   try {
     const payload = sharedFetch("cost", {
       command,
@@ -607,7 +610,7 @@ function fetchCostWithCommand(command, providerId, backend) {
     }, () => {
       try {
         const extraEnv = backend === "codexbar" ? { SWIFT_TESTING: "1" } : {};
-        return runJSON(command, commandArgs, providerId, "", "", extraEnv);
+        return runJSON(command, runArgs, providerId, "", "", extraEnv);
       } catch (error) {
         return [{
           provider: "cost",

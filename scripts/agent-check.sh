@@ -199,6 +199,65 @@ else
   skp "mock helper smoke"
 fi
 
+# --- manual refresh arguments + shared cache reuse ---
+section "manual refresh (mock CLI)"
+if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
+  [[ -n "${mock_bin_dir:-}" ]] || mock_bin_dir="$("$repo_root/scripts/setup-mock-cli.sh" --print-bin)"
+  arglog_dir="$(mktemp -d)"
+  arglog="$arglog_dir/args.txt"
+  wrapper="$arglog_dir/codexbar-arglog"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$arglog" "$mock_bin_dir/codexbar" >"$wrapper"
+  chmod +x "$wrapper"
+  helper="plasmoid/contents/code/codexbar-plasmoid-helper.mjs"
+  # run_helper <provider> <source> <cache-dir> <force>
+  run_helper() {
+    XDG_CACHE_HOME="$3" node "$helper" --cli "$wrapper" --nativeCli "$wrapper" \
+      --provider "$1" --source "$2" --timeout 5 --cache-seconds 300 --force "$4" >/dev/null 2>&1 || true
+  }
+
+  # Automatic refresh never asks the CLI to rescan.
+  run_helper codex cli "$arglog_dir/cache-auto" false
+  if grep -q '^cost .*--provider codex$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
+    ok "automatic refresh sends the plain cost command"
+  else
+    bad "automatic refresh arguments ($(tr '\n' '|' <"$arglog"))"
+  fi
+
+  # A manual refresh bypasses the CLI scan debounce, on the cost call only.
+  : >"$arglog"
+  run_helper codex cli "$arglog_dir/cache-manual" true
+  if grep -q '^cost .*--provider codex --refresh$' "$arglog" && ! grep -q '^usage .*--refresh' "$arglog"; then
+    ok "manual refresh passes --refresh to the cost backend only"
+  else
+    bad "manual refresh arguments ($(tr '\n' '|' <"$arglog"))"
+  fi
+
+  # Native backends keep their existing arguments.
+  : >"$arglog"
+  run_helper opencode native "$arglog_dir/cache-native" true
+  if grep -q '^cost .*--provider opencode$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
+    ok "native backend cost arguments unchanged"
+  else
+    bad "native backend arguments ($(tr '\n' '|' <"$arglog"))"
+  fi
+
+  # The manual result has to land in the slot automatic polling reads.
+  : >"$arglog"
+  run_helper codex cli "$arglog_dir/cache-shared" true
+  manual_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
+  run_helper codex cli "$arglog_dir/cache-shared" false
+  shared_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
+  if [[ "$manual_calls" == "1" && "$shared_calls" == "1" ]]; then
+    ok "manual refresh result is reused by the shared cache"
+  else
+    bad "manual refresh wrote a separate cache entry ($manual_calls -> $shared_calls cost calls)"
+  fi
+
+  rm -rf "$arglog_dir"
+else
+  skp "manual refresh smoke"
+fi
+
 # --- isolated configuration page ---
 section "isolated config UI"
 if [[ "$use_mock" -ne 1 ]]; then
