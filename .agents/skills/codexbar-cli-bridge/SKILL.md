@@ -33,6 +33,10 @@ codexbar usage --format json --json-only --provider <provider> --source <source>
 codexbar cost --format json --json-only --provider <provider>
 ```
 
+`codexbar cost` also accepts `--refresh`. The helper passes it for manual refreshes only, on the `codexbar` backend — native backends keep their existing
+arguments. The flag is deliberately excluded from the shared cache identity, so a manual refresh overwrites the slot other widgets read instead of creating a
+refresh-only entry.
+
 For Linux-native providers (`antigravity`, `cursor`, `devin`, `opencode`, `opencodego`) with `source=native` or
 `source=native-auth`, the helper calls the bundled Rust binary at `plasmoid/contents/code/codexbar-plasmoid`
 instead of `codexbar`. Antigravity `native-auth` uses user tokens under `~/.config/antigravity-usage` from
@@ -110,6 +114,8 @@ The helper should output:
         "sessionTokens": 128000,
         "last30DaysCostUSD": 41.2,
         "last30DaysTokens": 2180000,
+        "provenance": "listPriceEstimate",
+        "historyCoverageIsEstablished": false,
         "currencyCode": "USD",
         "sessionLabel": "Today",
         "last30DaysLabel": "30d"
@@ -161,6 +167,7 @@ On command failure:
 - Annotate calendar days where a usage row's `resetsAt` lands and `percentLeft > 0` as `limitResets` (unused limit resets).
 - Map Codex `usage.codexResetCredits` to entry `limitResetCredits` (`availableCount`, `nextExpiresAt`, `items`). When the primary source is `cli`/`codex-cli` and omits that field, enrich from a best-effort oauth usage fetch.
 - Cost lookup is best effort. A cost failure should populate `costError`, not discard successful usage entries.
+- Preserve `cost.provenance` (top level or `cost.totals.provenance`) and `cost.historyCoverageIsEstablished` on `tokenUsage`, so the card can label list-price estimates and warn while the local scan is still catching up.
 - QML number formatting is Qt/QML, not browser JS. Use `Number(value).toLocaleString(Qt.locale(), "f", digits)`, not options objects.
 
 ## Validation

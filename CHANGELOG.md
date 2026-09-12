@@ -20,6 +20,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Hide the time-remaining marker when the reported reset is further away than the window length
 - Give scoped rate windows (e.g. Claude's per-model weekly limit) their own row ids so they cannot shadow a standard window or inherit its pace
 - Show scoped rate windows for native providers too; they were dropped for `usageRows` payloads
+- Keep a manual cost refresh in the same shared cache slot as automatic polling, so its result is reused instead of landing in a refresh-only entry
 
 ### Maintenance
 

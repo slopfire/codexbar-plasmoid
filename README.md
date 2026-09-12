@@ -256,9 +256,10 @@ as `listPriceEstimate` are identified as list-price estimates, not billed charge
 Codex local token totals include cached input tokens and are separate from the
 account's rate-limit percentage.
 When the CLI reports incomplete local history, the card warns that totals may
-omit usage. Manual refresh also bypasses the CLI scan debounce so another bounded
-scan can continue catching up. Local history does not include remote usage unless
-the corresponding logs are present on this computer.
+omit usage. Manual refresh also passes `--refresh` to the CodexBar cost backend to
+bypass its scan debounce, so another bounded scan can continue catching up; native
+backends keep their existing arguments. Local history does not include remote
+usage unless the corresponding logs are present on this computer.
 
 ## Linux Helper
 
