@@ -209,7 +209,7 @@ Item {
 
     readonly property var knownProviderIconIds: [
         "abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude",
-        "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram",
+        "clinepass", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram",
         "deepseek", "demo", "devin", "doubao", "elevenlabs", "factory", "gemini", "grok",
         "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo",
         "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter",
@@ -659,6 +659,7 @@ Item {
             openai: "OpenAI",
             azureopenai: "Azure OpenAI",
             claude: "Claude",
+            clinepass: "ClinePass",
             cursor: "Cursor",
             gemini: "Gemini",
             copilot: "Copilot",

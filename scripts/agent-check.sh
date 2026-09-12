@@ -160,12 +160,20 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
               const cxSecondary = rowOf("codex", "secondary");
               const clPrimary = rowOf("claude", "primary");
               const clTertiary = rowOf("claude", "tertiary");
+              const cpPrimary = rowOf("clinepass", "primary");
+              const cpSecondary = rowOf("clinepass", "secondary");
+              const cpTertiary = rowOf("clinepass", "tertiary");
+              const openRouter = j.entries.find(e=>e.provider==="openrouter");
               if(cxPrimary?.windowMinutes !== 300) process.exit(5);
               if(cxPrimary?.pace?.willLastToReset !== true) process.exit(6);
               if(!Number.isFinite(cxSecondary?.pace?.expectedUsedPercent)) process.exit(7);
               if(clPrimary?.pace?.willLastToReset !== false) process.exit(8);
               // Reset beyond the window length must yield no pace verdict at all.
               if(clTertiary?.windowMinutes !== 300 || clTertiary?.pace !== null) process.exit(9);
+              if(cpPrimary?.title !== "5-hour" || cpPrimary?.percentLeft !== 65 || cpPrimary?.windowMinutes !== 300) process.exit(10);
+              if(cpSecondary?.title !== "Weekly" || cpSecondary?.percentLeft !== 45 || cpSecondary?.windowMinutes !== 10080) process.exit(11);
+              if(cpTertiary?.title !== "Monthly" || cpTertiary?.percentLeft !== 25 || cpTertiary?.resetsAt !== null || cpTertiary?.windowMinutes !== 43200 || cpTertiary?.pace !== null) process.exit(12);
+              if(!openRouter || openRouter.rows?.length !== 0 || openRouter.creditsRemaining !== 12.5) process.exit(13);
               console.log(j.entries.map(e=>e.provider).join(","));
             } catch { process.exit(4); }
           });

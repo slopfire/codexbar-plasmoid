@@ -62,6 +62,7 @@ Kirigami.ScrollablePage {
     readonly property var providerCatalog: [
         { id: "codex", name: "Codex", sources: ["auto", "cli", "oauth", "web"], linuxDefault: "cli" },
         { id: "claude", name: "Claude", sources: ["auto", "cli", "oauth", "api", "web"], linuxDefault: "cli" },
+        { id: "clinepass", name: "ClinePass", sources: ["auto", "api"], linuxDefault: "api" },
         { id: "cursor", name: "Cursor", sources: ["auto", "native", "cli"], linuxDefault: "native" },
         { id: "gemini", name: "Gemini", sources: ["auto", "api"], linuxDefault: "api" },
         { id: "copilot", name: "Copilot", sources: ["auto", "api"], linuxDefault: "api" },
@@ -1201,6 +1202,7 @@ Kirigami.ScrollablePage {
             openai: "#398979",
             azureopenai: "#397fb7",
             claude: "#b57861",
+            clinepass: "#5a8fd6",
             gemini: "#8972b5",
             antigravity: "#55976b",
             cursor: "#3c9487",

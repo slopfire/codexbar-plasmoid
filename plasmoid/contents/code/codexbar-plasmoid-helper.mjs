@@ -148,6 +148,7 @@ const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok
 const linuxAutoFallbacks = {
   codex: "cli",
   claude: "cli",
+  clinepass: "api",
   cursor: "native",
   opencode: "native",
   opencodego: "native",
@@ -1195,13 +1196,13 @@ function usageRows(providerId, usage, source, pace = {}) {
       : usedPercent !== null
         ? Math.max(0, Math.min(100, 100 - usedPercent))
         : null;
+    const windowMinutes = numberOrNull(window?.windowMinutes);
     const resetsAt = window?.resetsAt || null;
-    // For API providers, a window without resetsAt is just a balance placeholder,
-    // not a real usage bar. Skip it so the balance summary renders instead.
-    if (source === "api" && !resetsAt && percentLeft !== null) {
+    // API balance placeholders have no reset time or window duration. A real
+    // window can omit its reset time, such as ClinePass's monthly quota.
+    if (source === "api" && !resetsAt && !(windowMinutes > 0) && percentLeft !== null) {
       return null;
     }
-    const windowMinutes = numberOrNull(window?.windowMinutes);
     return {
       id,
       title,
@@ -1445,6 +1446,10 @@ function providerLabels(providerId) {
   switch (providerId) {
     case "claude":
       return { session: "Session", weekly: "Weekly", tertiary: "Opus" };
+    case "clinepass":
+      // Upstream ClinePass reports a 5-hour window, a weekly window, and a
+      // monthly window (primaryBindingQuotaLanes: secondary + tertiary).
+      return { session: "5-hour", weekly: "Weekly", tertiary: "Monthly" };
     case "codex":
       return { session: "Session", weekly: "Weekly", tertiary: "Long window" };
     case "kilo":
@@ -1627,6 +1632,8 @@ function providerApiKeyEnvName(providerId) {
       return "ALIBABA_API_KEY";
     case "alibabatokenplan":
       return "ALIBABA_API_KEY";
+    case "clinepass":
+      return "CLINE_API_KEY";
     case "copilot":
       return "GITHUB_TOKEN";
     case "deepseek":
