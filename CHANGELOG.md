@@ -2,6 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.10 — 2026-09-13
+
+### Fixes
+
+- Keep very low percentages visible in tray usage bars without clipping their rounded ends
+
 ## 0.1.9 — 2026-09-12
 
 ### Features
