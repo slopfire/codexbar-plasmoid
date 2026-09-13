@@ -222,28 +222,50 @@ Item {
                     border.width: 1
                     border.color: bars.strokeColor
 
-                    // Exact percent width, rounded like the track. Cap radius by
-                    // half the fill width so short fills stay circular capsules
-                    // instead of using the track radius on a too-narrow rect.
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: {
-                            const p = Number(modelData.percentLeft);
-                            if (!Number.isFinite(p) || p <= 0) {
-                                return 0;
-                            }
-                            const clamped = Math.max(0, Math.min(100, p));
-                            const exact = parent.width * clamped / 100;
-                            // Hairline only when nearly empty so "some left" is still
-                            // visible on narrow tray slots — do not inflate mid values.
-                            return clamped > 0 && exact < 1 ? 1 : exact;
-                        }
-                        radius: Math.min(parent.radius, width / 2)
-                        color: bars.stale
+                    Canvas {
+                        readonly property real fraction: Math.max(0, Math.min(100, Number(modelData.percentLeft))) / 100
+                        readonly property real exactWidth: parent.width * fraction
+                        readonly property real fillWidth: fraction > 0
+                            ? Math.min(parent.width, Math.max(exactWidth, parent.height / 2))
+                            : 0
+
+                        anchors.fill: parent
+                        readonly property color ink: bars.stale
                             ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.55)
                             : modelData.color
+                        onInkChanged: requestPaint()
+                        onFillWidthChanged: requestPaint()
+                        onWidthChanged: requestPaint()
+                        onHeightChanged: requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d");
+                            ctx.reset();
+                            if (fillWidth <= 0) {
+                                return;
+                            }
+                            const r = Math.min(width, height) / 2;
+                            ctx.beginPath();
+                            ctx.moveTo(r, 0);
+                            ctx.lineTo(width - r, 0);
+                            ctx.arc(width - r, r, r, -Math.PI / 2, 0);
+                            ctx.lineTo(width, height - r);
+                            ctx.arc(width - r, height - r, r, 0, Math.PI / 2);
+                            ctx.lineTo(r, height);
+                            ctx.arc(r, height - r, r, Math.PI / 2, Math.PI);
+                            ctx.lineTo(0, r);
+                            ctx.arc(r, r, r, Math.PI, 3 * Math.PI / 2);
+                            ctx.closePath();
+                            ctx.clip();
+                            const endRadius = height / 2;
+                            ctx.beginPath();
+                            ctx.moveTo(-height, 0);
+                            ctx.lineTo(fillWidth - endRadius, 0);
+                            ctx.arc(fillWidth - endRadius, height / 2, endRadius, -Math.PI / 2, Math.PI / 2);
+                            ctx.lineTo(-height, height);
+                            ctx.closePath();
+                            ctx.fillStyle = ink;
+                            ctx.fill();
+                        }
                     }
                 }
             }
