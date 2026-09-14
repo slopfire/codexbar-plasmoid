@@ -1,4 +1,5 @@
 mod antigravity;
+mod commandcode;
 mod cursor;
 mod devin;
 mod grok;
@@ -13,6 +14,7 @@ use std::time::Duration;
 
 pub const NATIVE_PROVIDERS: &[&str] = &[
     "antigravity",
+    "commandcode",
     "cursor",
     "devin",
     "grok",
@@ -32,6 +34,7 @@ pub fn fetch_provider(
         "antigravity" => {
             vec![antigravity::fetch(http, timeout, antigravity::method_for_source(source))]
         }
+        "commandcode" => vec![commandcode::fetch(http)],
         "cursor" => vec![cursor::fetch(http, include_status)],
         "devin" => vec![devin::fetch(http)],
         "grok" => grok::fetch(http),

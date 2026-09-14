@@ -5,6 +5,7 @@
 //! - Cursor: dashboard usage events (`get-filtered-usage-events`) via session cookie
 //! - Grok: local session `updates.jsonl` turn_completed usage (`costUsdTicks` when
 //!   present; otherwise API-equivalent $ from per-model token rates)
+//! - Command Code: per-message usage in `~/.commandcode/projects/**/*.jsonl`
 //!
 //! Antigravity and Devin only expose quota *percentages* — no absolute token/cost
 //! history is available to aggregate into this shape.
@@ -74,7 +75,7 @@ struct CostRow {
 pub fn supports_cost(provider: &str) -> bool {
     matches!(
         provider,
-        "opencode" | "opencodego" | "cursor" | "grok" | "all"
+        "opencode" | "opencodego" | "cursor" | "grok" | "commandcode" | "all"
     )
 }
 
@@ -94,6 +95,9 @@ pub fn fetch_costs(provider: &str, home: &Path, http: &HttpClient) -> Result<Vec
             if let Ok(snapshot) = fetch_grok_cost(home) {
                 out.push(snapshot);
             }
+            if let Ok(snapshot) = fetch_commandcode_cost(home) {
+                out.push(snapshot);
+            }
             Ok(out)
         }
         "opencode" => Ok(vec![fetch_opencode_cost("opencode", home, CostScope::All)?]),
@@ -104,8 +108,9 @@ pub fn fetch_costs(provider: &str, home: &Path, http: &HttpClient) -> Result<Vec
         )?]),
         "cursor" => Ok(vec![fetch_cursor_cost(http)?]),
         "grok" => Ok(vec![fetch_grok_cost(home)?]),
+        "commandcode" => Ok(vec![fetch_commandcode_cost(home)?]),
         other => Err(anyhow!(
-            "Native cost is supported for opencode, opencodego, cursor, and grok (got {other})."
+            "Native cost is supported for opencode, opencodego, cursor, grok, and commandcode (got {other})."
         )),
     }
 }
@@ -664,6 +669,133 @@ fn json_f64(value: &serde_json::Value) -> Option<f64> {
         .or_else(|| value.as_u64().map(|n| n as f64))
 }
 
+// --- Command Code local sessions ---------------------------------------------
+
+/// Command Code writes one transcript per session under
+/// `~/.commandcode/projects/<slug>/<session-id>.jsonl`. Every assistant message
+/// carries its own usage blob alongside the top-level `model`:
+///
+/// ```json
+/// {"timestamp":"2026-09-14T06:31:20.397Z","model":"deepseek/deepseek-v4.1-flash",
+///  "usage":{"inputTokens":19590,"outputTokens":206,"cacheReadTokens":7808,
+///           "cacheWriteTokens":0,"costUsd":0.0019143239999999998}}
+/// ```
+///
+/// `*.checkpoints.jsonl` files hold file snapshots rather than usage.
+fn fetch_commandcode_cost(home: &Path) -> Result<CostSnapshot> {
+    let projects_root = commandcode_home(home).join("projects");
+    if !projects_root.is_dir() {
+        return Err(anyhow!(
+            "Command Code session directory not found under {}.",
+            projects_root.display()
+        ));
+    }
+
+    let mut rows = Vec::new();
+    collect_commandcode_sessions(&projects_root, &mut rows);
+    if rows.is_empty() {
+        return Err(anyhow!(
+            "No Command Code session usage found under {}.",
+            projects_root.display()
+        ));
+    }
+
+    Ok(snapshot_from_rows("commandcode", "local", &rows, Utc::now()))
+}
+
+fn commandcode_home(home: &Path) -> PathBuf {
+    std::env::var("COMMANDCODE_HOME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".commandcode"))
+}
+
+fn collect_commandcode_sessions(dir: &Path, out: &mut Vec<CostRow>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_commandcode_sessions(&path, out);
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !name.ends_with(".jsonl") || name.ends_with(".checkpoints.jsonl") {
+            continue;
+        }
+        out.extend(read_commandcode_session_file(&path));
+    }
+}
+
+fn read_commandcode_session_file(path: &Path) -> Vec<CostRow> {
+    let Ok(file) = fs::File::open(path) else {
+        return Vec::new();
+    };
+    let mut rows = Vec::new();
+    for line in BufReader::new(file).lines() {
+        let Ok(line) = line else {
+            continue;
+        };
+        // Only assistant turns carry a usage blob; skip user/session lines early.
+        if !line.contains("\"usage\"") {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+            continue;
+        };
+        if let Some(row) = cost_row_from_commandcode_message(&value) {
+            rows.push(row);
+        }
+    }
+    rows
+}
+
+fn cost_row_from_commandcode_message(value: &serde_json::Value) -> Option<CostRow> {
+    let usage = value.get("usage")?;
+    let created_ms = parse_event_timestamp(value.get("timestamp")).or_else(|| {
+        value
+            .pointer("/message/meta/createdAt")
+            .and_then(json_f64)
+            .and_then(normalize_epoch_ms)
+    })?;
+    let tokens = commandcode_usage_total_tokens(usage);
+    let cost = usage
+        .get("costUsd")
+        .and_then(json_f64)
+        .filter(|cost| cost.is_finite() && *cost >= 0.0)
+        .unwrap_or(0.0);
+    if cost <= 0.0 && tokens <= 0 {
+        return None;
+    }
+    let model = value
+        .get("model")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(ToOwned::to_owned);
+    Some(CostRow {
+        created_ms,
+        cost,
+        tokens,
+        model,
+    })
+}
+
+/// Mirrors the token total the CLI prints in its own `<usage>` trailer, so the
+/// widget agrees with `cmd` about what a turn cost.
+fn commandcode_usage_total_tokens(usage: &serde_json::Value) -> i64 {
+    ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"]
+        .iter()
+        .filter_map(|key| usage.get(*key).and_then(json_i64))
+        .map(|value| value.max(0))
+        .sum()
+}
+
 // --- Aggregation -------------------------------------------------------------
 
 fn snapshot_from_rows(
@@ -999,5 +1131,92 @@ mod tests {
             normalize_epoch_ms(1_700_000_000_000.0),
             Some(1_700_000_000_000)
         );
+    }
+
+    #[test]
+    fn commandcode_message_uses_cost_usd_and_every_token_class() {
+        // Shape captured from ~/.commandcode/projects/**/*.jsonl.
+        let value = serde_json::json!({
+            "type": "message",
+            "timestamp": "2026-09-14T06:31:20.397Z",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "usage": {
+                "inputTokens": 19590,
+                "outputTokens": 206,
+                "cacheReadTokens": 7808,
+                "cacheWriteTokens": 0,
+                "costUsd": 0.0019143239999999998
+            }
+        });
+        let row = cost_row_from_commandcode_message(&value).expect("row");
+        assert_eq!(row.tokens, 27604);
+        assert!((row.cost - 0.001914324).abs() < 1e-12);
+        assert_eq!(row.model.as_deref(), Some("deepseek/deepseek-v4.1-flash"));
+        assert_eq!(
+            row.created_ms,
+            DateTime::parse_from_rfc3339("2026-09-14T06:31:20.397Z")
+                .unwrap()
+                .timestamp_millis()
+        );
+    }
+
+    #[test]
+    fn commandcode_message_without_usage_is_ignored() {
+        let value = serde_json::json!({
+            "type": "message",
+            "timestamp": "2026-09-14T06:31:20.397Z",
+            "message": { "role": "user" }
+        });
+        assert!(cost_row_from_commandcode_message(&value).is_none());
+    }
+
+    #[test]
+    fn commandcode_message_falls_back_to_meta_created_at() {
+        // Older transcripts omit the ISO timestamp but keep the message clock.
+        let value = serde_json::json!({
+            "usage": { "inputTokens": 10, "outputTokens": 5, "cacheReadTokens": 0, "cacheWriteTokens": 0 },
+            "message": { "meta": { "createdAt": 1789367476693_i64 } }
+        });
+        let row = cost_row_from_commandcode_message(&value).expect("row");
+        assert_eq!(row.created_ms, 1789367476693);
+        assert_eq!(row.tokens, 15);
+        assert_eq!(row.cost, 0.0);
+    }
+
+    #[test]
+    fn commandcode_sessions_skip_checkpoint_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "codexbar-commandcode-cost-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        let project = dir.join("projects").join("home-sfire-projects-demo");
+        fs::create_dir_all(&project).expect("mkdir");
+        fs::write(
+            project.join("session.jsonl"),
+            concat!(
+                r#"{"type":"message","timestamp":"2026-09-14T06:31:20.397Z","model":"m","usage":{"inputTokens":100,"outputTokens":20,"cacheReadTokens":0,"cacheWriteTokens":0,"costUsd":0.5}}"#,
+                "\n",
+                r#"{"type":"message","message":{"role":"user"}}"#,
+                "\n",
+            ),
+        )
+        .expect("write session");
+        fs::write(
+            project.join("session.checkpoints.jsonl"),
+            concat!(
+                r#"{"type":"message","timestamp":"2026-09-14T06:31:20.397Z","usage":{"inputTokens":1,"outputTokens":1,"cacheReadTokens":0,"cacheWriteTokens":0,"costUsd":9.99}}"#,
+                "\n",
+            ),
+        )
+        .expect("write checkpoints");
+
+        let mut rows = Vec::new();
+        collect_commandcode_sessions(&dir.join("projects"), &mut rows);
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].tokens, 120);
+        assert!((rows[0].cost - 0.5).abs() < 1e-9);
     }
 }

@@ -289,6 +289,7 @@ PlasmoidItem {
                 azureopenai: "#397fb7",
                 claude: "#b57861",
                 clinepass: "#5a8fd6",
+                commandcode: "#a1579c",
                 gemini: "#8972b5",
                 antigravity: "#55976b",
                 cursor: "#3c9487",

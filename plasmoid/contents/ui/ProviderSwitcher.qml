@@ -660,6 +660,7 @@ Item {
             azureopenai: "Azure OpenAI",
             claude: "Claude",
             clinepass: "ClinePass",
+            commandcode: "Command Code",
             cursor: "Cursor",
             gemini: "Gemini",
             copilot: "Copilot",
@@ -704,6 +705,7 @@ Item {
         const colors = {
             codex: "#4b929b",
             claude: "#b57861",
+            commandcode: "#a1579c",
             cursor: "#3c9487",
             gemini: "#8972b5",
             copilot: "#8c68b7",

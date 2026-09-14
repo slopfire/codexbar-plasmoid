@@ -143,8 +143,8 @@ Provider rows are saved as a JSON list in the `providerConfigs` Plasma setting. 
 ```
 
 `source` can be `auto`, `cli`, `oauth`, `api`, `web`, or `native`, depending on the provider. On Linux, `auto` maps
-native-capable providers to the bundled native fetcher where appropriate: Antigravity, Cursor, Devin, OpenCode, and OpenCode Go
-use `native`; Codex, Claude, Augment, Factory, JetBrains, Kiro, Windsurf, and similar local-agent providers use `cli`;
+native-capable providers to the bundled native fetcher where appropriate: Antigravity, Command Code, Cursor, Devin, Grok,
+OpenCode, and OpenCode Go use `native`; Codex, Claude, Augment, Factory, JetBrains, Kiro, Windsurf, and similar local-agent providers use `cli`;
 API providers such as Gemini, OpenAI, Groq, DeepSeek, OpenRouter, and ClinePass use `api`; Vertex AI uses `oauth`;
 Manus, Amp, T3 Chat, and similar browser-session providers use `web`.
 
@@ -264,13 +264,17 @@ usage unless the corresponding logs are present on this computer.
 
 ## Linux Helper
 
-Antigravity, Cursor, Devin, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
+Antigravity, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
 or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity can either
 probe a running `agy`/IDE language server locally, or use **Native Auth** (browser Google OAuth via
 `codexbar-plasmoid login --provider antigravity`, or tokens from `antigravity-usage login`, stored under
 `~/.config/antigravity-usage`) to call the Cloud Code API without the IDE.
 Devin calls the `app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
+Command Code calls `api.commandcode.ai/alpha/{billing/credits,billing/subscriptions,whoami}` with the API key that
+`cmd login` writes to `~/.commandcode/auth.json` (overrides: `COMMANDCODE_API_KEY`, `COMMANDCODE_AUTH_FILE`,
+`COMMANDCODE_HOME`, `COMMANDCODE_API_BASE`). Its token spend is read from the local session transcripts under
+`~/.commandcode/projects/**/*.jsonl`.
 
 Build and bundle it:
 
@@ -287,7 +291,7 @@ Run it directly:
 plasmoid/contents/code/codexbar-plasmoid usage --format json --json-only --provider cursor --source native
 ```
 
-In widget settings, choose **Linux Helper** as the source for Antigravity, Cursor, Devin, OpenCode, or OpenCode Go. Linux auto mode
+In widget settings, choose **Linux Helper** as the source for Antigravity, Command Code, Cursor, Devin, Grok, OpenCode, or OpenCode Go. Linux auto mode
 already prefers Linux Helper for those providers. For Antigravity without a running IDE, choose **Native Auth** after browser login:
 
 ```sh
@@ -320,6 +324,7 @@ Authentication options:
 - OpenCode Go subscription rate limits from an opencode.ai session (not estimated from local SQLite)
 - OpenCode / OpenCode Go local token spend from `~/.local/share/opencode/*.db` (cost)
 - Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
+- Command Code: `~/.commandcode/auth.json` from `cmd login` (or `COMMANDCODE_API_KEY`); Command Code token spend from `~/.commandcode/projects/**/*.jsonl` (cost)
 
 Native cookie / auth configuration uses a provider list (local only — do not commit real secrets):
 

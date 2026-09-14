@@ -37,7 +37,7 @@ codexbar cost --format json --json-only --provider <provider>
 arguments. The flag is deliberately excluded from the shared cache identity, so a manual refresh overwrites the slot other widgets read instead of creating a
 refresh-only entry.
 
-For Linux-native providers (`antigravity`, `cursor`, `devin`, `opencode`, `opencodego`) with `source=native` or
+For Linux-native providers (`antigravity`, `commandcode`, `cursor`, `devin`, `grok`, `opencode`, `opencodego`) with `source=native` or
 `source=native-auth`, the helper calls the bundled Rust binary at `plasmoid/contents/code/codexbar-plasmoid`
 instead of `codexbar`. Antigravity `native-auth` uses user tokens under `~/.config/antigravity-usage` from
 `codexbar-plasmoid login --provider antigravity` (browser OAuth) or `antigravity-usage login`; plain `native`

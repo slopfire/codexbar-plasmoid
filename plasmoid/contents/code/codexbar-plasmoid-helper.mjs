@@ -137,18 +137,22 @@ const showCredits = args.credits !== "false";
 const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
 const kdeProviderConfig = loadKdeProviderConfig();
 
-const nativeProviders = new Set(["antigravity", "cursor", "devin", "grok", "opencode", "opencodego"]);
+const nativeProviders = new Set(["antigravity", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
 // Upstream codexbar cost only scans Claude/Codex local logs. Native cost covers
-// OpenCode SQLite, Cursor dashboard events, and Grok local session usage.
+// OpenCode SQLite, Cursor dashboard events, Grok local session usage, and
+// Command Code session transcripts.
 // Antigravity / Devin only expose quota percentages (no absolute token history).
 const CODEXBAR_COST_PROVIDERS = new Set(["codex", "claude"]);
-const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok"]);
+const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok", "commandcode"]);
 
 const linuxAutoFallbacks = {
   codex: "cli",
   claude: "cli",
   clinepass: "api",
+  // Command Code's web source needs a logged-in commandcode.ai browser session;
+  // the native fetcher reuses the `cmd login` key in ~/.commandcode/auth.json.
+  commandcode: "native",
   cursor: "native",
   opencode: "native",
   opencodego: "native",
@@ -748,6 +752,7 @@ function discoverInstalledAgents() {
   const candidates = [
     { provider: "codex", commands: ["codex"], paths: [path.join(home, ".codex")] },
     { provider: "claude", commands: ["claude"], paths: [path.join(home, ".claude")] },
+    { provider: "commandcode", commands: ["cmd", "command-code"], paths: [path.join(home, ".commandcode")] },
     { provider: "cursor", commands: ["cursor"], paths: [path.join(configHome, "Cursor"), path.join(home, ".cursor")] },
     { provider: "antigravity", commands: ["antigravity", "agy"], paths: [path.join(configHome, "Antigravity"), path.join(configHome, "antigravity"), path.join(configHome, "antigravity-usage")] },
     { provider: "augment", commands: ["augment"], paths: [path.join(home, ".augment")] },
@@ -1537,6 +1542,9 @@ function providerLabels(providerId) {
     case "grok":
       // xAI UI labels this "Weekly SuperGrok Limit"; primary window is the weekly pool.
       return { session: "Weekly", weekly: "Weekly", tertiary: "Extra" };
+    case "commandcode":
+      // /alpha/billing/credits reports a rolling 5-hour and a weekly credit window.
+      return { session: "5-hour", weekly: "Weekly", tertiary: "Extra" };
     case "demo":
       return { session: "Low", weekly: "Session", tertiary: "Weekly" };
     default:

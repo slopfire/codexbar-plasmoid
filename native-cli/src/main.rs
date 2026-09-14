@@ -226,7 +226,7 @@ fn parse_args(args: &[String]) -> std::collections::HashMap<String, String> {
 
 fn print_help() {
     println!(
-        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Cursor, Devin, Grok, OpenCode, and OpenCode Go
+        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go
 
 Usage:
   codexbar-plasmoid usage --format json --json-only --provider <id> --source native|native-auth [--status] [--web-timeout <seconds>]
@@ -235,16 +235,19 @@ Usage:
   codexbar-plasmoid logout --provider antigravity [--account <email>] [--all]
 
 Providers:
-  antigravity, cursor, devin, grok, opencode, opencodego, all
+  antigravity, commandcode, cursor, devin, grok, opencode, opencodego, all
 
 Cost (token spend / API $):
   opencode, opencodego — ~/.local/share/opencode/*.db
   cursor — dashboard usage events (session cookie)
   grok — ~/.grok/sessions/**/updates.jsonl (costUsdTicks or per-model API rates)
+  commandcode — ~/.commandcode/projects/**/*.jsonl (per-message costUsd)
   all — soft-merge of the above
   (antigravity / devin: quota % only, no absolute token history)
 
 Authentication:
+  - Command Code: ~/.commandcode/auth.json (written by `cmd login`), or
+    COMMANDCODE_API_KEY / COMMANDCODE_HOME / COMMANDCODE_AUTH_FILE overrides
   - Antigravity (--source native): running agy/IDE first, then Cloud Code OAuth fallback
   - Antigravity (--source native-auth): Cloud Code API using tokens under
     ~/.config/antigravity-usage from browser OAuth:
