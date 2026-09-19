@@ -217,10 +217,12 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$arglog" "$mock_bin_dir/codexbar" >"$wrapper"
   chmod +x "$wrapper"
   helper="plasmoid/contents/code/codexbar-plasmoid-helper.mjs"
-  # run_helper <provider> <source> <cache-dir> <force>
+  # run_helper <provider> <source> <cache-dir> <force> [usage-cache-seconds] [cost-cache-seconds]
   run_helper() {
     XDG_CACHE_HOME="$3" node "$helper" --cli "$wrapper" --nativeCli "$wrapper" \
-      --provider "$1" --source "$2" --timeout 5 --cache-seconds 300 --force "$4" >/dev/null 2>&1 || true
+      --provider "$1" --source "$2" --timeout 5 \
+      --cache-seconds "${5:-300}" --cost-cache-seconds "${6:-3600}" \
+      --force "$4" >/dev/null 2>&1 || true
   }
 
   # Automatic refresh never asks the CLI to rescan.
@@ -259,6 +261,37 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
     ok "manual refresh result is reused by the shared cache"
   else
     bad "manual refresh wrote a separate cache entry ($manual_calls -> $shared_calls cost calls)"
+  fi
+
+  # Cost history keeps its longer cadence even when usage sharing is disabled.
+  : >"$arglog"
+  run_helper codex cli "$arglog_dir/cache-split" false 0 3600
+  run_helper codex cli "$arglog_dir/cache-split" false 0 3600
+  usage_calls="$(grep -c '^usage .*--provider codex' "$arglog" || true)"
+  cost_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
+  if [[ "$usage_calls" == "2" && "$cost_calls" == "1" ]]; then
+    ok "usage and cost caches use separate intervals"
+  else
+    bad "separate cache intervals made $usage_calls usage calls and $cost_calls cost calls"
+  fi
+
+  # The widget passes an applet id, so provider secrets do not appear in ps output.
+  applet_config_home="$arglog_dir/config"
+  mkdir -p "$applet_config_home"
+  kwriteconfig6 --file "$applet_config_home/plasma-org.kde.plasma.desktop-appletsrc" \
+    --group Containments --group 9 --group Applets --group 42 \
+    --group Configuration --group General --key providerConfigs \
+    '[{"provider":"codex","source":"cli","enabled":true,"apiKey":"test-secret"}]'
+  : >"$arglog"
+  XDG_CONFIG_HOME="$applet_config_home" XDG_CACHE_HOME="$arglog_dir/cache-applet" \
+    node "$helper" --cli "$wrapper" --nativeCli "$wrapper" \
+      --applet-id 42 --provider all --source auto --timeout 5 \
+      --cache-seconds 0 --cost-cache-seconds 3600 --force false >/dev/null 2>&1 || true
+  if grep -q '^usage .*--provider codex --source cli' "$arglog" \
+      && ! rg -q 'test-secret' plasmoid/contents/ui/main.qml; then
+    ok "helper loads provider settings by applet id"
+  else
+    bad "applet provider settings were not loaded"
   fi
 
   rm -rf "$arglog_dir"

@@ -22,6 +22,10 @@ const autoUpdate = args.autoUpdate === "true" || args["auto-update"] === "true";
 const updateTag = clean(args.tag) || "latest";
 const managedCliBinary = managedBinary();
 const sharedCacheSeconds = Math.max(0, Number(args.cacheSeconds || args["cache-seconds"] || 0));
+const costCacheArg = args.costCacheSeconds ?? args["cost-cache-seconds"];
+const costCacheSeconds = Math.max(0, Number(
+  costCacheArg === undefined ? sharedCacheSeconds : costCacheArg,
+));
 const forceRefresh = args.force === "true";
 const requestStartedAt = Date.now();
 
@@ -128,7 +132,7 @@ if (fs.existsSync(path.join(managedDir, "libsqlite3.so.0"))) {
 }
 const provider = clean(args.provider) || "all";
 const source = clean(args.source) || "auto";
-const localProviderConfigs = parseProviderConfigs(args.providers);
+const localProviderConfigs = parseProviderConfigs(providerConfigInput());
 const syncProviders = args.syncProviders === "true" || args["sync-providers"] === "true";
 const providerConfigs = syncProviders ? loadSharedProviderConfigs(localProviderConfigs) : localProviderConfigs;
 const includeCost = args.cost !== "false";
@@ -622,7 +626,7 @@ function fetchCostWithCommand(command, providerId, backend) {
           error: { message: shortError(error, command) },
         }];
       }
-    });
+    }, costCacheSeconds);
     return asArray(payload);
   } catch (error) {
     return [{
@@ -632,8 +636,8 @@ function fetchCostWithCommand(command, providerId, backend) {
   }
 }
 
-function sharedFetch(namespace, identity, producer) {
-  if (sharedCacheSeconds <= 0) {
+function sharedFetch(namespace, identity, producer, cacheSeconds = sharedCacheSeconds) {
+  if (cacheSeconds <= 0) {
     return producer();
   }
 
@@ -647,7 +651,7 @@ function sharedFetch(namespace, identity, producer) {
   const waitDeadline = Date.now() + timeoutMs + 5000;
 
   while (true) {
-    const cached = readSharedCache(cachePath, forceRefresh);
+    const cached = readSharedCache(cachePath, forceRefresh, cacheSeconds);
     if (cached.hit) {
       return cached.value;
     }
@@ -658,7 +662,7 @@ function sharedFetch(namespace, identity, producer) {
       fs.writeFileSync(lockFd, `${process.pid}\n${Date.now()}\n`);
 
       // Another helper may have populated the cache between our read and lock.
-      const afterLock = readSharedCache(cachePath, forceRefresh);
+      const afterLock = readSharedCache(cachePath, forceRefresh, cacheSeconds);
       if (afterLock.hit) {
         return afterLock.value;
       }
@@ -690,12 +694,12 @@ function sharedProviderCacheDir() {
   return path.join(cacheHome, "codexbar-plasmoid", "provider-cache");
 }
 
-function readSharedCache(cachePath, forced) {
+function readSharedCache(cachePath, forced, cacheSeconds) {
   try {
     const stat = fs.statSync(cachePath);
     const freshEnough = forced
       ? stat.mtimeMs >= requestStartedAt
-      : Date.now() - stat.mtimeMs <= sharedCacheSeconds * 1000;
+      : Date.now() - stat.mtimeMs <= cacheSeconds * 1000;
     if (!freshEnough) {
       return { hit: false, value: null };
     }
@@ -1575,6 +1579,86 @@ function parseProviderConfigs(raw) {
       includeCost: item.includeCost !== false,
       _fromConfigs: true,
     }));
+}
+
+function providerConfigInput() {
+  const appletId = clean(args.appletId || args["applet-id"]);
+  if (!appletId) {
+    return args.providers;
+  }
+  const stored = readAppletConfigValue(appletId, "providerConfigs");
+  return stored === null ? args.providers : stored;
+}
+
+function readAppletConfigValue(appletId, key) {
+  if (!/^[A-Za-z0-9._-]+$/.test(appletId)) {
+    return null;
+  }
+  const configHome = clean(process.env.XDG_CONFIG_HOME) || path.join(os.homedir(), ".config");
+  const configFileName = "plasma-org.kde.plasma.desktop-appletsrc";
+  const configPath = path.join(configHome, configFileName);
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const escapedId = appletId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionPattern = new RegExp(
+    `^\\[Containments\\]\\[([^\\]]+)\\]\\[Applets\\]\\[${escapedId}\\]\\[Configuration\\]\\[General\\]$`,
+    "m",
+  );
+  const section = sectionPattern.exec(raw);
+  if (!section) {
+    return null;
+  }
+
+  try {
+    return execFileSync("kreadconfig6", [
+      "--file", configFileName,
+      "--group", "Containments",
+      "--group", section[1],
+      "--group", "Applets",
+      "--group", appletId,
+      "--group", "Configuration",
+      "--group", "General",
+      "--key", key,
+    ], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 5000,
+    }).trim();
+  } catch {
+    return readKConfigValueFromSection(raw, section, key);
+  }
+}
+
+function readKConfigValueFromSection(raw, section, key) {
+  const sectionStart = section.index + section[0].length;
+  const remainder = raw.slice(sectionStart);
+  const nextSection = remainder.search(/^\[/m);
+  const body = nextSection === -1 ? remainder : remainder.slice(0, nextSection);
+  const prefix = `${key}=`;
+  const line = body.split(/\r?\n/).find((item) => item.startsWith(prefix));
+  return line === undefined ? null : decodeKConfigValue(line.slice(prefix.length));
+}
+
+function decodeKConfigValue(raw) {
+  let decoded = "";
+  for (let index = 0; index < raw.length; index += 1) {
+    if (raw[index] !== "\\" || index + 1 >= raw.length) {
+      decoded += raw[index];
+      continue;
+    }
+    index += 1;
+    const escaped = raw[index];
+    if (escaped === "n") decoded += "\n";
+    else if (escaped === "r") decoded += "\r";
+    else if (escaped === "t") decoded += "\t";
+    else decoded += escaped;
+  }
+  return decoded;
 }
 
 function loadSharedProviderConfigs(fallback) {

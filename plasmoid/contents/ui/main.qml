@@ -41,7 +41,8 @@ PlasmoidItem {
     readonly property var visibleEntries: resolveVisibleEntries(entries, effectiveSelectedEntryIds)
     readonly property var defaultEntry: entries.length > 0 ? entries[0] : null
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
-    readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 300)
+    readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 150)
+    readonly property int costRefreshInterval: Math.max(300, plasmoid.configuration.costRefreshIntervalSeconds || 3600)
 
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : compactRepresentation
     toolTipMainText: primaryEntry
@@ -140,7 +141,7 @@ PlasmoidItem {
             const parts = [
                 quote(script),
                 "--cli", quote(plasmoid.configuration.cliPath || "codexbar"),
-                "--providers", quote(plasmoid.configuration.providerConfigs || ""),
+                "--applet-id", quote(root.appletInstanceKey()),
                 "--provider", quote(plasmoid.configuration.provider || "all"),
                 "--source", quote(plasmoid.configuration.source || "auto"),
                 "--timeout", quote(plasmoid.configuration.requestTimeoutSeconds || 45),
@@ -154,6 +155,7 @@ PlasmoidItem {
                 "--auto-update", quote(plasmoid.configuration.autoUpdateCli ? "true" : "false"),
                 "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest"),
                 "--cache-seconds", quote(plasmoid.configuration.shareProviderFetches === false ? 0 : root.refreshInterval),
+                "--cost-cache-seconds", quote(root.costRefreshInterval),
                 "--force", quote(forceRefresh ? "true" : "false")
             ];
             return parts.join(" ");
@@ -886,6 +888,9 @@ PlasmoidItem {
     }
 
     function refreshNow(forceRefresh) {
+        if (loading) {
+            return false;
+        }
         const command = codexBar.command(forceRefresh === true);
         if (previousCommand.length > 0) {
             executable.disconnectSource(previousCommand);
@@ -895,6 +900,7 @@ PlasmoidItem {
         loading = true;
         lastError = "";
         executable.connectSource(command);
+        return true;
     }
 
     function openProviderSite(entry) {

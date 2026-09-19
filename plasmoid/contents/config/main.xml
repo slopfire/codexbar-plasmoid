@@ -89,10 +89,16 @@
       <default>position</default>
     </entry>
     <entry name="refreshIntervalSeconds" type="Int">
-      <label>Refresh interval in seconds</label>
-      <default>300</default>
+      <label>Usage refresh interval in seconds</label>
+      <default>150</default>
       <min>60</min>
       <max>86400</max>
+    </entry>
+    <entry name="costRefreshIntervalSeconds" type="Int">
+      <label>Cost history refresh interval in seconds</label>
+      <default>3600</default>
+      <min>300</min>
+      <max>604800</max>
     </entry>
     <entry name="shareProviderFetches" type="Bool">
       <label>Share matching provider refreshes between widget instances</label>

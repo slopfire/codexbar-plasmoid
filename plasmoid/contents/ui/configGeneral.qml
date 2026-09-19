@@ -10,6 +10,7 @@ Kirigami.ScrollablePage {
     property alias cfg_autoUpdateCli: autoUpdateCli.checked
     property string cfg_cliUpdateChannel: cliUpdateChannel.currentValue
     property alias cfg_refreshIntervalSeconds: refreshInterval.value
+    property alias cfg_costRefreshIntervalSeconds: costRefreshInterval.value
     property alias cfg_shareProviderFetches: shareProviderFetches.checked
     property alias cfg_requestTimeoutSeconds: requestTimeout.value
 
@@ -60,20 +61,33 @@ Kirigami.ScrollablePage {
 
             QtControls.SpinBox {
                 id: refreshInterval
-                Kirigami.FormData.label: i18n("Refresh:")
+                Kirigami.FormData.label: i18n("Usage refresh (seconds):")
                 from: 60
                 to: 86400
                 stepSize: 30
                 editable: true
                 textFromValue: function(value) {
-                    if (value < 90) {
-                        return i18np("%1 second", "%1 seconds", value);
-                    }
+                    return i18np("%1 second", "%1 seconds", value);
+                }
+                valueFromText: function(text) {
+                    const parsed = parseInt(text, 10);
+                    return Number.isFinite(parsed) ? parsed : 150;
+                }
+            }
+
+            QtControls.SpinBox {
+                id: costRefreshInterval
+                Kirigami.FormData.label: i18n("Cost history refresh (minutes):")
+                from: 300
+                to: 604800
+                stepSize: 300
+                editable: true
+                textFromValue: function(value) {
                     return i18np("%1 minute", "%1 minutes", Math.round(value / 60));
                 }
                 valueFromText: function(text) {
                     const parsed = parseInt(text, 10);
-                    return Number.isFinite(parsed) ? parsed : 300;
+                    return Number.isFinite(parsed) ? parsed * 60 : 3600;
                 }
             }
 
@@ -101,7 +115,7 @@ Kirigami.ScrollablePage {
 
             QtControls.Label {
                 Layout.fillWidth: true
-                text: i18n("Widgets using the same CLI, provider, source, account, and fetch options reuse one result per refresh interval.")
+                text: i18n("Widgets using the same CLI and provider settings reuse usage results. Cost history uses its own refresh interval.")
                 color: Kirigami.Theme.disabledTextColor
                 wrapMode: Text.Wrap
             }
