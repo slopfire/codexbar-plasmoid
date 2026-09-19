@@ -2,6 +2,13 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## 0.1.11 — 2026-09-19
+
+### Features
+
+- Add Command Code usage, subscription, and local cost support through the Linux helper
+- Let usage and cost history use separate refresh intervals
+
 ## 0.1.10 — 2026-09-13
 
 ### Fixes
