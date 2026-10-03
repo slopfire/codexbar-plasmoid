@@ -1,42 +1,10 @@
-use crate::config::workspace_id;
-use crate::cookies::resolve_cookie_header;
 use crate::http::HttpClient;
-use crate::output::{ProviderPayload, UsageSnapshot};
-use crate::providers::opencode_shared::{fetch_subscription, fetch_workspace_id, parse_usage};
-use anyhow::Result;
+use crate::output::ProviderPayload;
 
-pub fn fetch(http: &HttpClient) -> ProviderPayload {
-    match fetch_inner(http) {
-        Ok(payload) => payload,
-        Err(error) => ProviderPayload::error("opencode", error.to_string()),
-    }
-}
-
-fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
-    let cookie = resolve_cookie_header("opencode")?;
-    let workspace = match workspace_id("opencode") {
-        Some(id) => id,
-        None => fetch_workspace_id(http, &cookie.header)?,
-    };
-    let subscription = fetch_subscription(http, &workspace, &cookie.header)?;
-    let snapshot = parse_usage(&subscription, false)?;
-
-    let mut payload = ProviderPayload::ok(
-        "opencode",
-        UsageSnapshot {
-            primary: Some(snapshot.primary),
-            secondary: Some(snapshot.secondary),
-            tertiary: None,
-            usage_rows: None,
-            provider_cost: None,
-            cursor_requests: None,
-            updated_at: snapshot.updated_at,
-            identity: None,
-        },
-        None,
-        None,
-        None,
-    );
-    payload.site_url = Some(format!("https://opencode.ai/workspace/{workspace}/billing"));
-    Ok(payload)
+/// The OpenCode subscription card. OpenCode folded Lite/Go into the unified
+/// console (see `opencode_console.rs`); the same `go/status` meters feed this
+/// provider minus the monthly window, matching the long-standing two-bar
+/// contract (rolling + weekly) this provider used to render.
+pub fn fetch(http: &HttpClient, timeout_ms: u64) -> Vec<ProviderPayload> {
+    crate::opencode_console::fetch_opencode(http, timeout_ms)
 }

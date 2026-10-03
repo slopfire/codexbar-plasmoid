@@ -55,6 +55,7 @@ fn resolve_database_path(root: &Path) -> PathBuf {
 }
 
 /// True when a local OpenCode database is present (used for messaging / cost).
+#[allow(dead_code)]
 pub fn can_read_local_usage(home: &Path) -> bool {
     let (_, database_path) = local_paths(home);
     database_path.exists()

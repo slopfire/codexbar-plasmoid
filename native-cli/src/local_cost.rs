@@ -258,7 +258,7 @@ fn fetch_cursor_cost(http: &HttpClient) -> Result<CostSnapshot> {
                 rows.push(row);
             }
         }
-        let fetched = (page * CURSOR_PAGE_SIZE) as i64;
+        let fetched = page * CURSOR_PAGE_SIZE;
         let done = events.len() < CURSOR_PAGE_SIZE as usize
             || total_hint.is_some_and(|total| fetched >= total)
             || page >= CURSOR_MAX_PAGES;
@@ -582,8 +582,16 @@ fn grok_ticks_to_usd(value: Option<&serde_json::Value>) -> Option<f64> {
 
 fn estimate_grok_model_cost(model_id: &str, usage: &serde_json::Value) -> f64 {
     let rates = grok_model_rates(model_id);
-    let input = usage.get("inputTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
-    let output = usage.get("outputTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
+    let input = usage
+        .get("inputTokens")
+        .and_then(json_i64)
+        .unwrap_or(0)
+        .max(0) as f64;
+    let output = usage
+        .get("outputTokens")
+        .and_then(json_i64)
+        .unwrap_or(0)
+        .max(0) as f64;
     let cached = usage
         .get("cachedReadTokens")
         .and_then(json_i64)
@@ -591,7 +599,11 @@ fn estimate_grok_model_cost(model_id: &str, usage: &serde_json::Value) -> f64 {
         .max(0) as f64;
     // When only totalTokens is present (older events), treat as uncached input.
     let (input, output, cached) = if input <= 0.0 && output <= 0.0 {
-        let total = usage.get("totalTokens").and_then(json_i64).unwrap_or(0).max(0) as f64;
+        let total = usage
+            .get("totalTokens")
+            .and_then(json_i64)
+            .unwrap_or(0)
+            .max(0) as f64;
         (total, 0.0, 0.0)
     } else {
         (input, output, cached)
@@ -700,7 +712,12 @@ fn fetch_commandcode_cost(home: &Path) -> Result<CostSnapshot> {
         ));
     }
 
-    Ok(snapshot_from_rows("commandcode", "local", &rows, Utc::now()))
+    Ok(snapshot_from_rows(
+        "commandcode",
+        "local",
+        &rows,
+        Utc::now(),
+    ))
 }
 
 fn commandcode_home(home: &Path) -> PathBuf {
@@ -789,11 +806,16 @@ fn cost_row_from_commandcode_message(value: &serde_json::Value) -> Option<CostRo
 /// Mirrors the token total the CLI prints in its own `<usage>` trailer, so the
 /// widget agrees with `cmd` about what a turn cost.
 fn commandcode_usage_total_tokens(usage: &serde_json::Value) -> i64 {
-    ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"]
-        .iter()
-        .filter_map(|key| usage.get(*key).and_then(json_i64))
-        .map(|value| value.max(0))
-        .sum()
+    [
+        "inputTokens",
+        "outputTokens",
+        "cacheReadTokens",
+        "cacheWriteTokens",
+    ]
+    .iter()
+    .filter_map(|key| usage.get(*key).and_then(json_i64))
+    .map(|value| value.max(0))
+    .sum()
 }
 
 // --- Aggregation -------------------------------------------------------------
@@ -828,10 +850,17 @@ fn snapshot_from_rows(
                 .single()
                 .map(|dt| dt.format("%Y-%m-%d").to_string())
                 .unwrap_or_else(|| "unknown".to_string());
-            let entry = daily.entry(day_key).or_insert_with(|| (0.0, 0, BTreeMap::new()));
+            let entry = daily
+                .entry(day_key)
+                .or_insert_with(|| (0.0, 0, BTreeMap::new()));
             entry.0 += row.cost;
             entry.1 += row.tokens;
-            if let Some(model) = row.model.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            if let Some(model) = row
+                .model
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
                 let model_entry = entry.2.entry(model.to_string()).or_insert((0.0, 0));
                 model_entry.0 += row.cost;
                 model_entry.1 += row.tokens;
@@ -1099,10 +1128,8 @@ mod tests {
 
     #[test]
     fn grok_updates_file_scans_turn_completed() {
-        let dir = std::env::temp_dir().join(format!(
-            "codexbar-grok-cost-test-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("codexbar-grok-cost-test-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("mkdir");
         let path = dir.join("updates.jsonl");

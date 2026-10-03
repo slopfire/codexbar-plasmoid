@@ -21,7 +21,11 @@ const RETRIEVE_USER_QUOTA_SUMMARY_PATH: &str =
 const QUOTA_SUMMARY_ROW_ORDER: &[(&str, &str, &str)] = &[
     ("gemini-5h", "gemini-five-hour", "Gemini five-hour limit"),
     ("gemini-weekly", "gemini-weekly", "Gemini weekly limit"),
-    ("3p-5h", "claude-gpt-five-hour", "Claude/GPT five-hour limit"),
+    (
+        "3p-5h",
+        "claude-gpt-five-hour",
+        "Claude/GPT five-hour limit",
+    ),
     ("3p-weekly", "claude-gpt-weekly", "Claude/GPT weekly limit"),
 ];
 const NOT_RUNNING_MESSAGE: &str =
@@ -59,11 +63,12 @@ pub fn fetch(http: &HttpClient, timeout: Duration, method: AntigravityMethod) ->
         AntigravityMethod::Auto => match fetch_local(timeout) {
             LocalOutcome::Fresh(payload) => payload,
             LocalOutcome::Cached(cached) => fetch_cloud(http, timeout).unwrap_or(cached),
-            LocalOutcome::NotRunning(_) | LocalOutcome::Error(_) => match fetch_cloud(http, timeout)
-            {
-                Ok(payload) => payload,
-                Err(error) => ProviderPayload::error("antigravity", error.to_string()),
-            },
+            LocalOutcome::NotRunning(_) | LocalOutcome::Error(_) => {
+                match fetch_cloud(http, timeout) {
+                    Ok(payload) => payload,
+                    Err(error) => ProviderPayload::error("antigravity", error.to_string()),
+                }
+            }
         },
     }
 }
@@ -569,10 +574,7 @@ fn rows_from_quota_groups(groups: Vec<QuotaGroup>) -> Result<Vec<UsageRowSnapsho
                     .remaining_fraction
                     .map(|fraction| clamp_percent(fraction * 100.0))
                     .unwrap_or(0.0),
-                resets_at: bucket
-                    .reset_time
-                    .as_deref()
-                    .and_then(parse_iso_date),
+                resets_at: bucket.reset_time.as_deref().and_then(parse_iso_date),
             })
         })
         .collect::<Vec<_>>();
@@ -807,7 +809,9 @@ fn usage_snapshot_from_quotas(
     let normalized = quotas.into_iter().map(normalize_model).collect::<Vec<_>>();
     let usage_models: Vec<_> = normalized
         .iter()
-        .filter(|model| model.quota.remaining_fraction.is_some() || model.quota.reset_time.is_some())
+        .filter(|model| {
+            model.quota.remaining_fraction.is_some() || model.quota.reset_time.is_some()
+        })
         .cloned()
         .collect();
     let summary_models: Vec<_> = usage_models
@@ -1300,8 +1304,8 @@ fn load_tokens() -> Result<(StoredTokens, PathBuf)> {
             "No Antigravity native-auth login found. Run \
              `codexbar-plasmoid login --provider antigravity` (or `antigravity-usage login`) first.",
         )?;
-    let tokens: StoredTokens = serde_json::from_str(&raw)
-        .context("Parse antigravity-usage tokens.json failed")?;
+    let tokens: StoredTokens =
+        serde_json::from_str(&raw).context("Parse antigravity-usage tokens.json failed")?;
     Ok((tokens, legacy_path))
 }
 
@@ -1414,7 +1418,12 @@ fn pick_onboard_tier(response: &LoadCodeAssistResponse) -> Option<String> {
         .paid_tier
         .as_ref()
         .and_then(|tier| tier.id.clone())
-        .or_else(|| response.current_tier.as_ref().and_then(|tier| tier.id.clone()))
+        .or_else(|| {
+            response
+                .current_tier
+                .as_ref()
+                .and_then(|tier| tier.id.clone())
+        })
 }
 
 fn load_code_assist(http: &HttpClient, access_token: &str) -> Result<LoadCodeAssistResponse> {
@@ -1523,15 +1532,12 @@ fn fetch_cloud(http: &HttpClient, _timeout: Duration) -> Result<ProviderPayload>
     let access_token = ensure_valid_access_token(http, &mut tokens, &path)?;
 
     let mut code_assist = load_code_assist(http, &access_token)?;
-    let mut project_id = tokens
-        .project_id
-        .clone()
-        .or_else(|| {
-            code_assist
-                .cloudaicompanion_project
-                .as_ref()
-                .and_then(|value| extract_cloud_project_id(value))
-        });
+    let mut project_id = tokens.project_id.clone().or_else(|| {
+        code_assist
+            .cloudaicompanion_project
+            .as_ref()
+            .and_then(extract_cloud_project_id)
+    });
 
     // No project yet — try a single onboarding pass, then reload.
     if project_id.is_none() {
@@ -1542,7 +1548,7 @@ fn fetch_cloud(http: &HttpClient, _timeout: Duration) -> Result<ProviderPayload>
                 project_id = code_assist
                     .cloudaicompanion_project
                     .as_ref()
-                    .and_then(|value| extract_cloud_project_id(value));
+                    .and_then(extract_cloud_project_id);
             }
         }
     }
@@ -1555,12 +1561,10 @@ fn fetch_cloud(http: &HttpClient, _timeout: Duration) -> Result<ProviderPayload>
         }
     }
 
-    let plan = code_assist
-        .plan_info
-        .and_then(|info| info.plan_type);
+    let plan = code_assist.plan_info.and_then(|info| info.plan_type);
 
-    let quotas = fetch_available_models(http, &access_token, project_id.as_deref())
-        .unwrap_or_default();
+    let quotas =
+        fetch_available_models(http, &access_token, project_id.as_deref()).unwrap_or_default();
     if quotas.is_empty() {
         anyhow::bail!("No Antigravity quota models returned by Cloud Code API");
     }
@@ -1574,7 +1578,8 @@ fn fetch_cloud(http: &HttpClient, _timeout: Duration) -> Result<ProviderPayload>
         snapshot.usage_rows = Some(quota_rows);
     }
 
-    let mut payload = ProviderPayload::ok("antigravity", snapshot, tokens.email.clone(), None, None);
+    let mut payload =
+        ProviderPayload::ok("antigravity", snapshot, tokens.email.clone(), None, None);
     payload.source = "native-auth".to_string();
     save_cached_payload(&payload);
     Ok(payload)
@@ -1836,8 +1841,8 @@ mod tests {
         })
         .to_string();
 
-        let rows = parse_quota_summary_response(&response)
-            .expect("cloud quota summary should parse");
+        let rows =
+            parse_quota_summary_response(&response).expect("cloud quota summary should parse");
 
         assert_eq!(rows.len(), 4);
         assert_usage_row(&rows[0], "gemini-five-hour", 100.0);
@@ -1929,10 +1934,7 @@ mod tests {
         .expect("refresh response with new refresh_token should parse");
 
         assert_eq!(response.access_token, "ya29.rotated");
-        assert_eq!(
-            response.refresh_token.as_deref(),
-            Some("1//0new-refresh")
-        );
+        assert_eq!(response.refresh_token.as_deref(), Some("1//0new-refresh"));
     }
 
     #[test]
@@ -1946,32 +1948,36 @@ mod tests {
     fn parses_cloud_code_fetch_available_models_into_quotas() {
         let weekly_reset = (Utc::now() + chrono::Duration::hours(168)).to_rfc3339();
         let five_hour_reset = (Utc::now() + chrono::Duration::hours(5)).to_rfc3339();
-        let response: FetchAvailableModelsResponse = serde_json::from_str(&serde_json::json!({
-            "models": {
-                "claude-sonnet-4-5": {
-                    "displayName": "Claude Sonnet 4.5",
-                    "model": "MODEL_CLAUDE_SONNET",
-                    "quotaInfo": { "remainingFraction": 0.42, "resetTime": weekly_reset }
-                },
-                "gemini-3-pro-low": {
-                    "displayName": "Gemini 3 Pro (Low)",
-                    "model": "MODEL_GEMINI_PRO_LOW",
-                    "quotaInfo": { "remainingFraction": 0.25, "resetTime": five_hour_reset }
-                },
-                "gemini-3-flash": {
-                    "displayName": "Gemini 3 Flash",
-                    "model": "MODEL_GEMINI_FLASH",
-                    "quotaInfo": { "remainingFraction": 0.8, "resetTime": five_hour_reset }
-                },
-                "chat_autocomplete": {
-                    "displayName": "Autocomplete",
-                    "quotaInfo": { "remainingFraction": 1.0, "resetTime": five_hour_reset }
-                },
-                "no-quota-model": {
-                    "displayName": "No Quota"
+        let response: FetchAvailableModelsResponse = serde_json::from_str(
+            &serde_json::json!({
+                "models": {
+                    "claude-sonnet-4-5": {
+                        "displayName": "Claude Sonnet 4.5",
+                        "model": "MODEL_CLAUDE_SONNET",
+                        "quotaInfo": { "remainingFraction": 0.42, "resetTime": weekly_reset }
+                    },
+                    "gemini-3-pro-low": {
+                        "displayName": "Gemini 3 Pro (Low)",
+                        "model": "MODEL_GEMINI_PRO_LOW",
+                        "quotaInfo": { "remainingFraction": 0.25, "resetTime": five_hour_reset }
+                    },
+                    "gemini-3-flash": {
+                        "displayName": "Gemini 3 Flash",
+                        "model": "MODEL_GEMINI_FLASH",
+                        "quotaInfo": { "remainingFraction": 0.8, "resetTime": five_hour_reset }
+                    },
+                    "chat_autocomplete": {
+                        "displayName": "Autocomplete",
+                        "quotaInfo": { "remainingFraction": 1.0, "resetTime": five_hour_reset }
+                    },
+                    "no-quota-model": {
+                        "displayName": "No Quota"
+                    }
                 }
-            }
-        }).to_string()).expect("fetchAvailableModels JSON should parse");
+            })
+            .to_string(),
+        )
+        .expect("fetchAvailableModels JSON should parse");
 
         let quotas = quotas_from_models(response.models.unwrap_or_default());
 
@@ -2008,8 +2014,12 @@ mod tests {
             },
         ];
 
-        let snapshot = usage_snapshot_from_quotas(quotas, Some("user@example.com".to_string()), Some("GOOGLE_AI_PRO".to_string()))
-            .expect("cloud quotas should build a snapshot");
+        let snapshot = usage_snapshot_from_quotas(
+            quotas,
+            Some("user@example.com".to_string()),
+            Some("GOOGLE_AI_PRO".to_string()),
+        )
+        .expect("cloud quotas should build a snapshot");
 
         assert_eq!(
             snapshot.primary.as_ref().map(|w| w.remaining_percent),

@@ -157,7 +157,11 @@ impl ProviderPayload {
     }
 }
 
-pub fn rate_window(used_percent: f64, window_minutes: Option<i64>, resets_at: Option<DateTime<Utc>>) -> RateWindow {
+pub fn rate_window(
+    used_percent: f64,
+    window_minutes: Option<i64>,
+    resets_at: Option<DateTime<Utc>>,
+) -> RateWindow {
     let used = clamp_percent(used_percent);
     RateWindow {
         used_percent: used,
@@ -224,7 +228,7 @@ pub fn anonymize_email_str(email: &str) -> String {
     } else {
         let first = local.chars().next().unwrap_or('*');
         let last = local.chars().last().unwrap_or('*');
-        let stars: String = std::iter::repeat('*').take(local.chars().count() - 2).collect();
+        let stars: String = std::iter::repeat_n('*', local.chars().count() - 2).collect();
         format!("{}{}{}@{}", first, stars, last, domain)
     }
 }
@@ -252,9 +256,10 @@ fn is_uuid_like(value: &str) -> bool {
         return false;
     }
     let expected = [8, 4, 4, 4, 12];
-    parts.iter().zip(expected).all(|(part, len)| {
-        part.len() == len && part.chars().all(|c| c.is_ascii_hexdigit())
-    })
+    parts
+        .iter()
+        .zip(expected)
+        .all(|(part, len)| part.len() == len && part.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
 fn anonymize_opaque_id(value: &str) -> String {
@@ -274,7 +279,14 @@ fn anonymize_opaque_id(value: &str) -> String {
         return format!("{}{}", chars.iter().take(keep).collect::<String>(), stars);
     }
     let head: String = chars.iter().take(4).collect();
-    let tail: String = chars.iter().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: String = chars
+        .iter()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     let stars = "*".repeat(chars.len().saturating_sub(8));
     format!("{head}{stars}{tail}")
 }
@@ -289,7 +301,10 @@ mod anonymize_tests {
         assert_eq!(anonymize_email_str("ab@example.com"), "a*@example.com");
         assert_eq!(anonymize_email_str("abc@example.com"), "a*c@example.com");
         assert_eq!(anonymize_email_str("user@example.com"), "u**r@example.com");
-        assert_eq!(anonymize_email_str("username@example.com"), "u******e@example.com");
+        assert_eq!(
+            anonymize_email_str("username@example.com"),
+            "u******e@example.com"
+        );
         assert_eq!(anonymize_email_str("not_an_email"), "not_an_email");
     }
 

@@ -4,7 +4,6 @@ mod cursor;
 mod devin;
 mod grok;
 mod opencode;
-mod opencode_shared;
 mod opencodego;
 
 use crate::http::HttpClient;
@@ -32,13 +31,17 @@ pub fn fetch_provider(
 ) -> Vec<ProviderPayload> {
     match provider {
         "antigravity" => {
-            vec![antigravity::fetch(http, timeout, antigravity::method_for_source(source))]
+            vec![antigravity::fetch(
+                http,
+                timeout,
+                antigravity::method_for_source(source),
+            )]
         }
         "commandcode" => vec![commandcode::fetch(http)],
         "cursor" => vec![cursor::fetch(http, include_status)],
         "devin" => vec![devin::fetch(http)],
         "grok" => grok::fetch(http),
-        "opencode" => vec![opencode::fetch(http)],
+        "opencode" => opencode::fetch(http, timeout.as_millis() as u64),
         "opencodego" => opencodego::fetch(http, home),
         _ => vec![ProviderPayload::error(
             provider,

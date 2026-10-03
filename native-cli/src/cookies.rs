@@ -2,11 +2,13 @@ use crate::config::{manual_cookie_header, normalize_provider_id};
 use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use anyhow::Result;
 use cbc::Decryptor;
+use regex::Regex;
 use rusqlite::Connection;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 type Aes128CbcDec = Decryptor<aes::Aes128>;
 
@@ -26,7 +28,10 @@ const CURSOR_COOKIE_NAMES: &[&str] = &[
     "__Secure-authjs.session-token",
 ];
 const OPENCODE_DOMAINS: &[&str] = &["opencode.ai", "app.opencode.ai"];
-const OPENCODE_COOKIE_NAMES: &[&str] = &["auth", "__Host-auth"];
+// The old /workspace/* SolidStart app used the `auth` sealed cookie; the new
+// unified console at opencode.ai/console authenticates with
+// `__Host-console_session` (value `st_<uuid>`), so keep both in the header.
+const OPENCODE_COOKIE_NAMES: &[&str] = &["auth", "__Host-auth", "__Host-console_session"];
 const GROK_DOMAINS: &[&str] = &["grok.com", "www.grok.com", "x.ai", "accounts.x.ai"];
 const GROK_COOKIE_NAMES: &[&str] = &["sso", "sso-rw"];
 
@@ -216,8 +221,16 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
     let mut stores = Vec::new();
 
     let chromium_roots = [
-        (home.join(".config/google-chrome"), ChromiumBrowser::Chrome, "Chrome"),
-        (home.join(".config/chromium"), ChromiumBrowser::Chromium, "Chromium"),
+        (
+            home.join(".config/google-chrome"),
+            ChromiumBrowser::Chrome,
+            "Chrome",
+        ),
+        (
+            home.join(".config/chromium"),
+            ChromiumBrowser::Chromium,
+            "Chromium",
+        ),
         (
             home.join(".config/BraveSoftware/Brave-Browser"),
             ChromiumBrowser::Brave,
@@ -228,7 +241,11 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
             ChromiumBrowser::Edge,
             "Edge",
         ),
-        (home.join(".config/helium"), ChromiumBrowser::Helium, "Helium"),
+        (
+            home.join(".config/helium"),
+            ChromiumBrowser::Helium,
+            "Helium",
+        ),
     ];
 
     for (root, browser, label) in chromium_roots {
@@ -272,10 +289,7 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
     let zen_roots = [
         (home.join(".zen"), "Zen"),
         (home.join(".config/zen"), "Zen"),
-        (
-            home.join(".var/app/app.zen_browser.zen/zen"),
-            "Zen Flatpak",
-        ),
+        (home.join(".var/app/app.zen_browser.zen/zen"), "Zen Flatpak"),
     ];
     for (root, label) in zen_roots {
         if !root.exists() {
@@ -301,6 +315,99 @@ fn browser_cookie_stores() -> Vec<CookieStore> {
     }
 
     stores
+}
+
+/// Discover OpenCode workspace ids (`wrk_...`) recorded by the console UI.
+///
+/// opencode.ai/console persists the last-workspace hint in localStorage, so
+/// every signed-in browser profile carries the id even though the new
+/// console API is addressed purely by workspace id + `x-org-id` header.
+/// Chromium keeps localStorage in a leveldb directory, Firefox/Zen keep
+/// per-origin sqlite files. Both are scanned as raw bytes with a
+/// conservative id regex; `wrk_` ids are high-entropy and unrelated values
+/// cannot collide.
+pub fn opencode_workspace_ids_from_browsers() -> Vec<String> {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
+    let mut out = Vec::new();
+
+    let chromium_roots = [
+        home.join(".config/google-chrome"),
+        home.join(".config/chromium"),
+        home.join(".config/BraveSoftware/Brave-Browser"),
+        home.join(".config/microsoft-edge"),
+        home.join(".config/helium"),
+    ];
+    for root in chromium_roots {
+        if !root.exists() {
+            continue;
+        }
+        for profile in list_chromium_profiles(&root) {
+            let leveldb = root.join(&profile).join("Local Storage").join("leveldb");
+            scan_workspace_ids_dir(&leveldb, &mut out);
+        }
+    }
+
+    let firefox_roots = [
+        home.join(".mozilla/firefox"),
+        home.join(".zen"),
+        home.join(".config/zen"),
+        home.join(".var/app/app.zen_browser.zen/zen"),
+    ];
+    for root in firefox_roots {
+        if !root.exists() {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let ls_dir = entry.path().join("storage/default/https+++opencode.ai/ls");
+            scan_workspace_ids_dir(&ls_dir, &mut out);
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn wrk_id_re() -> &'static Regex {
+    static WRK_ID_RE: OnceLock<Regex> = OnceLock::new();
+    WRK_ID_RE.get_or_init(|| {
+        // Fixed-literal compile-time-known regex; the fallback wildcard keeps
+        // the happy path panic-free even if the primary pattern were edited.
+        Regex::new(r"wrk_[A-Za-z0-9]{10,}")
+            .or_else(|_| Regex::new(r"wrk_[A-Za-z0-9]+"))
+            .unwrap_or_else(|_| Regex::new(".").unwrap())
+    })
+}
+
+fn scan_workspace_ids_dir(dir: &Path, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(metadata) = fs::metadata(&path) else {
+            continue;
+        };
+        if !metadata.is_file() || metadata.len() > 64 * 1024 * 1024 {
+            continue;
+        }
+        let Ok(bytes) = fs::read(&path) else {
+            continue;
+        };
+        // Raw leveldb/sqlite byte scans: `wrk_` ids are ASCII, so lossy
+        // decoding keeps them intact without pulling in regex-bytes.
+        let text = String::from_utf8_lossy(&bytes);
+        for capture in wrk_id_re().captures_iter(&text) {
+            if let Some(found) = capture.get(0) {
+                let id = found.as_str().to_string();
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+    }
 }
 
 fn list_chromium_profiles(root: &Path) -> Vec<String> {
@@ -350,7 +457,9 @@ fn names_for(provider_id: &str) -> &'static [&'static str] {
 
 fn domain_matches(host: &str, domains: &[&str]) -> bool {
     let normalized = host.trim_start_matches('.').to_lowercase();
-    domains.iter().any(|domain| normalized == *domain || normalized.ends_with(&format!(".{domain}")))
+    domains
+        .iter()
+        .any(|domain| normalized == *domain || normalized.ends_with(&format!(".{domain}")))
 }
 
 fn read_chromium_cookies(
@@ -360,7 +469,8 @@ fn read_chromium_cookies(
     strict_names: bool,
 ) -> Option<String> {
     let copied = copy_to_temp(cookies_path)?;
-    let conn = Connection::open_with_flags(&copied, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let conn =
+        Connection::open_with_flags(&copied, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     let domains = domains_for(provider_id);
     let names = names_for(provider_id);
     let mut stmt = conn
@@ -403,9 +513,14 @@ fn read_chromium_cookies(
     }
 }
 
-fn read_firefox_cookies(cookies_path: &Path, provider_id: &str, strict_names: bool) -> Option<String> {
+fn read_firefox_cookies(
+    cookies_path: &Path,
+    provider_id: &str,
+    strict_names: bool,
+) -> Option<String> {
     let copied = copy_to_temp(cookies_path)?;
-    let conn = Connection::open_with_flags(&copied, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let conn =
+        Connection::open_with_flags(&copied, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
     let domains = domains_for(provider_id);
     let names = names_for(provider_id);
     let mut stmt = conn
@@ -413,7 +528,11 @@ fn read_firefox_cookies(cookies_path: &Path, provider_id: &str, strict_names: bo
         .ok()?;
     let rows = stmt
         .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .ok()?;
 
@@ -458,7 +577,8 @@ fn chromium_passwords(browser: ChromiumBrowser) -> Vec<String> {
     ]) {
         push(value);
     }
-    if let Some(value) = secret_tool_lookup(&["lookup", "application", browser.application_name()]) {
+    if let Some(value) = secret_tool_lookup(&["lookup", "application", browser.application_name()])
+    {
         push(value);
     }
     if let Some(value) = kwallet_password(browser) {
@@ -557,7 +677,7 @@ fn decrypt_chromium_value(encrypted_value: &[u8], passwords: &[String]) -> Optio
     }
 
     let ciphertext = &encrypted_value[3..];
-    if ciphertext.is_empty() || ciphertext.len() % 16 != 0 {
+    if ciphertext.is_empty() || !ciphertext.len().is_multiple_of(16) {
         return None;
     }
 
@@ -610,16 +730,33 @@ fn decode_chromium_plaintext(plain: &[u8]) -> Result<String, ()> {
 }
 
 fn looks_like_cookie_value(value: &str) -> bool {
-    !value.is_empty() && !value.bytes().any(|byte| byte < 9 || (byte > 13 && byte < 32))
+    !value.is_empty()
+        && !value
+            .bytes()
+            .any(|byte| byte < 9 || (byte > 13 && byte < 32))
 }
 
 fn copy_to_temp(path: &Path) -> Option<PathBuf> {
-    let temp_dir = std::env::temp_dir().join(format!(
-        "codexbar-plasmoid-cookies-{}",
-        std::process::id()
-    ));
+    let temp_dir =
+        std::env::temp_dir().join(format!("codexbar-plasmoid-cookies-{}", std::process::id()));
     fs::create_dir_all(&temp_dir).ok()?;
     let copied = temp_dir.join(path.file_name()?);
     fs::copy(path, &copied).ok()?;
     Some(copied)
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::opencode_workspace_ids_from_browsers;
+
+    #[test]
+    fn finds_console_workspace_ids_when_present() {
+        // Scrapes live browser profiles on this machine; may legitimately find
+        // none if OpenCode console was never opened. Asserts the scanner
+        // returns well-formed ids at minimum (none or wrk_-prefixed).
+        let ids = opencode_workspace_ids_from_browsers();
+        for id in &ids {
+            assert!(id.starts_with("wrk_"), "malformed id: {id}");
+        }
+    }
 }

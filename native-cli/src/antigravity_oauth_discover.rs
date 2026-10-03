@@ -139,8 +139,7 @@ fn extract_from_bytes(data: &[u8]) -> Option<(String, String)> {
     // allocating a multi-hundred-MB String over the `agy` binary.
     static CLIENT_RE: OnceLock<Regex> = OnceLock::new();
     let client_re = CLIENT_RE.get_or_init(|| {
-        Regex::new(r"[0-9]{6,}-[a-z0-9]+\.apps\.googleusercontent\.com")
-            .expect("client id regex")
+        Regex::new(r"[0-9]{6,}-[a-z0-9]+\.apps\.googleusercontent\.com").expect("client id regex")
     });
 
     let mut clients: Vec<(usize, String)> = Vec::new();
@@ -317,7 +316,9 @@ mod tests {
         blob.extend_from_slice(host.as_bytes());
         blob.extend_from_slice(b"padding");
         blob.extend_from_slice(metrics_client.as_bytes());
-        blob.extend_from_slice(b"/google.internal.cloud.code.v1internal.CloudCode/RecordCodeAssistMetrics");
+        blob.extend_from_slice(
+            b"/google.internal.cloud.code.v1internal.CloudCode/RecordCodeAssistMetrics",
+        );
         blob.extend_from_slice(b"more");
         blob.extend_from_slice(desktop_client.as_bytes());
         blob.extend_from_slice(b"Warning: unrelated");

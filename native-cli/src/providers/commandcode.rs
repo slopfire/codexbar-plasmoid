@@ -63,10 +63,9 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
     let base = api_base();
     let headers = auth_headers(&api_key)?;
 
-    let credits: CreditsResponse = serde_json::from_value(http.fetch_json_value(
-        &format!("{base}/alpha/billing/credits"),
-        &headers,
-    )?)
+    let credits: CreditsResponse = serde_json::from_value(
+        http.fetch_json_value(&format!("{base}/alpha/billing/credits"), &headers)?,
+    )
     .context("parse Command Code credits")?;
 
     // Plan and identity are decorative: a missing or unreadable response must
@@ -90,11 +89,11 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
 
     let limits = credits.window_limits.as_ref();
     let usage = UsageSnapshot {
-        primary: window_rate(
-            limits.and_then(|limits| limits.five_hour.as_ref()),
-            5 * 60,
+        primary: window_rate(limits.and_then(|limits| limits.five_hour.as_ref()), 5 * 60),
+        secondary: window_rate(
+            limits.and_then(|limits| limits.weekly.as_ref()),
+            7 * 24 * 60,
         ),
-        secondary: window_rate(limits.and_then(|limits| limits.weekly.as_ref()), 7 * 24 * 60),
         tertiary: monthly_window(&credits, plan.as_ref()),
         usage_rows: None,
         provider_cost: None,
@@ -284,10 +283,7 @@ fn active_plan(subscriptions: &SubscriptionsResponse) -> Option<PlanInfo> {
     Some(PlanInfo {
         label: tier.map(|(_, label, _)| (*label).to_string()),
         monthly_credits: tier.map(|(_, _, credits)| *credits),
-        period_end: data
-            .current_period_end
-            .as_deref()
-            .and_then(rfc3339_to_utc),
+        period_end: data.current_period_end.as_deref().and_then(rfc3339_to_utc),
     })
 }
 

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, COOKIE, USER_AGENT};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, COOKIE, USER_AGENT};
 use std::time::Duration;
 
 const USER_AGENT_VALUE: &str =
@@ -45,7 +45,7 @@ impl HttpClient {
 
     pub fn fetch_json_value(&self, url: &str, headers: &HeaderMap) -> Result<serde_json::Value> {
         let text = self.fetch_text(url, headers)?;
-        Ok(serde_json::from_str(&text).with_context(|| format!("parse JSON from {url}"))?)
+        serde_json::from_str(&text).with_context(|| format!("parse JSON from {url}"))
     }
 
     pub fn post_text(&self, url: &str, headers: &HeaderMap, body: &[u8]) -> Result<String> {
@@ -64,6 +64,23 @@ impl HttpClient {
 
     /// POST raw bytes and return the response body as bytes (no UTF-8 assumption).
     /// Used for gRPC-web protobuf frames that are not valid text.
+    /// GET returning `(status, body)` without an `error_for_status` bail —
+    /// callers branch on 401/403/404/400 to produce friendly provider errors.
+    pub fn client_get(&self, url: &str, headers: &HeaderMap) -> Result<(u16, String)> {
+        let response = self
+            .client
+            .get(url)
+            .headers(headers.clone())
+            .header(USER_AGENT, USER_AGENT_VALUE)
+            .send()
+            .with_context(|| format!("GET {url}"))?;
+        let status = response.status().as_u16();
+        let text = response
+            .text()
+            .with_context(|| format!("read body from {url}"))?;
+        Ok((status, text))
+    }
+
     pub fn post_bytes(&self, url: &str, headers: &HeaderMap, body: &[u8]) -> Result<Vec<u8>> {
         let response = self
             .client
@@ -143,7 +160,11 @@ impl HttpClient {
                     .context("invalid bearer token header")?,
             )
             .header("Content-Type", "application/json")
-            .header(USER_AGENT, HeaderValue::from_str(user_agent).unwrap_or_else(|_| HeaderValue::from_static("antigravity")))
+            .header(
+                USER_AGENT,
+                HeaderValue::from_str(user_agent)
+                    .unwrap_or_else(|_| HeaderValue::from_static("antigravity")),
+            )
             .body(payload)
             .send()
             .with_context(|| format!("POST {url}"))?;
@@ -155,18 +176,30 @@ impl HttpClient {
     }
 }
 
-pub fn cookie_header(value: &str) -> Result<HeaderMap> {
+/// Headers for the new OpenCode console API (`/console/api/*`): the
+/// `__Host-console_session` cookie for auth plus the `x-org-id` workspace
+/// header that every org-scoped route requires (`org_required` otherwise).
+pub fn console_headers(session_value: &str, org_id: &str) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
-    headers.insert(COOKIE, HeaderValue::from_str(value).context("invalid cookie header")?);
+    headers.insert(
+        COOKIE,
+        HeaderValue::from_str(&format!("__Host-console_session={session_value}"))
+            .context("invalid console session cookie")?,
+    );
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
+    headers.insert(
+        HeaderName::from_static("x-org-id"),
+        HeaderValue::from_str(org_id).context("invalid workspace id")?,
+    );
     Ok(headers)
 }
 
-pub fn html_headers(cookie: &str) -> Result<HeaderMap> {
-    let mut headers = cookie_header(cookie)?;
+pub fn cookie_header(value: &str) -> Result<HeaderMap> {
+    let mut headers = HeaderMap::new();
     headers.insert(
-        ACCEPT,
-        HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        COOKIE,
+        HeaderValue::from_str(value).context("invalid cookie header")?,
     );
+    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     Ok(headers)
 }

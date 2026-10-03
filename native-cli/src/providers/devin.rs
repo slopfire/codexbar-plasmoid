@@ -1,6 +1,6 @@
 use crate::config;
 use crate::http::HttpClient;
-use crate::output::{self, ProviderPayload, ProviderIdentitySnapshot, RateWindow, UsageSnapshot};
+use crate::output::{self, ProviderIdentitySnapshot, ProviderPayload, RateWindow, UsageSnapshot};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION};
@@ -15,10 +15,12 @@ pub fn fetch(http: &HttpClient) -> ProviderPayload {
 }
 
 fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
-    let bearer_token = resolve_bearer_token()
-        .ok_or_else(|| anyhow!("No Devin bearer token found. Set DEVIN_BEARER_TOKEN or DEVIN_AUTHORIZATION."))?;
-    let organization = resolve_organization()
-        .ok_or_else(|| anyhow!("No Devin organization found. Set DEVIN_ORGANIZATION or DEVIN_ORG."))?;
+    let bearer_token = resolve_bearer_token().ok_or_else(|| {
+        anyhow!("No Devin bearer token found. Set DEVIN_BEARER_TOKEN or DEVIN_AUTHORIZATION.")
+    })?;
+    let organization = resolve_organization().ok_or_else(|| {
+        anyhow!("No Devin organization found. Set DEVIN_ORGANIZATION or DEVIN_ORG.")
+    })?;
 
     let normalized = normalize_organization(&organization);
     let internal_id = internal_organization_id(&normalized);
@@ -76,7 +78,7 @@ fn strip_bearer_prefix(raw: &str) -> &str {
         return strip_bearer_prefix(rest);
     }
     if lower.starts_with("bearer ") {
-        return &raw[7..].trim();
+        return raw[7..].trim();
     }
     raw
 }
@@ -144,8 +146,7 @@ fn candidate_paths(normalized: &str, internal_id: Option<&str>) -> Vec<String> {
         paths.push(format!("{id}/billing/quota/usage"));
     }
     paths.push(format!("{normalized}/billing/quota/usage"));
-    if normalized.starts_with("org/") {
-        let slug = &normalized[4..];
+    if let Some(slug) = normalized.strip_prefix("org/") {
         paths.push(format!("{slug}/billing/quota/usage"));
     }
     if !normalized.starts_with("org/") && !normalized.starts_with("organizations/") {
@@ -175,7 +176,8 @@ fn parse_quota(value: &serde_json::Value, normalized_org: &str) -> Result<QuotaS
 
     let daily_used_percent = extract_percent(obj, &["daily_percentage", "daily_percent", "daily"]);
     let daily_resets_at = extract_reset_at(obj, "daily");
-    let weekly_used_percent = extract_percent(obj, &["weekly_percentage", "weekly_percent", "weekly"]);
+    let weekly_used_percent =
+        extract_percent(obj, &["weekly_percentage", "weekly_percent", "weekly"]);
     let weekly_resets_at = extract_reset_at(obj, "weekly");
 
     if daily_used_percent.is_none() && weekly_used_percent.is_none() {
@@ -223,7 +225,10 @@ fn parse_percent_value(value: &serde_json::Value) -> Option<f64> {
     Some(raw.clamp(0.0, 100.0))
 }
 
-fn extract_reset_at(obj: &serde_json::Map<String, serde_json::Value>, prefix: &str) -> Option<DateTime<Utc>> {
+fn extract_reset_at(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    prefix: &str,
+) -> Option<DateTime<Utc>> {
     for (key, value) in obj {
         if key.to_lowercase().contains("reset") && key.to_lowercase().contains(prefix) {
             if let Some(date) = parse_date(value) {
@@ -273,7 +278,10 @@ fn find_nested_windows(
     (daily, weekly)
 }
 
-fn find_window(value: &serde_json::Value, key_fragment: &str) -> Option<(f64, Option<DateTime<Utc>>)> {
+fn find_window(
+    value: &serde_json::Value,
+    key_fragment: &str,
+) -> Option<(f64, Option<DateTime<Utc>>)> {
     if let Some(obj) = value.as_object() {
         for (key, val) in obj {
             if key.to_lowercase().contains(key_fragment) && !key.to_lowercase().contains("hide") {
@@ -281,8 +289,14 @@ fn find_window(value: &serde_json::Value, key_fragment: &str) -> Option<(f64, Op
                     return Some((percent, None));
                 }
                 if let Some(inner) = val.as_object() {
-                    if let Some(percent) = extract_percent(inner, &["used_percent", "usedPercent", "percent", "usage_percent"]) {
-                        let reset = inner.iter().find(|(k, _)| k.to_lowercase().contains("reset")).and_then(|(_, v)| parse_date(v));
+                    if let Some(percent) = extract_percent(
+                        inner,
+                        &["used_percent", "usedPercent", "percent", "usage_percent"],
+                    ) {
+                        let reset = inner
+                            .iter()
+                            .find(|(k, _)| k.to_lowercase().contains("reset"))
+                            .and_then(|(_, v)| parse_date(v));
                         return Some((percent, reset));
                     }
                 }

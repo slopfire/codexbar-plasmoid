@@ -4,6 +4,7 @@ mod config;
 mod cookies;
 mod http;
 mod local_cost;
+mod opencode_console;
 mod opencodego_local;
 mod output;
 mod providers;
@@ -47,7 +48,10 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let payload = vec![ProviderPayload::error("cli", error.to_string())];
-            println!("{}", serde_json::to_string(&payload).unwrap_or_else(|_| "[]".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string(&payload).unwrap_or_else(|_| "[]".to_string())
+            );
             ExitCode::FAILURE
         }
     }
@@ -116,10 +120,7 @@ fn run_usage(args: &[String]) -> anyhow::Result<()> {
         anyhow::bail!("Unknown command: {command}");
     }
     let parsed = parse_args(&args[2..]);
-    let source = parsed
-        .get("source")
-        .map(String::as_str)
-        .unwrap_or("native");
+    let source = parsed.get("source").map(String::as_str).unwrap_or("native");
     if source != "native" && source != "native-auth" {
         anyhow::bail!("--source must be native or native-auth for codexbar-plasmoid.");
     }

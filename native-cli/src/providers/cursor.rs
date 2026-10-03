@@ -18,10 +18,9 @@ fn fetch_inner(http: &HttpClient, include_status: bool) -> Result<ProviderPayloa
     let cookie = resolve_cookie_header("cursor")?;
     let headers = cookie_header(&cookie.header)?;
 
-    let usage_summary: CursorUsageSummary = serde_json::from_value(http.fetch_json_value(
-        "https://cursor.com/api/usage-summary",
-        &headers,
-    )?)?;
+    let usage_summary: CursorUsageSummary = serde_json::from_value(
+        http.fetch_json_value("https://cursor.com/api/usage-summary", &headers)?,
+    )?;
     let user_info: Option<CursorUserInfo> = http
         .fetch_json_value("https://cursor.com/api/auth/me", &headers)
         .ok()
@@ -99,12 +98,18 @@ fn cursor_usage_snapshot(
         _ => None,
     };
 
-    let plan = summary.individual_usage.as_ref().and_then(|usage| usage.plan.as_ref());
+    let plan = summary
+        .individual_usage
+        .as_ref()
+        .and_then(|usage| usage.plan.as_ref());
     let overall = summary
         .individual_usage
         .as_ref()
         .and_then(|usage| usage.overall.as_ref());
-    let pooled = summary.team_usage.as_ref().and_then(|usage| usage.pooled.as_ref());
+    let pooled = summary
+        .team_usage
+        .as_ref()
+        .and_then(|usage| usage.pooled.as_ref());
 
     let plan_used_raw = plan.and_then(|p| p.used).unwrap_or(0) as f64;
     let plan_limit_raw = plan.and_then(|p| p.limit).unwrap_or(0) as f64;
@@ -121,13 +126,17 @@ fn cursor_usage_snapshot(
         auto
     } else if plan_limit_raw > 0.0 {
         clamp_percent((plan_used_raw / plan_limit_raw) * 100.0)
-    } else if let (Some(used), Some(limit)) = (overall.and_then(|o| o.used), overall.and_then(|o| o.limit)) {
+    } else if let (Some(used), Some(limit)) =
+        (overall.and_then(|o| o.used), overall.and_then(|o| o.limit))
+    {
         if limit > 0 {
             clamp_percent((used as f64 / limit as f64) * 100.0)
         } else {
             0.0
         }
-    } else if let (Some(used), Some(limit)) = (pooled.and_then(|o| o.used), pooled.and_then(|o| o.limit)) {
+    } else if let (Some(used), Some(limit)) =
+        (pooled.and_then(|o| o.used), pooled.and_then(|o| o.limit))
+    {
         if limit > 0 {
             clamp_percent((used as f64 / limit as f64) * 100.0)
         } else {
@@ -142,9 +151,7 @@ fn cursor_usage_snapshot(
         .and_then(|gpt4| gpt4.max_request_usage)
         .is_some();
 
-    let has_token_plan_data = plan
-        .and_then(|p| p.total_percent_used)
-        .is_some()
+    let has_token_plan_data = plan.and_then(|p| p.total_percent_used).is_some()
         || auto_percent.is_some()
         || api_percent.is_some();
 
@@ -165,12 +172,14 @@ fn cursor_usage_snapshot(
         plan_percent_used
     };
 
-    let cursor_requests = request_usage.and_then(|usage| usage.gpt4.as_ref()).and_then(|gpt4| {
-        gpt4.max_request_usage.map(|limit| CursorRequestUsage {
-            used: gpt4.num_requests_total.or(gpt4.num_requests).unwrap_or(0) as i64,
-            limit: limit as i64,
-        })
-    });
+    let cursor_requests = request_usage
+        .and_then(|usage| usage.gpt4.as_ref())
+        .and_then(|gpt4| {
+            gpt4.max_request_usage.map(|limit| CursorRequestUsage {
+                used: gpt4.num_requests_total.or(gpt4.num_requests).unwrap_or(0),
+                limit,
+            })
+        });
 
     CursorUsageParts {
         primary: rate_window(primary_used, window_minutes, billing_cycle_end),
@@ -200,7 +209,10 @@ fn cursor_credits_snapshot(summary: &CursorUsageSummary) -> Option<CreditsSnapsh
 fn cursor_provider_cost(summary: &CursorUsageSummary) -> Option<ProviderCostSnapshot> {
     let on_demand = summary.individual_usage.as_ref()?.on_demand.as_ref()?;
     let used = on_demand.used.unwrap_or(0) as f64 / 100.0;
-    let limit = on_demand.limit.map(|value| value as f64 / 100.0).unwrap_or(0.0);
+    let limit = on_demand
+        .limit
+        .map(|value| value as f64 / 100.0)
+        .unwrap_or(0.0);
     if used <= 0.0 && limit <= 0.0 {
         return None;
     }
@@ -262,7 +274,11 @@ fn format_membership(value: &str) -> String {
         "team" => "Cursor Team".to_string(),
         _ => format!(
             "Cursor {}{}",
-            value.chars().next().map(|c| c.to_ascii_uppercase()).unwrap_or_default(),
+            value
+                .chars()
+                .next()
+                .map(|c| c.to_ascii_uppercase())
+                .unwrap_or_default(),
             &value[1..]
         ),
     }
@@ -272,11 +288,7 @@ fn parse_iso_date(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|value| value.with_timezone(&Utc))
-        .or_else(|| {
-            value
-                .parse::<DateTime<Utc>>()
-                .ok()
-        })
+        .or_else(|| value.parse::<DateTime<Utc>>().ok())
 }
 
 fn urlencoding(value: &str) -> String {
@@ -465,10 +477,7 @@ mod tests {
             }"#,
         )
         .expect("usage summary JSON should deserialize");
-        let label = summary
-            .membership_type
-            .as_deref()
-            .map(format_membership);
+        let label = summary.membership_type.as_deref().map(format_membership);
         assert_eq!(label.as_deref(), Some("Cursor Free"));
         assert_ne!(label.as_deref(), Some("Cursor Pro"));
     }
@@ -480,10 +489,7 @@ mod tests {
         )
         .expect("usage summary JSON should deserialize");
         assert!(summary.membership_type.is_none());
-        let label = summary
-            .membership_type
-            .as_deref()
-            .map(format_membership);
+        let label = summary.membership_type.as_deref().map(format_membership);
         assert_eq!(label, None);
     }
 }

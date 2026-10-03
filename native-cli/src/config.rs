@@ -126,7 +126,11 @@ pub fn manual_cookie_header(provider_id: &str) -> Option<String> {
 
 pub fn workspace_id(provider_id: &str) -> Option<String> {
     if let Some(settings) = provider_settings(provider_id) {
-        if let Some(id) = settings.workspace_id.as_deref().and_then(normalize_workspace_id) {
+        if let Some(id) = settings
+            .workspace_id
+            .as_deref()
+            .and_then(normalize_workspace_id)
+        {
             return Some(id);
         }
     }
@@ -135,7 +139,9 @@ pub fn workspace_id(provider_id: &str) -> Option<String> {
     } else {
         "CODEXBAR_OPENCODE_WORKSPACE_ID"
     };
-    env::var(env_key).ok().and_then(|value| normalize_workspace_id(&value))
+    env::var(env_key)
+        .ok()
+        .and_then(|value| normalize_workspace_id(&value))
 }
 
 pub fn normalize_workspace_id(raw: &str) -> Option<String> {

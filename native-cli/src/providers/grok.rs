@@ -1,8 +1,6 @@
 use crate::cookies::resolve_all_cookie_headers;
 use crate::http::HttpClient;
-use crate::output::{
-    rate_window, ProviderIdentitySnapshot, ProviderPayload, UsageSnapshot,
-};
+use crate::output::{rate_window, ProviderIdentitySnapshot, ProviderPayload, UsageSnapshot};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, COOKIE};
@@ -78,7 +76,11 @@ pub fn fetch(http: &HttpClient) -> Vec<ProviderPayload> {
 
     // Prefer successful entries; if any succeeded, drop pure error leftovers so
     // the widget does not show a failing Chrome cookie next to a good Zen login.
-    let successes: Vec<_> = payloads.iter().filter(|p| p.error.is_none()).cloned().collect();
+    let successes: Vec<_> = payloads
+        .iter()
+        .filter(|p| p.error.is_none())
+        .cloned()
+        .collect();
     if !successes.is_empty() {
         return prefer_active_subscription_accounts(successes);
     }
@@ -232,16 +234,14 @@ fn fetch_bearer(http: &HttpClient, auth: &AuthCredential) -> Result<ProviderPayl
     // still have weekly free limits via GetGrokCreditsConfig — do not label those SuperGrok.
     let plan = fetch_active_plan(http, AuthKind::Bearer(&auth.bearer));
 
-    Ok(build_payload(
-        billing,
-        email,
-        team_id,
-        plan,
-        "native-auth",
-    ))
+    Ok(build_payload(billing, email, team_id, plan, "native-auth"))
 }
 
-fn fetch_cookie(http: &HttpClient, cookie_header: &str, source_label: &str) -> Result<ProviderPayload> {
+fn fetch_cookie(
+    http: &HttpClient,
+    cookie_header: &str,
+    source_label: &str,
+) -> Result<ProviderPayload> {
     let mut headers = grpc_headers()?;
     headers.insert(
         COOKIE,
@@ -257,7 +257,9 @@ fn fetch_cookie(http: &HttpClient, cookie_header: &str, source_label: &str) -> R
     Ok(build_payload(
         billing,
         email.or(user_id),
-        session.and_then(|s| s.organization_id).filter(|s| !s.is_empty()),
+        session
+            .and_then(|s| s.organization_id)
+            .filter(|s| !s.is_empty()),
         plan,
         source_label,
     ))
@@ -271,17 +273,19 @@ fn build_payload(
     plan: Option<String>,
     source: &str,
 ) -> ProviderPayload {
-    let window_minutes = billing
-        .resets_at
-        .map(|end| {
-            let start = billing.period_start.unwrap_or_else(Utc::now);
-            end.signed_duration_since(start).num_minutes().max(0)
-        });
+    let window_minutes = billing.resets_at.map(|end| {
+        let start = billing.period_start.unwrap_or_else(Utc::now);
+        end.signed_duration_since(start).num_minutes().max(0)
+    });
 
     let mut payload = ProviderPayload::ok(
         "grok",
         UsageSnapshot {
-            primary: Some(rate_window(billing.used_percent, window_minutes, billing.resets_at)),
+            primary: Some(rate_window(
+                billing.used_percent,
+                window_minutes,
+                billing.resets_at,
+            )),
             secondary: None,
             tertiary: None,
             usage_rows: None,
@@ -315,7 +319,10 @@ fn grpc_headers() -> Result<HeaderMap> {
         CONTENT_TYPE,
         HeaderValue::from_static("application/grpc-web+proto"),
     );
-    headers.insert(ACCEPT, HeaderValue::from_static("application/grpc-web+proto"));
+    headers.insert(
+        ACCEPT,
+        HeaderValue::from_static("application/grpc-web+proto"),
+    );
     headers.insert("x-grpc-web", HeaderValue::from_static("1"));
     headers.insert("Origin", HeaderValue::from_static("https://grok.com"));
     headers.insert("Referer", HeaderValue::from_static("https://grok.com/"));
@@ -378,7 +385,7 @@ fn parse_billing_response(bytes: &[u8]) -> Result<BillingSnapshot> {
     // Field 1 = credit_usage_percent (fixed32 float). Omitted means 0% used.
     let used_percent = find_fixed32(period, 1)
         .map(f32::from_bits)
-        .map(|v| f64::from(v))
+        .map(f64::from)
         .unwrap_or(0.0);
 
     // Field 4/5 = google.protobuf.Timestamp { seconds = 1, nanos = 2 }.
@@ -508,7 +515,8 @@ fn display_subscription_tier(tier: &str) -> String {
                     let mut chars = word.chars();
                     match chars.next() {
                         Some(first) => {
-                            first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                            first.to_uppercase().collect::<String>()
+                                + &chars.as_str().to_lowercase()
                         }
                         None => String::new(),
                     }
@@ -599,7 +607,7 @@ fn for_each_field(buf: &[u8], mut visit: impl FnMut(u32, u32, usize, usize) -> b
     }
 }
 
-fn find_length_delimited<'a>(buf: &'a [u8], field_num: u32) -> Option<&'a [u8]> {
+fn find_length_delimited(buf: &[u8], field_num: u32) -> Option<&[u8]> {
     let mut range = None;
     for_each_field(buf, |field, wire, start, end| {
         if field == field_num && wire == 2 {

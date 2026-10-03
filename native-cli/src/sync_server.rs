@@ -691,7 +691,7 @@ fn merge_snapshots(snapshots: &[StoredSnapshot]) -> Value {
         .into_values()
         .map(|contributions| merge_entry_group(&contributions))
         .collect();
-    merged_entries.sort_by(|left, right| merge_sort_key(left).cmp(&merge_sort_key(right)));
+    merged_entries.sort_by_key(merge_sort_key);
 
     json!({
         "ok": true,

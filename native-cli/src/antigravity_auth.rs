@@ -289,7 +289,9 @@ fn obtain_code_callback(client_id: &str, options: &LoginOptions) -> Result<(Stri
     let listener = match options.port {
         Some(port) => TcpListener::bind(("127.0.0.1", port))
             .with_context(|| format!("bind OAuth callback on 127.0.0.1:{port}"))?,
-        None => TcpListener::bind("127.0.0.1:0").context("bind OAuth callback on ephemeral port")?,
+        None => {
+            TcpListener::bind("127.0.0.1:0").context("bind OAuth callback on ephemeral port")?
+        }
     };
     listener
         .set_nonblocking(true)
@@ -304,7 +306,10 @@ fn obtain_code_callback(client_id: &str, options: &LoginOptions) -> Result<(Stri
 
     eprintln!("Starting Google OAuth login for Antigravity native-auth.");
     eprintln!("Listening for callback on {redirect_uri}");
-    eprintln!("Waiting up to {}s for browser sign-in…", options.timeout.as_secs());
+    eprintln!(
+        "Waiting up to {}s for browser sign-in…",
+        options.timeout.as_secs()
+    );
 
     if options.no_browser {
         eprintln!();
@@ -350,10 +355,7 @@ fn wait_for_callback_code(
                 let request = String::from_utf8_lossy(&buf[..n]);
                 let first_line = request.lines().next().unwrap_or("");
                 // e.g. GET /callback?code=...&state=... HTTP/1.1
-                let path_and_query = first_line
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap_or("/");
+                let path_and_query = first_line.split_whitespace().nth(1).unwrap_or("/");
                 let full = format!("http://127.0.0.1{path_and_query}");
 
                 match extract_code_from_redirect(&full, expected_state) {
@@ -613,7 +615,13 @@ fn sanitize_account_name(email: &str) -> String {
 }
 
 fn open_browser(url: &str) -> Result<()> {
-    let candidates = ["xdg-open", "gio", "kde-open6", "kde-open5", "sensible-browser"];
+    let candidates = [
+        "xdg-open",
+        "gio",
+        "kde-open6",
+        "kde-open5",
+        "sensible-browser",
+    ];
     for command in candidates {
         let mut cmd = Command::new(command);
         if command == "gio" {
