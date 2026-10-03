@@ -2,6 +2,14 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
+## Unreleased
+
+### Features
+
+- Add a self-hosted sync server (`codexbar-plasmoid sync-server`): widgets publish their locally fetched usage snapshots, and the server merges them per (provider, account) with cross-device daily cost/history totals
+- Publish locally fetched entries to the sync server after each refresh (best effort, failures never interrupt rendering) — filter them behind General → Sync server
+- New provider source **Sync server**: a widget without provider credentials can render the merged cross-device data (never sends credentials anywhere; publishes exclude remote-sourced entries so server data cannot loop back)
+
 ## 0.1.11 — 2026-09-19
 
 ### Features

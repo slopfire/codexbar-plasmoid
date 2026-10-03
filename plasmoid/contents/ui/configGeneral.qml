@@ -13,6 +13,9 @@ Kirigami.ScrollablePage {
     property alias cfg_costRefreshIntervalSeconds: costRefreshInterval.value
     property alias cfg_shareProviderFetches: shareProviderFetches.checked
     property alias cfg_requestTimeoutSeconds: requestTimeout.value
+    property alias cfg_syncServerUrl: syncServerUrl.text
+    property alias cfg_syncServerToken: syncServerToken.text
+    property alias cfg_syncDeviceName: syncDeviceName.text
 
     // Preserve runtime keys when Apply rewrites the General group.
     property string cfg_selectedEntryIds: "[]"
@@ -116,6 +119,32 @@ Kirigami.ScrollablePage {
             QtControls.Label {
                 Layout.fillWidth: true
                 text: i18n("Widgets using the same CLI and provider settings reuse usage results. Cost history uses its own refresh interval.")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
+            }
+
+            QtControls.TextField {
+                id: syncServerUrl
+                Kirigami.FormData.label: i18n("Sync server:")
+                placeholderText: "http://192.168.1.10:8188"
+            }
+
+            QtControls.TextField {
+                id: syncServerToken
+                Kirigami.FormData.label: i18n("Sync token:")
+                echoMode: TextInput.Password
+                placeholderText: i18n("Bearer token from the server")
+            }
+
+            QtControls.TextField {
+                id: syncDeviceName
+                Kirigami.FormData.label: i18n("Device name:")
+                placeholderText: "laptop"
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: i18n("When set, this widget publishes locally fetched usage to the sync server (codexbar-plasmoid sync-server) after each refresh. Provider rows set to the remote source read the merged cross-device data instead of fetching here. Credentials stay on the device with them; the anonymize option above applies to published data.")
                 color: Kirigami.Theme.disabledTextColor
                 wrapMode: Text.Wrap
             }

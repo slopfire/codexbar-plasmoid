@@ -141,6 +141,16 @@ const showCredits = args.credits !== "false";
 const anonymizeEmails = args.anonymizeEmails !== "false" && args["anonymize-emails"] !== "false";
 const kdeProviderConfig = loadKdeProviderConfig();
 
+// Sync-server settings. When a server URL is configured, every successful
+// refresh publishes this device's locally fetched entries (never credentials,
+// never remote-sourced entries that came back from the server) and provider
+// rows with the "remote" source read the server's merged result instead of
+// fetching with local credentials.
+const syncUrl = clean(args["sync-url"]) || "";
+const syncToken = clean(args["sync-token"]) || "";
+const syncDevice =
+  sanitizeSyncDevice(clean(args["sync-device"]) || suggestedDeviceName()) || "plasmoid";
+
 const nativeProviders = new Set(["antigravity", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
 // Upstream codexbar cost only scans Claude/Codex local logs. Native cost covers
@@ -230,7 +240,11 @@ async function main() {
       costError = costResult.costError;
     }
     const snapshot = normalizeSnapshot(usage, cost, costError);
+    await mergeRemoteEntriesIntoSnapshot(snapshot);
     snapshot.cliUpdate = updateResult;
+    if (syncUrl) {
+      snapshot.publish = await publishSnapshot(snapshot);
+    }
     process.stdout.write(`${JSON.stringify(snapshot)}\n`);
   } catch (error) {
     const snapshot = errorSnapshot(error);
@@ -263,17 +277,25 @@ function parseArgs(rawArgs) {
 
 function runUsage() {
   const configs = effectiveProviderConfigs();
-  const items = configs.length > 0
-    ? configs.flatMap((config) => asArray(runUsageForConfig(config)))
-    : asArray(runUsageForConfig({
-      provider,
-      source,
-      account: clean(args.account),
-      accountIndex: Number(args.accountIndex || 0),
-      allAccounts: args.allAccounts === "true",
-    }));
+  if (configs.length > 0) {
+    const items = configs
+      .filter((config) => !usesRemoteSource(config))
+      .flatMap((config) => asArray(runUsageForConfig(config)));
+    // codex-cli omits free rate-limit reset credits; oauth carries them. Merge when missing.
+    return enrichCodexLimitResetCredits(items);
+  }
+  const legacy = {
+    provider,
+    source,
+    account: clean(args.account),
+    accountIndex: Number(args.accountIndex || 0),
+    allAccounts: args.allAccounts === "true",
+  };
+  if (usesRemoteSource(legacy)) {
+    return [];
+  }
   // codex-cli omits free rate-limit reset credits; oauth carries them. Merge when missing.
-  return enrichCodexLimitResetCredits(items);
+  return enrichCodexLimitResetCredits(asArray(runUsageForConfig(legacy)));
 }
 
 /**
@@ -521,7 +543,7 @@ function runCost() {
   const configs = (effectiveProviderConfigs().length > 0
     ? effectiveProviderConfigs()
     : [{ provider, includeCost: true }])
-    .filter((config) => config.includeCost !== false);
+    .filter((config) => config.includeCost !== false && !usesRemoteSource(config));
 
   if (configs.length === 0) {
     return { items: [], costError: null };
@@ -738,6 +760,275 @@ function sleepMilliseconds(milliseconds) {
 function hashSecret(value) {
   const secret = clean(value);
   return secret ? crypto.createHash("sha256").update(secret).digest("hex") : "";
+}
+
+// ---------------------------------------------------------------------------
+// Sync server: publish this device's local fetches, and serve merged entries
+// for provider rows configured with the "remote" source.
+// ---------------------------------------------------------------------------
+
+function sanitizeSyncDevice(raw) {
+  const trimmed = clean(raw);
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(trimmed) ? trimmed : "";
+}
+
+function suggestedDeviceName() {
+  // Hostnames carry no secrets, but they can contain dots and other
+  // characters the server's device-id validation rejects; strip down here.
+  return (os.hostname() || "").split(".")[0] || "";
+}
+
+function buildSyncUrl() {
+  if (!syncUrl) {
+    return null;
+  }
+  try {
+    const url = new URL(syncUrl.includes("://") ? syncUrl : `http://${syncUrl}`);
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One sync-server HTTP exchange. Bounded by the request timeout; resolves a
+ * normalized result instead of throwing so publish/read failures degrade to
+ * per-provider error cards (never to JSON breakage).
+ */
+async function syncHttpRequest(method, urlString, token, timeoutMs, requestBody = null) {
+  const url = new URL(urlString);
+  const transport = url.protocol === "https:" ? await import("node:https") : await import("node:http");
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (!settled) {
+        settled = true;
+        resolve(result);
+      }
+    };
+    const headers = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    if (requestBody !== null) {
+      headers["Content-Type"] = "application/json";
+      headers["Content-Length"] = String(Buffer.byteLength(requestBody, "utf8"));
+    }
+    const request = transport.request(
+      {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === "https:" ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers,
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => {
+          const status = Number(response.statusCode || 0);
+          finish({ ok: status >= 200 && status < 300, status, text: chunks.join("") });
+        });
+      },
+    );
+    request.setTimeout(timeoutMs, () => {
+      request.destroy();
+      finish({ ok: false, status: 0, text: "", error: "sync server request timeout" });
+    });
+    request.on("error", (error) => {
+      finish({ ok: false, status: 0, text: "", error: shortError(error) });
+    });
+    if (requestBody !== null) {
+      request.end(requestBody);
+    } else {
+      request.end();
+    }
+  });
+}
+
+/** Best-effort publish; failures never affect the data the widget renders. */
+async function publishSnapshot(snapshot) {
+  const base = buildSyncUrl();
+  if (!base) {
+    return { ok: false, error: "sync server URL missing" };
+  }
+  // Never publish server-sourced entries back and never publish failures:
+  // a bad fetch must not clobber this device's last good snapshot.
+  const publishEntries = asArray(snapshot.entries).filter((entry) =>
+    entry && !entry.error && localPublishProviders().has(normalizeProviderId(entry.provider)),
+  );
+  if (publishEntries.length === 0) {
+    return { ok: true, skipped: true };
+  }
+  const payload = { ...snapshot, entries: publishEntries };
+  const target = `${base}/v1/snapshot/${encodeURIComponent(syncDevice)}`;
+  const response = await syncHttpRequest(
+    "PUT",
+    target,
+    syncToken,
+    Math.min(timeoutMs, 20000),
+    JSON.stringify(payload),
+  );
+  if (response.ok) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    error: response.error || `sync server publish failed with status ${response.status}`,
+  };
+}
+
+function usesRemoteSource(config) {
+  return resolveSource(config.provider, config.source) === "remote";
+}
+
+/**
+ * Providers this device fetches locally right now. Evaluated lazily because
+ * resolveSource needs linuxAutoFallbacks, which is initialized later in this
+ * module than the parse-time constants.
+ */
+function localPublishProviders() {
+  return new Set(
+    effectiveProviderConfigs()
+      .filter((config) => !usesRemoteSource(config))
+      .map((config) => normalizeProviderId(config.provider)),
+  );
+}
+
+async function fetchRemoteEntries() {
+  const providers = new Set();
+  const remoteConfigs = effectiveProviderConfigs().filter((config) => usesRemoteSource(config));
+  const uniqueConfigs = [];
+  for (const config of remoteConfigs) {
+    const providerId = normalizeProviderId(config.provider);
+    if (providers.has(providerId)) {
+      continue;
+    }
+    providers.add(providerId);
+    uniqueConfigs.push(config);
+  }
+  if (uniqueConfigs.length === 0) {
+    return [];
+  }
+  const base = buildSyncUrl();
+  const entries = [];
+  for (const config of uniqueConfigs) {
+    entries.push(...(await remoteEntriesForProvider(config, base)));
+  }
+  return entries;
+}
+
+async function mergeRemoteEntriesIntoSnapshot(snapshot) {
+  const remoteEntries = await fetchRemoteEntries();
+  if (remoteEntries.length === 0) {
+    return;
+  }
+  // A provider row with the remote source governs its provider entirely,
+  // so duplicate local cards for the same provider are dropped.
+  const remoteProviders = new Set(
+    remoteEntries.map((entry) => normalizeProviderId(entry.provider)),
+  );
+  snapshot.entries = [
+    ...asArray(snapshot.entries).filter(
+      (entry) => !remoteProviders.has(normalizeProviderId(entry.provider)),
+    ),
+    ...remoteEntries,
+  ];
+  assignStableEntryIds(snapshot.entries);
+}
+
+async function remoteEntriesForProvider(config, base) {
+  const providerId = normalizeProviderId(config.provider);
+  if (!base) {
+    return [remoteUsageErrorEntry(providerId, "Sync server URL missing")];
+  }
+  const target = `${base}/v1/usage?provider=${encodeURIComponent(providerId)}`;
+  try {
+    const response = await syncHttpRequest("GET", target, syncToken, Math.min(timeoutMs, 20000));
+    if (!response.ok) {
+      throw new Error(
+        response.error || `sync server request failed with status ${response.status}`,
+      );
+    }
+    const parsed = JSON.parse(response.text);
+    const entries = asArray(parsed.entries)
+      .map((entry) => (entry && typeof entry === "object" ? normalizeRemoteEntry(entry) : null))
+      .filter(
+        (entry) =>
+          entry && !entry.error && normalizeProviderId(entry.provider) === providerId,
+      );
+    if (entries.length === 0) {
+      return [
+        remoteUsageErrorEntry(
+          providerId,
+          "Nothing published on the sync server for this provider yet",
+        ),
+      ];
+    }
+    const wantedAccount = clean(config.account).toLowerCase();
+    if (wantedAccount) {
+      const matching = entries.filter(
+        (entry) => clean(entry.account).toLowerCase() === wantedAccount,
+      );
+      // Lenient matching: the server may hold entries under another
+      // publisher's anonymized label; keeping everything beats showing
+      // nothing.
+      if (matching.length > 0) {
+        return matching;
+      }
+    }
+    return entries;
+  } catch (error) {
+    return [remoteUsageErrorEntry(providerId, shortError(error))];
+  }
+}
+
+/**
+ * The server returns already-normalized entries; fill any missing field so
+ * the merged shape matches what normalizeProvider emits for local rows.
+ */
+function normalizeRemoteEntry(entry) {
+  const defaults = {
+    provider: entry.provider || "unknown",
+    account: entry.account ?? null,
+    organization: entry.organization ?? null,
+    plan: entry.plan ?? null,
+    source: entry.source || "remote",
+    siteUrl: entry.siteUrl ?? null,
+    version: entry.version ?? null,
+    updatedAt: entry.updatedAt || new Date().toISOString(),
+    status: entry.status ?? null,
+    error: entry.error ?? null,
+    rows: asArray(entry.rows),
+    creditsRemaining: entry.creditsRemaining ?? null,
+    limitResetCredits: entry.limitResetCredits ?? null,
+    codeReviewRemainingPercent: entry.codeReviewRemainingPercent ?? null,
+    tokenUsage: entry.tokenUsage ?? null,
+    dailyUsage: asArray(entry.dailyUsage),
+  };
+  return { ...defaults, ...entry };
+}
+
+function remoteUsageErrorEntry(providerId, message) {
+  return {
+    provider: providerId,
+    account: null,
+    organization: null,
+    plan: null,
+    source: "remote",
+    siteUrl: null,
+    version: null,
+    updatedAt: new Date().toISOString(),
+    status: null,
+    error: { message },
+    rows: [],
+    creditsRemaining: null,
+    limitResetCredits: null,
+    codeReviewRemainingPercent: null,
+    tokenUsage: null,
+    dailyUsage: [],
+  };
 }
 
 function effectiveProviderConfigs() {
@@ -1547,8 +1838,10 @@ function providerLabels(providerId) {
       // xAI UI labels this "Weekly SuperGrok Limit"; primary window is the weekly pool.
       return { session: "Weekly", weekly: "Weekly", tertiary: "Extra" };
     case "commandcode":
-      // /alpha/billing/credits reports a rolling 5-hour and a weekly credit window.
-      return { session: "5-hour", weekly: "Weekly", tertiary: "Extra" };
+      // /alpha/billing/credits reports a rolling 5-hour and a weekly credit
+      // window; the native helper rebuilds the plan's monthly allowance as the
+      // tertiary window.
+      return { session: "5-hour", weekly: "Weekly", tertiary: "Monthly" };
     case "demo":
       return { session: "Low", weekly: "Session", tertiary: "Weekly" };
     default:

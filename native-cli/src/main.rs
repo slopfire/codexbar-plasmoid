@@ -7,6 +7,7 @@ mod local_cost;
 mod opencodego_local;
 mod output;
 mod providers;
+mod sync_server;
 
 use crate::config::normalize_provider_id;
 use crate::http::HttpClient;
@@ -20,7 +21,8 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     let command = args.get(1).map(String::as_str).unwrap_or("help");
 
-    // Interactive auth commands print human-readable text (not usage JSON).
+    // Interactive auth commands and the sync server print human-readable
+    // text (not usage JSON).
     if matches!(command, "login" | "logout") {
         return match run_auth_command(command, &args[2..]) {
             Ok(()) => ExitCode::SUCCESS,
@@ -29,6 +31,16 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         };
+    }
+
+    if command == "sync-server" {
+        match sync_server::run_sync_server(&parse_args(&args[2..])) {
+            Ok(()) => return ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("error: {error:#}");
+                return ExitCode::FAILURE;
+            }
+        }
     }
 
     match run_usage(&args) {
@@ -103,7 +115,6 @@ fn run_usage(args: &[String]) -> anyhow::Result<()> {
     if command != "usage" {
         anyhow::bail!("Unknown command: {command}");
     }
-
     let parsed = parse_args(&args[2..]);
     let source = parsed
         .get("source")
@@ -233,10 +244,10 @@ Usage:
   codexbar-plasmoid cost --format json --json-only --provider <id>
   codexbar-plasmoid login --provider antigravity [--manual] [--no-browser] [--port <n>] [--timeout <seconds>]
   codexbar-plasmoid logout --provider antigravity [--account <email>] [--all]
+  codexbar-plasmoid sync-server [--bind <ip>] [--port <n>] [--token <t>] [--data-dir <path>]
 
 Providers:
   antigravity, commandcode, cursor, devin, grok, opencode, opencodego, all
-
 Cost (token spend / API $):
   opencode, opencodego — ~/.local/share/opencode/*.db
   cursor — dashboard usage events (session cookie)

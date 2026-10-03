@@ -121,6 +121,7 @@ Open the widget configuration from Plasma and adjust:
 - explicit provider-setting read/write synchronization between widget instances
 - refresh interval and CLI timeout
 - shared provider refreshes between widget instances
+- sync server for cross-device publishing and the remote provider source
 - status, credits, cost, and history visibility
 - compact representation metric
 
@@ -173,6 +174,52 @@ The default is **Position color**. Bars without a known window length and reset 
 
 Email addresses are anonymized by default before the helper returns data to QML. Disable **Anonymize emails** only if the
 widget may display full account addresses.
+
+### Sync Server (cross-device sharing)
+
+The bundled Linux helper doubles as a small self-hosted sync server. Widgets on different machines publish
+their locally fetched usage, and every widget can read the merged result — so devices without provider
+credentials still show usage, and the same provider API is not hit once per device.
+
+What the server does:
+
+- Stores one snapshot per device id (data dir: `~/.local/share/codexbar-plasmoid/sync-server`)
+- Merges read-side per (provider, account): the freshest non-error entry wins for limits, status,
+  and metadata, because those are account-global
+- Sums daily token/cost history across the devices that contributed the same provider+account,
+  with per-device provenance (`remoteDevices`) in each merged entry. Publications are local scans,
+  so overlapping synced session logs could double-count; the server never silently deduplicates them
+- Unions per-day rate-limit reset annotations, computed on each publisher's own calendar
+- Prunes snapshots older than 60 days
+
+What stays on the devices:
+
+- Credentials (cookies, OAuth tokens, API keys) never leave the publishing device. The helper
+  publishes only its post-normalization, post-anonymization entries; failed fetches are never
+  published, so a bad refresh cannot clobber a device's last good snapshot
+- All fetching logic (CLI, native fetchers, local cost scans) still runs on whichever device has
+  the credentials; the server only stores and merges results
+
+Run it on an always-on machine (NAS, home server):
+
+```sh
+codexbar-plasmoid sync-server --bind 0.0.0.0 --port 8188 --token <secret>
+# optional: --data-dir /var/lib/codexbar-sync  (snapshots/<device>.json + token file)
+```
+
+Routes: `GET /health` (no token), `PUT /v1/snapshot/<device>` (publish), `GET /v1/usage?provider=<id>`
+(merged entries in the helper's JSON shape), `GET /v1/devices`. Every `/v1` route needs the bearer
+token; without `--token` or `CODEXBAR_SYNC_TOKEN` the server generates one at `<data-dir>/token` and
+never prints it. Plain HTTP carries that token on every request — put the server behind a reverse
+proxy or a Tailscale/WireGuard tunnel rather than exposing it directly.
+
+Widget setup: under Configure → General → **Sync server**, set the base URL (`http://host:8188`,
+optional token, optional device name; defaults to the hostname). Every successful refresh then
+publishes this device's locally fetched entries, and provider rows (Providers page) can select the
+new **Sync server** source to render the merged cross-device data instead of fetching locally —
+the last-published entry per (provider, account) wins for limits, and daily cost/history rows are
+summed across devices. This is an addition, not a replacement: without a configured sync server,
+or for provider rows left on their usual sources, everything works exactly as before.
 
 ### Environment Variables on Linux (esp. NixOS)
 

@@ -1,5 +1,8 @@
 /native-cli/target/
 /plasmoid/contents/code/codexbar-plasmoid
 /dist/
+/artifacts/
 *.plasmoid
 .omo/
+.commandcode/
+.zvec-grep/

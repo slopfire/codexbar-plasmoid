@@ -53,6 +53,25 @@ Optional usage flags are driven by settings:
 - `--account-index <n>`
 - `--all-accounts`
 
+Sync server flags (all optional; empty values are ignored):
+
+- `--sync-url <base>` — when set, the helper publishes its locally fetched
+  entries after each successful refresh (best effort; failures surface as
+  `publish: {ok: false}` on the snapshot, never as a JSON break), and provider
+  rows with `source: "remote"` read `GET <base>/v1/usage?provider=<id>` from
+  the server (the bundled Rust binary's `sync-server` command) instead of
+  spawning the CLI/native fetchers for that provider.
+- `--sync-token <token>` — bearer token for both publish and remote reads.
+- `--sync-device <id>` — device id for publications (default: hostname, sanitized).
+
+Publish rules: only entries without `error` and only providers this device
+fetches locally fly to the server, so server-sourced data can never loop back
+and a failed fetch cannot clobber a device's last good snapshot. Remote rows
+return the server's already-normalized merged entries (each carries
+`remoteDevices` provenance); they replace any local cards for the same
+provider and skip the local cost scan for that provider, since history totals
+are merged server-side.
+
 Always keep helper output as one JSON object on stdout. Even failures should be normalized to JSON so QML can render an error instead of failing to parse.
 
 ## Normalized Output Shape

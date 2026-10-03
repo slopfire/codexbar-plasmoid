@@ -40,7 +40,8 @@ Kirigami.ScrollablePage {
         api: i18n("API"),
         web: i18n("Web"),
         native: i18n("Linux Helper"),
-        "native-auth": i18n("Native Auth")
+        "native-auth": i18n("Native Auth"),
+        remote: i18n("Sync server")
     })
     readonly property var sourceNotes: ({
         auto: i18n("Provider default"),
@@ -50,7 +51,8 @@ Kirigami.ScrollablePage {
         web: i18n("Browser/web session"),
         native: i18n("Bundled Linux helper"),
         "native-auth": i18n("Browser Google OAuth (codexbar-plasmoid login)"),
-        local: i18n("Built-in sample data (no CLI)")
+        local: i18n("Built-in sample data (no CLI)"),
+        remote: i18n("Merged cross-device data (General → Sync server)")
     })
     // Grok SuperGrok weekly limits only come from the native helper on Linux.
     readonly property var grokSourceNotes: ({
@@ -339,7 +341,7 @@ Kirigami.ScrollablePage {
                                             onActivated: function(row) {
                                                 const selected = page.providerCatalog[row];
                                                 page.setProviderProperty(providerDelegate.index, "provider", selected.id);
-                                                if (selected.sources.indexOf(providerDelegate.source) === -1) {
+                                                if (page.availableSources(selected.id).indexOf(providerDelegate.source) === -1) {
                                                     page.setProviderProperty(providerDelegate.index, "source", selected.linuxDefault);
                                                 }
                                             }
@@ -946,7 +948,8 @@ Kirigami.ScrollablePage {
         }
         return items.map(function(item) {
             const provider = catalogFor(item.provider);
-            const source = provider.sources.indexOf(item.source) === -1 ? provider.linuxDefault : item.source;
+            const sourceList = availableSources(provider.id);
+            const source = sourceList.indexOf(item.source) === -1 ? provider.linuxDefault : item.source;
             return {
                 provider: provider.id,
                 source: source,
@@ -1159,9 +1162,19 @@ Kirigami.ScrollablePage {
         setProviderProperty(providerIndex, "accountIndex", kind === "index" ? Number(choice.value || 0) : 0);
     }
 
-    function sourceModel(providerId) {
+    // Every provider except the demo row can consume the sync server's merged
+    // data; the remote source needs no local credentials.
+    function availableSources(providerId) {
         const provider = catalogFor(providerId);
-        return provider.sources.map(function(source) {
+        const list = provider.sources.slice();
+        if (String(providerId || "") !== "demo" && list.indexOf("remote") === -1) {
+            list.push("remote");
+        }
+        return list;
+    }
+
+    function sourceModel(providerId) {
+        return availableSources(providerId).map(function(source) {
             return { text: sourceLabels[source] || source, value: source };
         });
     }
@@ -1297,7 +1310,9 @@ Kirigami.ScrollablePage {
         for (let index = 0; index < providerModel.count; index += 1) {
             const item = providerModel.get(index);
             const provider = normalizedProviderId(item.provider);
-            if (!item.enabled || provider === "devin" || provider === "demo") {
+            // Remote-sourced rows have no local accounts to detect; the
+            // server's merged entries already carry the account labels.
+            if (!item.enabled || provider === "devin" || provider === "demo" || String(item.source) === "remote") {
                 continue;
             }
             configs.push({

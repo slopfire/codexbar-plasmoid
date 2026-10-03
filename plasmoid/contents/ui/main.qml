@@ -156,6 +156,9 @@ PlasmoidItem {
                 "--tag", quote(plasmoid.configuration.cliUpdateChannel || "latest"),
                 "--cache-seconds", quote(plasmoid.configuration.shareProviderFetches === false ? 0 : root.refreshInterval),
                 "--cost-cache-seconds", quote(root.costRefreshInterval),
+                "--sync-url", quote(plasmoid.configuration.syncServerUrl || ""),
+                "--sync-token", quote(plasmoid.configuration.syncServerToken || ""),
+                "--sync-device", quote(plasmoid.configuration.syncDeviceName || ""),
                 "--force", quote(forceRefresh ? "true" : "false")
             ];
             return parts.join(" ");

@@ -8,13 +8,17 @@
 //! - `/alpha/billing/subscriptions` — plan tier
 //! - `/alpha/whoami` — account identity
 //!
+//! The monthly allowance is not served as a `windowLimits` entry; it is rebuilt
+//! from the plan allotment and the remaining `monthlyCredits` balance, with the
+//! subscription's `currentPeriodEnd` as its reset.
+//!
 //! Token spend history is not served by the API; it comes from the local session
 //! transcripts instead (see `local_cost::fetch_costs`).
 
 use crate::http::HttpClient;
 use crate::output::{
-    clamp_percent, CreditsSnapshot, ProviderIdentitySnapshot, ProviderPayload, RateWindow,
-    UsageSnapshot,
+    clamp_percent, rate_window, CreditsSnapshot, ProviderIdentitySnapshot, ProviderPayload,
+    RateWindow, UsageSnapshot,
 };
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, TimeZone, Utc};
@@ -24,6 +28,9 @@ use std::path::PathBuf;
 
 const DEFAULT_API_BASE: &str = "https://api.commandcode.ai";
 const SITE_URL: &str = "https://commandcode.ai/usage";
+
+/// Billing cycles are monthly, so the rebuilt allowance window spans 30 days.
+const MONTHLY_WINDOW_MINUTES: i64 = 30 * 24 * 60;
 
 /// Plan tiers and their monthly credit allotment, mirroring the mapping the
 /// `cmd` CLI uses for its own usage screen. Unknown tiers report no plan label
@@ -88,7 +95,7 @@ fn fetch_inner(http: &HttpClient) -> Result<ProviderPayload> {
             5 * 60,
         ),
         secondary: window_rate(limits.and_then(|limits| limits.weekly.as_ref()), 7 * 24 * 60),
-        tertiary: None,
+        tertiary: monthly_window(&credits, plan.as_ref()),
         usage_rows: None,
         provider_cost: None,
         cursor_requests: None,
@@ -198,9 +205,17 @@ fn epoch_ms_to_datetime(value: f64) -> Option<DateTime<Utc>> {
     Utc.timestamp_millis_opt(millis.round() as i64).single()
 }
 
+/// Monthly credit balance in absolute credits.
+struct MonthlyCredits {
+    remaining: f64,
+    used: f64,
+    /// Absent unless a known plan tier names the allotment to measure against.
+    limit: Option<f64>,
+}
+
 /// `monthlyCredits` is the *remaining* monthly allowance; purchased and free
 /// credits roll over on top of it.
-fn credits_snapshot(credits: &CreditsResponse, plan: Option<&PlanInfo>) -> Option<CreditsSnapshot> {
+fn monthly_credits(credits: &CreditsResponse, plan: Option<&PlanInfo>) -> Option<MonthlyCredits> {
     let balance = credits.credits.as_ref()?;
     let purchased = balance.purchased_credits.unwrap_or(0.0).max(0.0);
     let free = balance.free_credits.unwrap_or(0.0).max(0.0);
@@ -218,12 +233,39 @@ fn credits_snapshot(credits: &CreditsResponse, plan: Option<&PlanInfo>) -> Optio
         ),
         _ => (0.0, None),
     };
+    Some(MonthlyCredits {
+        remaining,
+        used,
+        limit,
+    })
+}
+
+fn credits_snapshot(credits: &CreditsResponse, plan: Option<&PlanInfo>) -> Option<CreditsSnapshot> {
+    let MonthlyCredits {
+        remaining,
+        used,
+        limit,
+    } = monthly_credits(credits, plan)?;
     Some(CreditsSnapshot {
         remaining: Some(remaining),
         used,
         limit,
         updated_at: Utc::now(),
     })
+}
+
+/// The monthly allowance is the one Command Code window the API does not serve
+/// as a `windowLimits` entry, so rebuild it from the plan allotment and the
+/// remaining `monthlyCredits` balance. The subscription's `currentPeriodEnd`
+/// supplies the reset the other windows get from `resetAt`.
+fn monthly_window(credits: &CreditsResponse, plan: Option<&PlanInfo>) -> Option<RateWindow> {
+    let MonthlyCredits { used, limit, .. } = monthly_credits(credits, plan)?;
+    let limit = limit.filter(|limit| limit.is_finite() && *limit > 0.0)?;
+    Some(rate_window(
+        used / limit * 100.0,
+        Some(MONTHLY_WINDOW_MINUTES),
+        plan.and_then(|plan| plan.period_end),
+    ))
 }
 
 /// Only an active subscription names a plan; cancelled/expired tiers keep the
@@ -238,22 +280,29 @@ fn active_plan(subscriptions: &SubscriptionsResponse) -> Option<PlanInfo> {
     if plan_id.is_empty() {
         return None;
     }
-    let tier = PLAN_TIERS
-        .iter()
-        .find(|(id, _, _)| *id == plan_id)
-        .map(|(_, label, credits)| PlanInfo {
-            label: Some((*label).to_string()),
-            monthly_credits: Some(*credits),
-        });
-    Some(tier.unwrap_or(PlanInfo {
-        label: None,
-        monthly_credits: None,
-    }))
+    let tier = PLAN_TIERS.iter().find(|(id, _, _)| *id == plan_id);
+    Some(PlanInfo {
+        label: tier.map(|(_, label, _)| (*label).to_string()),
+        monthly_credits: tier.map(|(_, _, credits)| *credits),
+        period_end: data
+            .current_period_end
+            .as_deref()
+            .and_then(rfc3339_to_utc),
+    })
 }
 
 struct PlanInfo {
     label: Option<String>,
     monthly_credits: Option<f64>,
+    /// `currentPeriodEnd` — when the monthly allowance resets.
+    period_end: Option<DateTime<Utc>>,
+}
+
+/// Subscription period stamps are RFC 3339 strings (`2026-10-14T06:02:52.000Z`).
+fn rfc3339_to_utc(value: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value.trim())
+        .ok()
+        .map(|value| value.with_timezone(&Utc))
 }
 
 #[derive(Debug, Deserialize)]
@@ -314,6 +363,7 @@ struct SubscriptionsResponse {
 struct Subscription {
     status: Option<String>,
     plan_id: Option<String>,
+    current_period_end: Option<String>,
 }
 
 #[cfg(test)]
@@ -399,6 +449,107 @@ mod tests {
             (snapshot.remaining.unwrap() + snapshot.used - snapshot.limit.unwrap()).abs() < 1e-9,
             "remaining + used must equal the reported limit"
         );
+    }
+
+    #[test]
+    fn monthly_window_measures_against_the_plan_allotment() {
+        let credits = credits_from(
+            r#"{"credits":{"monthlyCredits":69.8345429039},
+                "windowLimits":{"limited":true}}"#,
+        );
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-goat"}}"#,
+        ))
+        .expect("plan");
+
+        let window = monthly_window(&credits, Some(&plan)).expect("monthly window");
+        assert_eq!(window.window_minutes, Some(43200));
+        assert!(window.resets_at.is_none());
+        assert!((window.used_percent - 0.236367280).abs() < 1e-6);
+        assert!((window.remaining_percent - 99.763632720).abs() < 1e-6);
+    }
+
+    #[test]
+    fn monthly_window_counts_purchased_credits_in_the_limit() {
+        let credits = credits_from(
+            r#"{"credits":{"monthlyCredits":69.8345429039,"purchasedCredits":5,"freeCredits":1.5},
+                "windowLimits":{"limited":true}}"#,
+        );
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-goat"}}"#,
+        ))
+        .expect("plan");
+
+        let window = monthly_window(&credits, Some(&plan)).expect("monthly window");
+        // Used (0.1655) spread across the 76.5-credit pool (70 + 5 + 1.5).
+        assert!((window.used_percent - 0.216283789).abs() < 1e-6);
+    }
+
+    #[test]
+    fn exhausted_monthly_window_pins_at_one_hundred() {
+        let credits = credits_from(r#"{"credits":{"monthlyCredits":0}}"#);
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-go"}}"#,
+        ))
+        .expect("plan");
+
+        let window = monthly_window(&credits, Some(&plan)).expect("monthly window");
+        assert_eq!(window.used_percent, 100.0);
+        assert_eq!(window.remaining_percent, 0.0);
+    }
+
+    #[test]
+    fn monthly_window_needs_both_a_known_plan_and_a_monthly_balance() {
+        let credits = credits_from(r#"{"credits":{"monthlyCredits":12.5}}"#);
+        // No subscription at all ⇒ no allotment to measure against.
+        assert!(monthly_window(&credits, None).is_none());
+        // Active but unrecognised tier ⇒ still no allotment.
+        let unknown = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-mystery"}}"#,
+        ))
+        .expect("plan");
+        assert!(monthly_window(&credits, Some(&unknown)).is_none());
+
+        // Known plan, but the API reported no monthly balance to measure.
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-goat"}}"#,
+        ))
+        .expect("plan");
+        let purchased_only = credits_from(r#"{"credits":{"purchasedCredits":4}}"#);
+        assert!(monthly_window(&purchased_only, Some(&plan)).is_none());
+    }
+
+    #[test]
+    fn monthly_window_resets_at_the_subscription_period_end() {
+        let credits = credits_from(r#"{"credits":{"monthlyCredits":48.96860422}}"#);
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-goat",
+                 "currentPeriodEnd":"2026-10-14T06:02:52.000Z"}}"#,
+        ))
+        .expect("plan");
+
+        let window = monthly_window(&credits, Some(&plan)).expect("monthly window");
+        // Consumed allowance: allotment (70) − remaining (48.96860422).
+        assert!((window.used_percent - 30.044851114).abs() < 1e-6);
+        assert_eq!(
+            window.resets_at.map(|value| value.to_rfc3339()),
+            Some("2026-10-14T06:02:52+00:00".to_string())
+        );
+    }
+
+    #[test]
+    fn period_end_parses_rfc3339_only() {
+        assert!(rfc3339_to_utc("2026-10-14T06:02:52.000Z").is_some());
+        assert!(rfc3339_to_utc(" 2026-10-14T06:02:52Z ").is_some());
+        assert!(rfc3339_to_utc("").is_none());
+        assert!(rfc3339_to_utc("2026-10-14").is_none());
+        // An unparseable stamp must not take down the monthly window.
+        let plan = active_plan(&subscriptions(
+            r#"{"data":{"status":"active","planId":"individual-goat",
+                 "currentPeriodEnd":"soon"}}"#,
+        ))
+        .expect("plan");
+        assert!(plan.period_end.is_none());
     }
 
     #[test]

@@ -140,5 +140,17 @@
       <label>Anonymize email addresses</label>
       <default>true</default>
     </entry>
+    <entry name="syncServerUrl" type="String">
+      <label>Sync server base URL for cross-device publishing and remote provider sources</label>
+      <default></default>
+    </entry>
+    <entry name="syncServerToken" type="String">
+      <label>Sync server bearer token</label>
+      <default></default>
+    </entry>
+    <entry name="syncDeviceName" type="String">
+      <label>Device id used when publishing to the sync server</label>
+      <default></default>
+    </entry>
   </group>
 </kcfg>
