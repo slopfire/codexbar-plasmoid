@@ -14,8 +14,9 @@ PlasmaComponents3.Frame {
     property bool showCredits: true
     property bool showHistory: true
     // Supplied by main.qml: one palette for tray and popup bars, one clock for
-    // every row.
+    // every row, and one relative-time formatter.
     property var fillColorFor: null
+    property var relativeTimeFor: null
     property real nowMs: Date.now()
 
     function rowFillColor(percentLeft, pace) {
@@ -343,6 +344,33 @@ PlasmaComponents3.Frame {
         }
 
         PlasmaComponents3.Label {
+            id: cardNoteLabel
+
+            Layout.fillWidth: true
+            // A refresh that failed but kept the last good limits, or limits
+            // that are unavailable while local spend still renders: say so
+            // quietly. The failed attempt itself stays in the tooltip instead
+            // of replacing live bars with a red error.
+            visible: card.cardNote().length > 0
+            text: card.cardNote()
+            color: Kirigami.Theme.disabledTextColor
+            font: Kirigami.Theme.smallFont
+            wrapMode: Text.WordWrap
+
+            MouseArea {
+                id: cardNoteArea
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+
+                PlasmaComponents3.ToolTip {
+                    visible: cardNoteArea.containsMouse && card.cardNoteDetail().length > 0
+                    text: card.cardNoteDetail()
+                }
+            }
+        }
+
+        PlasmaComponents3.Label {
             Layout.fillWidth: true
             text: card.footerInfo()
             color: Kirigami.Theme.disabledTextColor
@@ -368,6 +396,38 @@ PlasmaComponents3.Frame {
             parts.push(entry.plan.indexOf("Plan:") === 0 ? entry.plan : i18n("Plan: %1", entry.plan));
         }
         return parts.join(" · ");
+    }
+
+    // Soft status note. Two cases keep a red error off the card: a refresh that
+    // failed but left cached limits on screen, and a provider whose limits are
+    // unavailable while its local spend still renders. Returns "" when healthy.
+    function cardNote() {
+        if (!entry || entry.error) {
+            return "";
+        }
+        if (entry.stale) {
+            const age = card.relativeTimeFor ? card.relativeTimeFor(entry.staleSince) : "";
+            return age.length > 0
+                ? i18n("Last updated %1 — retrying", age)
+                : i18n("Showing the last known values — retrying");
+        }
+        if (entry.usageUnavailable) {
+            return i18n("Limits unavailable — showing local spend");
+        }
+        return "";
+    }
+
+    function cardNoteDetail() {
+        if (!entry) {
+            return "";
+        }
+        if (entry.lastAttemptError) {
+            return entry.lastAttemptError.message;
+        }
+        if (entry.usageUnavailable) {
+            return entry.usageUnavailable.message || entry.usageUnavailable.description || "";
+        }
+        return "";
     }
 
     function footerInfo() {

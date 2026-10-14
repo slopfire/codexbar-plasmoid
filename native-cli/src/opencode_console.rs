@@ -278,7 +278,14 @@ fn fetch_all_orgs(
     }
     let mut payloads = Vec::new();
     for org_id in &org_ids {
-        match fetch_one_org(http, session, provider, include_monthly, source_label, org_id) {
+        match fetch_one_org(
+            http,
+            session,
+            provider,
+            include_monthly,
+            source_label,
+            org_id,
+        ) {
             Ok(Some(payload)) => payloads.push(payload),
             // Organisation without Go access (pay-as-you-go): not an error,
             // just no subscription bars for this org.
@@ -334,8 +341,8 @@ fn fetch_org_ids(http: &HttpClient, session: &str) -> Result<Vec<String>> {
     if looks_signed_out(&body) {
         return Err(anyhow!("OpenCode session cookie is invalid or expired."));
     }
-    let orgs: Vec<ConsoleOrg> = serde_json::from_str(&body)
-        .map_err(|_| anyhow!("Missing OpenCode workspace id."))?;
+    let orgs: Vec<ConsoleOrg> =
+        serde_json::from_str(&body).map_err(|_| anyhow!("Missing OpenCode workspace id."))?;
     Ok(orgs.into_iter().map(|org| org.id).collect())
 }
 
@@ -716,7 +723,8 @@ mod tests {
             serde_json::from_str(r#"{"limitMicroCents": 6000000000}"#).expect("numeric limit");
         let text: MeterFixture =
             serde_json::from_str(r#"{"limitMicroCents": "6000000000"}"#).expect("string limit");
-        let absent: MeterFixture = serde_json::from_str(r#"{"limitMicroCents": null}"#).expect("null");
+        let absent: MeterFixture =
+            serde_json::from_str(r#"{"limitMicroCents": null}"#).expect("null");
 
         assert_eq!(numeric.limit_micro_cents.as_deref(), Some("6000000000"));
         assert_eq!(text.limit_micro_cents.as_deref(), Some("6000000000"));
@@ -753,7 +761,10 @@ mod tests {
         let meters = access.meters.expect("meters");
         assert!(meter_window(meters.five_hour.as_ref(), 300).is_some());
         assert!(meter_window(meters.month.as_ref(), 43200).is_some());
-        assert_eq!(status.subscriber_user_id.as_deref(), Some("acc_01KPKF0YAEVMRZCW7QXFA4W4YN"));
+        assert_eq!(
+            status.subscriber_user_id.as_deref(),
+            Some("acc_01KPKF0YAEVMRZCW7QXFA4W4YN")
+        );
     }
 
     #[test]

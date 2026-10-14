@@ -43,6 +43,10 @@ PlasmoidItem {
     readonly property var primaryEntry: visibleEntries.length > 0 ? visibleEntries[0] : null
     readonly property int refreshInterval: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 150)
     readonly property int costRefreshInterval: Math.max(300, plasmoid.configuration.costRefreshIntervalSeconds || 3600)
+    // Automatic refreshes carry ±15% jitter. Several widgets (and several
+    // providers inside one widget) otherwise poll in lockstep, which is what
+    // invites provider rate limits on the shared refresh boundary.
+    property int refreshDelayMs: Math.max(60, plasmoid.configuration.refreshIntervalSeconds || 150) * 1000
 
     preferredRepresentation: Plasmoid.formFactor === PlasmaCore.Types.Planar ? fullRepresentation : compactRepresentation
     toolTipMainText: primaryEntry
@@ -57,7 +61,12 @@ PlasmoidItem {
         }
     ]
 
+    function jitteredRefreshDelayMs() {
+        return Math.round(root.refreshInterval * 1000 * (0.85 + Math.random() * 0.3));
+    }
+
     Component.onCompleted: {
+        refreshDelayMs = jitteredRefreshDelayMs();
         // Restore before any refresh so the first paint can keep the last
         // selection even while the CLI is still loading.
         const restored = loadSelectedEntryIds();
@@ -81,7 +90,10 @@ PlasmoidItem {
         // overwrite the last real selection on plasmashell restart.
         selectionHydrated = false;
     }
-    onRefreshIntervalChanged: refreshTimer.restart()
+    onRefreshIntervalChanged: {
+        refreshDelayMs = jitteredRefreshDelayMs();
+        refreshTimer.restart();
+    }
     onSelectedEntryIdsChanged: {
         // Model rebuild only. Persistence is explicit (toggle / reconcile /
         // hydrate) so Component destruction cannot clobber saved selection.
@@ -118,11 +130,14 @@ PlasmoidItem {
 
     Timer {
         id: refreshTimer
-        interval: root.refreshInterval * 1000
+        interval: root.refreshDelayMs
         repeat: true
         running: true
         triggeredOnStart: false
-        onTriggered: root.refreshNow(false)
+        onTriggered: {
+            root.refreshNow(false);
+            root.refreshDelayMs = root.jitteredRefreshDelayMs();
+        }
     }
 
     QtObject {
@@ -145,6 +160,9 @@ PlasmoidItem {
                 "--provider", quote(plasmoid.configuration.provider || "all"),
                 "--source", quote(plasmoid.configuration.source || "auto"),
                 "--timeout", quote(plasmoid.configuration.requestTimeoutSeconds || 45),
+                "--retry-attempts", quote(plasmoid.configuration.providerRetryAttempts || 2),
+                "--cooldown-cap-seconds", quote(plasmoid.configuration.failureCooldownSeconds || 180),
+                "--cost-timeout", quote(plasmoid.configuration.costScanTimeoutSeconds || 300),
                 "--account", quote(plasmoid.configuration.account || ""),
                 "--accountIndex", quote(plasmoid.configuration.accountIndex || 0),
                 "--allAccounts", quote(plasmoid.configuration.allAccounts ? "true" : "false"),
@@ -1610,9 +1628,11 @@ PlasmoidItem {
                 delegate: ProviderCard {
                     id: providerCard
 
-                    // The palette and the wall clock live here so tray bars and
-                    // popup bars cannot disagree.
+                    // The palette, the wall clock, and the relative-time
+                    // formatter live here so tray bars and popup cards cannot
+                    // disagree.
                     fillColorFor: codexBar.usageBarFillColor
+                    relativeTimeFor: codexBar.relativeTime
                     nowMs: root.nowMs
 
                     required property string entryId

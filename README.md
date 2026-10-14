@@ -156,10 +156,30 @@ The account fields map to the CodexBar CLI account flags:
 - `allAccounts`: passes `--all-accounts`
 
 The refresh interval defaults to 5 minutes and is clamped to 1 minute through 24 hours. The request timeout is clamped to 5 through 300 seconds.
+Automatic refreshes are spread by ±15% so several widgets do not poll on the same boundary.
 Matching provider refreshes are shared by default between widget instances. Widgets using the same CLI, provider, source,
 account, and fetch options reuse a protected per-provider cache for one refresh interval, so several widgets do not run the
 same CodexBar usage and cost checks repeatedly. Manual refresh bypasses an older cached result, while simultaneous manual
 refreshes still collapse into one provider check. Presentation settings and provider-chip selections remain per widget.
+
+A refresh that fails transiently keeps the last good limits on screen with a soft *retrying* note instead of a red error,
+retries once when the failure arrived early (a busy Codex app-server socket, a 429, a reset connection), and then backs off
+before asking again. Failures are cached only for that short cooldown, never for the whole usage or cost window, so a
+provider that recovers is picked up on the next refresh. When Codex's `cli` source cannot answer, the widget falls back to
+the `oauth` source, which reads the same limits from the ChatGPT backend independently.
+
+Under **General → Reliability** you can tune that behaviour: **Retries per refresh** (default 2 attempts) bounds the extra
+calls inside one refresh, **Failure backoff cap** (default 180 seconds) is the longest wait before a failing provider is
+asked again — the wait starts at 30 seconds and doubles — and **Cost scan timeout** (default 300 seconds) is the background
+worker's budget, which you raise for very large Codex histories. A provider's own `Retry-After` hint is honoured up to the
+backoff cap.
+
+Cost is a background scanner. A full Codex cost walk takes 60-120 seconds, so the render path never runs it: it serves the
+cached figures (marking them stale if a scan is in flight) and a detached worker refreshes them. Codex cost is scanned
+natively by the bundled Rust binary in seconds — the upstream CLI segfaults walking Codex history on Linux, so it is only
+kept as a one-shot fallback when the native scan comes back empty or fails. The next refresh shows the
+new numbers, and a manual refresh starts a rescan without blocking the popup. A provider whose limits are unavailable while
+its local spend is known says so on the card instead of showing a bare cost panel.
 Use **Sync Write** to publish the current provider order, enabled state, source, account selection, all-accounts mode, and API
 keys. Use **Sync Read** in another widget to import that shared list. Synchronization only happens when either button is pressed;
 provider colors, tray-bar choices, and selected provider chips remain local to each widget.
@@ -370,6 +390,7 @@ Authentication options:
 - Chrome/Chromium/Helium/Firefox/Zen cookie import (`secret-tool` required for encrypted Chromium cookies)
 - OpenCode Go subscription rate limits from an opencode.ai session (not estimated from local SQLite)
 - OpenCode / OpenCode Go local token spend from `~/.local/share/opencode/*.db` (cost)
+- Codex local token spend from `~/.codex/sessions` plus `archived_sessions` (`$CODEX_HOME` overrides the base dir; cost, scanned natively in seconds with one upstream attempt as fallback)
 - Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
 - Command Code: `~/.commandcode/auth.json` from `cmd login` (or `COMMANDCODE_API_KEY`); Command Code token spend from `~/.commandcode/projects/**/*.jsonl` (cost)
 

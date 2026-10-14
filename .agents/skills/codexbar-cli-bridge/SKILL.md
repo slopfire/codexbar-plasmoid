@@ -37,6 +37,8 @@ codexbar cost --format json --json-only --provider <provider>
 arguments. The flag is deliberately excluded from the shared cache identity, so a manual refresh overwrites the slot other widgets read instead of creating a
 refresh-only entry.
 
+Codex cost is scanned by the bundled Rust binary first (upstream `codexbar cost` SIGSEGVs walking Codex history on Linux); only a missing-or-all-errors native result triggers one upstream `--provider codex` attempt. Claude keeps its own upstream scan.
+
 For Linux-native providers (`antigravity`, `commandcode`, `cursor`, `devin`, `grok`, `opencode`, `opencodego`) with `source=native` or
 `source=native-auth`, the helper calls the bundled Rust binary at `plasmoid/contents/code/codexbar-plasmoid`
 instead of `codexbar`. Antigravity `native-auth` uses user tokens under `~/.config/antigravity-usage` from
@@ -74,6 +76,55 @@ are merged server-side.
 
 Always keep helper output as one JSON object on stdout. Even failures should be normalized to JSON so QML can render an error instead of failing to parse.
 
+## Resilience contract
+
+`plasmoid/contents/code/codexbar-resilience.mjs` owns failure handling; keep it
+pure and unit-tested. `sharedFetch` is the only cache entry point and now
+behaves as a two-tier store:
+
+- `<namespace>-<key>.json` holds the last **successful** payload, kept past its
+  freshness window so it can be served stale. Legacy files (raw payloads) are
+  read as before; a legacy file whose payload is only errors is discarded rather
+  than promoted to good data.
+- `<namespace>-<key>.state.json` holds the failure count, last error, last
+  failure payload, and the cooldown deadline. Failures are negative-cached only
+  for that cooldown (30s doubling to a 10min cap, or the provider's Retry-After),
+  never for the whole usage/cost window.
+
+Rules:
+
+- Classify every failure with `classifyFailureMessage`: `transient`, `auth`,
+  `unsupported`, or `permanent`. Only transient failures are retried, and only
+  `transient`/`unsupported` failures move to a fallback source.
+- Three settings drive the layer, each passed from `main.qml` and clamped again
+  in the helper by `boundedNumber` (an unset arg falls back to the KConfigXT
+  default, so a bare helper invocation behaves the same):
+  `--retry-attempts` (1-4, default 2) → `runWithRetries` attempts,
+  `--cooldown-cap-seconds` (30-3600, default 180) → `cooldownCapMs`,
+  `--cost-timeout` (60-1800, default 300) → the worker's `execTimeoutMs`.
+- Serve the last good payload annotated with `stale`, `staleSince`, and
+  `lastAttemptError` when a refresh fails. QML renders that as a soft retry note;
+  a red error card is reserved for a provider with no cached data at all.
+- Retry transient failures once via `runWithRetries`, bounded by the request
+  timeout: a timeout consumes the budget, so only an early failure is re-run.
+- `sourceFallbacks` (in the helper) maps a provider to fallback sources. Codex
+  falls back from `cli` (the app-server JSON-RPC bridge) to `oauth`, which reads
+  the same limits independently. Skip `--account`/`--all-accounts` for the
+  `oauth` source, which rejects token-account flags.
+- Cost is a background scanner, never a render dependency. `codexbar cost`
+  takes 60-120s, so `fetchCostWithCommand` is called with `revalidate` (parent,
+  reads cache + spawns a worker) or `synchronous: true` (the `--cost-worker`
+  child, runs the scan with `--cost-timeout`, default 300s). `spawnCostWorker`
+  uses `cost-scan.requested` in the cache dir as its interlock; the worker
+  clears it when it finishes. Do not make the render path wait on a cost scan.
+- Cost staleness never marks a whole entry stale; only a stale *usage* payload
+  does. `usageUnavailable` carries the usage failure when a card falls back to
+  local spend.
+
+If you add a provider fallback, retryable error shape, or new background pass,
+add it here and cover it in `tests/helper-resilience.test.mjs` (pure logic) or
+`tests/helper-stale-serving.test.mjs` (helper process, mock CLI).
+
 ## Normalized Output Shape
 
 The helper should output:
@@ -94,6 +145,10 @@ The helper should output:
       "updatedAt": "ISO-8601",
       "status": { "indicator": "none", "description": "Operational" },
       "error": null,
+      "stale": false,
+      "staleSince": null,
+      "lastAttemptError": null,
+      "usageUnavailable": null,
       "rows": [
         {
           "id": "primary",
@@ -200,6 +255,7 @@ Preferred:
 Helper-focused:
 
 ```sh
+node --test tests/*.test.mjs          # resilience + stale-serving contracts
 ./scripts/setup-mock-cli.sh
 node --check plasmoid/contents/code/codexbar-plasmoid-helper.mjs
 PATH=/tmp/codexbar-plasma-mock:$PATH \

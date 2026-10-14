@@ -43,6 +43,10 @@ pub struct CostSnapshot {
     pub last30_days_label: String,
     pub updated_at: DateTime<Utc>,
     pub daily: Vec<DailyCostPoint>,
+    /// Pricing provenance (e.g. "listPriceEstimate"). Absent for providers
+    /// that predate the field; the helper tolerates a missing key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,18 +68,18 @@ pub struct ModelCostPoint {
 }
 
 #[derive(Clone)]
-struct CostRow {
-    created_ms: i64,
-    cost: f64,
-    tokens: i64,
-    model: Option<String>,
+pub(crate) struct CostRow {
+    pub(crate) created_ms: i64,
+    pub(crate) cost: f64,
+    pub(crate) tokens: i64,
+    pub(crate) model: Option<String>,
 }
 
 /// Providers the native binary can produce cost/token history for.
 pub fn supports_cost(provider: &str) -> bool {
     matches!(
         provider,
-        "opencode" | "opencodego" | "cursor" | "grok" | "commandcode" | "all"
+        "opencode" | "opencodego" | "cursor" | "grok" | "commandcode" | "codex" | "all"
     )
 }
 
@@ -98,6 +102,9 @@ pub fn fetch_costs(provider: &str, home: &Path, http: &HttpClient) -> Result<Vec
             if let Ok(snapshot) = fetch_commandcode_cost(home) {
                 out.push(snapshot);
             }
+            if let Ok(snapshot) = crate::codex_cost::fetch_codex_cost(home) {
+                out.push(snapshot);
+            }
             Ok(out)
         }
         "opencode" => Ok(vec![fetch_opencode_cost("opencode", home, CostScope::All)?]),
@@ -109,6 +116,7 @@ pub fn fetch_costs(provider: &str, home: &Path, http: &HttpClient) -> Result<Vec
         "cursor" => Ok(vec![fetch_cursor_cost(http)?]),
         "grok" => Ok(vec![fetch_grok_cost(home)?]),
         "commandcode" => Ok(vec![fetch_commandcode_cost(home)?]),
+        "codex" => Ok(vec![crate::codex_cost::fetch_codex_cost(home)?]),
         other => Err(anyhow!(
             "Native cost is supported for opencode, opencodego, cursor, grok, and commandcode (got {other})."
         )),
@@ -820,7 +828,7 @@ fn commandcode_usage_total_tokens(usage: &serde_json::Value) -> i64 {
 
 // --- Aggregation -------------------------------------------------------------
 
-fn snapshot_from_rows(
+pub(crate) fn snapshot_from_rows(
     provider: &str,
     source: &str,
     rows: &[CostRow],
@@ -907,6 +915,7 @@ fn snapshot_from_rows(
         last30_days_label: "30d".to_string(),
         updated_at: now,
         daily: daily_points,
+        provenance: None,
     }
 }
 
@@ -916,7 +925,7 @@ fn start_of_utc_day(now: DateTime<Utc>) -> DateTime<Utc> {
         .unwrap_or(now)
 }
 
-fn round_money(value: f64) -> f64 {
+pub(crate) fn round_money(value: f64) -> f64 {
     if !value.is_finite() {
         return 0.0;
     }

@@ -1,12 +1,19 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  classifyFailureMessage,
+  failureFromPayload,
+  fetchWithResilience,
+  runWithRetries,
+} from "./codexbar-resilience.mjs";
 
-const args = parseArgs(process.argv.slice(2));
+const rawArgs = process.argv.slice(2);
+const args = parseArgs(rawArgs);
 // KDE's plasmoid process inherits the user's session env from systemd --user
 // (which sources $XDG_CONFIG_HOME/environment.d/*.conf), but env vars th e
 // user only set in their shell rc files (e.g. ~/.zshrc) do not make it
@@ -16,6 +23,21 @@ const args = parseArgs(process.argv.slice(2));
 // take precedence so explicit overrides still win.
 loadEnvironmentFromFiles();
 const timeoutMs = Math.max(5, Number(args.timeout || 45)) * 1000;
+// Reliability knobs from the widget settings. Each has the same default the
+// KConfigXT schema ships, so a helper invoked without them behaves identically.
+const retryAttempts = boundedNumber(args["retry-attempts"], 2, 1, 4);
+const cooldownCapMs = boundedNumber(args["cooldown-cap-seconds"], 180, 30, 3600) * 1000;
+const costWorkerTimeoutMs = boundedNumber(args["cost-timeout"], 300, 60, 1800) * 1000;
+// Subprocess budget. The detached cost worker raises this because a full
+// Codex cost scan takes 60-120s on a warm machine and the widget's request
+// timeout is deliberately short.
+let execTimeoutMs = timeoutMs;
+
+function boundedNumber(raw, fallback, min, max) {
+  const value = Number(raw);
+  const chosen = Number.isFinite(value) && value > 0 ? value : fallback;
+  return Math.min(max, Math.max(min, Math.round(chosen)));
+}
 const cliPath = args.cli || process.env.CODEXBAR_CLI || "codexbar";
 const nativeCliPath = args.nativeCli || process.env.CODEXBAR_NATIVE_CLI || resolveNativeCliPath();
 const autoUpdate = args.autoUpdate === "true" || args["auto-update"] === "true";
@@ -153,12 +175,16 @@ const syncDevice =
 
 const nativeProviders = new Set(["antigravity", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
-// Upstream codexbar cost only scans Claude/Codex local logs. Native cost covers
-// OpenCode SQLite, Cursor dashboard events, Grok local session usage, and
-// Command Code session transcripts.
+// Upstream codexbar cost scans Claude local logs. Codex cost is scanned
+// natively in Rust instead: upstream `codexbar cost` walks Codex history in
+// Swift and SIGSEGVs on Linux. The helper falls back to one upstream
+// `codexbar cost --provider codex` attempt only when the native scan comes
+// back missing or all-errors. Native cost also covers OpenCode SQLite,
+// Cursor dashboard events, Grok local session usage, and Command Code
+// session transcripts.
 // Antigravity / Devin only expose quota percentages (no absolute token history).
-const CODEXBAR_COST_PROVIDERS = new Set(["codex", "claude"]);
-const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok", "commandcode"]);
+const CODEXBAR_COST_PROVIDERS = new Set(["claude"]);
+const NATIVE_COST_PROVIDERS = new Set(["opencode", "opencodego", "cursor", "grok", "commandcode", "codex"]);
 
 const linuxAutoFallbacks = {
   codex: "cli",
@@ -205,6 +231,16 @@ const linuxAutoFallbacks = {
   demo: "local",
 };
 
+// A resolved source that cannot answer must not leave the card blank. Only a
+// transient failure (busy RPC socket, 429) or an unsupported source moves on to
+// the next entry; auth and configuration errors stay put because a different
+// source would fail the same way. Codex's `cli` source talks to the Codex
+// app-server JSON-RPC bridge, which times out while a session is busy, while
+// `oauth` reads the same limits from the ChatGPT backend independently.
+const sourceFallbacks = {
+  codex: ["oauth"],
+};
+
 function currentCliPath() {
   return resolveEffectiveCliPath(cliPath, autoUpdate, managedCliBinary);
 }
@@ -220,6 +256,11 @@ function shouldAutoUpdate() {
 }
 
 async function main() {
+  if (args.costWorker === "true" || args["cost-worker"] === "true") {
+    runCostWorker();
+    return;
+  }
+
   let updateResult = null;
   if (shouldAutoUpdate()) {
     try {
@@ -331,7 +372,6 @@ function enrichCodexLimitResetCredits(items) {
       if (includeStatus) {
         commandArgs.push("--status");
       }
-      const account = clean(item.account || item.usage?.accountEmail || item.usage?.identity?.accountEmail);
       const command = currentCliPath();
       const oauthPayload = sharedFetch("usage", {
         command,
@@ -339,7 +379,7 @@ function enrichCodexLimitResetCredits(items) {
         provider: "codex",
         apiKeyHash: "",
         account: "",
-      }, () => runJSON(command, commandArgs, "codex", "", ""));
+      }, () => fetchUsageWithRetry(command, commandArgs, "codex", "", ""));
       const oauthItems = asArray(oauthPayload).filter((candidate) => (
         normalizeProviderId(candidate?.provider) === "codex" && !candidate?.error
       ));
@@ -377,6 +417,50 @@ function runUsageForConfig(config) {
     return [buildDemoUsagePayload(config)];
   }
 
+  // Walk the configured source, then any provider fallback, so a busy RPC
+  // socket or an unsupported source does not leave the card empty. A fresh
+  // success wins; a stale cache hit still tries the next source, but stays as
+  // the answer if the fallback also fails, because stale limits beat an error.
+  const chain = usageSourceChain(config);
+  let lastResult = null;
+  let staleResult = null;
+  for (let index = 0; index < chain.length; index += 1) {
+    const result = runUsageForSource(config, chain[index]);
+    const failure = failureFromPayload(result);
+    const servedStale = !failure && asArray(result).some((item) => item?.stale === true);
+    if (!failure && !servedStale) {
+      return result;
+    }
+    if (servedStale && !staleResult) {
+      staleResult = result;
+    }
+    lastResult = result;
+    if (!chain[index + 1]) {
+      break;
+    }
+    if (failure && !isFallbackWorthTrying(failure)) {
+      break;
+    }
+  }
+  return staleResult || lastResult;
+}
+
+function isFallbackWorthTrying(failure) {
+  return failure.transient || failure.kind === "unsupported";
+}
+
+function usageSourceChain(config) {
+  const primary = resolveSource(config.provider, config.source);
+  const chain = [primary];
+  for (const candidate of sourceFallbacks[normalizeProviderId(config.provider)] || []) {
+    if (candidate && !chain.includes(candidate)) {
+      chain.push(candidate);
+    }
+  }
+  return chain;
+}
+
+function runUsageForSource(config, source) {
   const commandArgs = [
     "usage",
     "--format",
@@ -385,7 +469,7 @@ function runUsageForConfig(config) {
     "--provider",
     config.provider,
     "--source",
-    resolveSource(config.provider, config.source),
+    source,
   ];
 
   if (includeStatus) {
@@ -394,8 +478,10 @@ function runUsageForConfig(config) {
   if (!showCredits) {
     commandArgs.push("--no-credits");
   }
-  const isDevin = normalizeProviderId(config.provider) === "devin";
-  if (!isDevin) {
+  // Devin selects its organization through the account flag. OAuth sources
+  // reject token-account flags outright, so a fallback source skips them.
+  const skipAccountFlags = normalizeProviderId(config.provider) === "devin" || source === "oauth";
+  if (!skipAccountFlags) {
     if (config.allAccounts === true) {
       commandArgs.push("--all-accounts");
     } else if (clean(config.account)) {
@@ -405,7 +491,7 @@ function runUsageForConfig(config) {
     }
   }
 
-  const command = commandForConfig(config);
+  const command = commandForConfig(config, source);
   try {
     return sharedFetch("usage", {
       command,
@@ -415,24 +501,39 @@ function runUsageForConfig(config) {
       account: clean(config.account),
     }, () => {
       try {
-        return runJSON(command, commandArgs, config.provider, config.apiKey, clean(config.account));
+        return fetchUsageWithRetry(command, commandArgs, config.provider, config.apiKey, clean(config.account));
       } catch (error) {
-        return [{
-          provider: normalizeProviderId(config.provider),
-          source: resolveSource(config.provider, config.source),
-          error: { message: shortError(error, command) },
-        }];
+        return [usageErrorEntry(config, source, command, error)];
       }
     });
   } catch (error) {
-    return [{
-      provider: normalizeProviderId(config.provider),
-      source: resolveSource(config.provider, config.source),
-      error: {
-        message: shortError(error, command),
-      },
-    }];
+    return [usageErrorEntry(config, source, command, error)];
   }
+}
+
+/**
+ * One CLI invocation, retried once when it fails transiently. A timeout burns
+ * the whole attempt budget, so only a call that failed early — a busy Codex
+ * app-server socket, a 429, a reset connection — is re-run.
+ */
+function fetchUsageWithRetry(command, commandArgs, providerId, apiKey, account) {
+  const outcome = runWithRetries(
+    () => runJSON(command, commandArgs, providerId, apiKey, account),
+    { attempts: retryAttempts, timeoutMs: execTimeoutMs, startedAt: Date.now() },
+  );
+  if (outcome.error) {
+    throw outcome.error;
+  }
+  return outcome.value;
+}
+
+function usageErrorEntry(config, source, command, error) {
+  const failure = classifyFailureMessage(shortError(error, command));
+  return {
+    provider: normalizeProviderId(config.provider),
+    source,
+    error: { kind: failure.kind, message: failure.message },
+  };
 }
 
 /**
@@ -539,7 +640,7 @@ function demoRowTitle(index, percentLeft) {
   return `${base} ${rounded}%`;
 }
 
-function runCost() {
+function runCost(options = {}) {
   const configs = (effectiveProviderConfigs().length > 0
     ? effectiveProviderConfigs()
     : [{ provider, includeCost: true }])
@@ -551,55 +652,69 @@ function runCost() {
 
   const items = [];
   const costErrors = [];
-  const collectCostResults = (payload) => {
-    for (const item of asArray(payload)) {
-      if (item && typeof item === "object" && !item.error) {
-        items.push(item);
-        continue;
-      }
-      const message = item && typeof item === "object" && item.error
-        ? (clean(item.error.message) || "CodexBar cost command failed")
-        : "";
-      if (message && !costErrors.includes(message)) {
-        costErrors.push(message);
-      }
+  for (const target of costTargets(configs)) {
+    collectCostResults(items, costErrors, fetchCostWithCommand(target, options));
+  }
+  return { items, costError: costErrors.length > 0 ? costErrors.join(" | ") : null };
+}
+
+function collectCostResults(items, costErrors, payload) {
+  for (const item of asArray(payload)) {
+    if (item && typeof item === "object" && !item.error) {
+      items.push(item);
+      continue;
     }
-  };
+    const message = item && typeof item === "object" && item.error
+      ? (clean(item.error.message) || "CodexBar cost command failed")
+      : "";
+    if (message && !costErrors.includes(message)) {
+      costErrors.push(message);
+    }
+  }
+}
+
+/**
+ * The cost commands the current configuration needs. Claude keeps its upstream
+ * scan; Codex is scanned by the bundled Rust binary (with one upstream
+ * `--provider codex` attempt as fallback); every other Linux-native provider
+ * has its own fast local scan.
+ */
+function costTargets(configs) {
+  const targets = [];
   const seenProviders = new Set();
 
   const codexbarProviders = uniqueProviderIds(configs.filter((config) =>
     CODEXBAR_COST_PROVIDERS.has(normalizeProviderId(config.provider))
   ));
   if (codexbarProviders.length > 0) {
-    collectCostResults(fetchCostWithCommand(
-      currentCliPath(),
-      codexbarProviders.length === 1 ? codexbarProviders[0] : "all",
-      "codexbar",
-    ));
+    targets.push({
+      command: currentCliPath(),
+      providerId: codexbarProviders.length === 1 ? codexbarProviders[0] : "all",
+      backend: "codexbar",
+    });
     for (const id of codexbarProviders) {
       seenProviders.add(id);
     }
   }
 
-  const nativeProvidersForCost = uniqueProviderIds(configs.filter((config) =>
+  for (const providerId of uniqueProviderIds(configs.filter((config) =>
     NATIVE_COST_PROVIDERS.has(normalizeProviderId(config.provider))
-  ));
-  for (const providerId of nativeProvidersForCost) {
-    collectCostResults(fetchCostWithCommand(nativeCliPath, providerId, "native"));
+  ))) {
+    targets.push({ command: nativeCliPath, providerId, backend: "native" });
     seenProviders.add(providerId);
   }
 
   // When auto-discovery requested a bare "all" without an explicit list, still
-  // try native OpenCode costs so local spend shows even if usage cookies fail.
+  // try native costs so local spend shows even if usage cookies fail.
   if (provider === "all" && configs.every((config) => !config._fromConfigs)) {
     for (const providerId of NATIVE_COST_PROVIDERS) {
       if (!seenProviders.has(providerId)) {
-        collectCostResults(fetchCostWithCommand(nativeCliPath, providerId, "native"));
+        targets.push({ command: nativeCliPath, providerId, backend: "native" });
       }
     }
   }
 
-  return { items, costError: costErrors.length > 0 ? costErrors.join(" | ") : null };
+  return targets;
 }
 
 function uniqueProviderIds(configs) {
@@ -616,7 +731,17 @@ function uniqueProviderIds(configs) {
   return ids;
 }
 
-function fetchCostWithCommand(command, providerId, backend) {
+/**
+ * Cost is a background scanner, never a render dependency.
+ *
+ * `codexbar cost` walks the whole Codex history and takes 60-120s — past the
+ * widget's request timeout — so an inline scan either blocks the refresh or
+ * gets killed and reported as an error. The render path only reads the cache
+ * and asks a detached worker to refresh it; the next refresh shows the new
+ * figures. `options.synchronous` is the worker's path, which does the scan.
+ */
+function fetchCostWithCommand(target, options = {}) {
+  const { command, providerId, backend } = target;
   const commandArgs = [
     "cost",
     "--format",
@@ -632,23 +757,21 @@ function fetchCostWithCommand(command, providerId, backend) {
   const runArgs = forceRefresh && backend === "codexbar"
     ? [...commandArgs, "--refresh"]
     : commandArgs;
+  const producer = () => {
+    if (backend === "native" && normalizeProviderId(providerId) === "codex") {
+      return fetchNativeCodexCostWithUpstreamFallback(command, commandArgs);
+    }
+    return runCostCommand(command, runArgs, providerId, backend);
+  };
   try {
     const payload = sharedFetch("cost", {
       command,
       commandArgs,
       provider: providerId,
       backend,
-    }, () => {
-      try {
-        const extraEnv = backend === "codexbar" ? { SWIFT_TESTING: "1" } : {};
-        return runJSON(command, runArgs, providerId, "", "", extraEnv);
-      } catch (error) {
-        return [{
-          provider: "cost",
-          error: { message: shortError(error, command) },
-        }];
-      }
-    }, costCacheSeconds);
+    }, producer, costCacheSeconds, options.synchronous
+      ? {}
+      : { revalidate: { spawn: spawnCostWorker } });
     return asArray(payload);
   } catch (error) {
     return [{
@@ -658,7 +781,120 @@ function fetchCostWithCommand(command, providerId, backend) {
   }
 }
 
-function sharedFetch(namespace, identity, producer, cacheSeconds = sharedCacheSeconds) {
+/**
+ * One cost scan against a single backend. Failures come back as data
+ * (`[{provider: "cost", error}]`), never thrown, so usage entries survive a
+ * cost failure.
+ */
+function runCostCommand(command, runArgs, providerId, backend) {
+  try {
+    const extraEnv = backend === "codexbar" ? { SWIFT_TESTING: "1" } : {};
+    const outcome = runWithRetries(
+      () => runJSON(command, runArgs, providerId, "", "", extraEnv),
+      { attempts: retryAttempts, timeoutMs: execTimeoutMs, startedAt: Date.now() },
+    );
+    if (outcome.error) {
+      throw outcome.error;
+    }
+    return outcome.value;
+  } catch (error) {
+    return [{
+      provider: "cost",
+      error: { message: shortError(error, command) },
+    }];
+  }
+}
+
+function hasUsableCostItem(payload) {
+  return asArray(payload).some((item) => item && typeof item === "object" && !item.error);
+}
+
+/**
+ * Codex cost scans with the bundled Rust binary first: upstream
+ * `codexbar cost` walks Codex history in Swift and SIGSEGVs on Linux. When the
+ * native scan comes back missing or all-errors (an old bundled binary without
+ * the Codex scanner, or a scan failure), make ONE upstream
+ * `codexbar cost --provider codex` attempt — today's behavior, including
+ * SIGSEGV surfacing — rather than going blank. Whatever the fallback returns
+ * (usable items or its error payload) is the Codex cost result.
+ */
+function fetchNativeCodexCostWithUpstreamFallback(nativeCommand, nativeCommandArgs) {
+  const nativeItems = asArray(runCostCommand(nativeCommand, nativeCommandArgs, "codex", "native"));
+  if (hasUsableCostItem(nativeItems)) {
+    return nativeItems;
+  }
+  const upstreamCommandArgs = [
+    "cost",
+    "--format",
+    "json",
+    "--json-only",
+    "--provider",
+    "codex",
+  ];
+  const upstreamRunArgs = forceRefresh
+    ? [...upstreamCommandArgs, "--refresh"]
+    : upstreamCommandArgs;
+  return runCostCommand(currentCliPath(), upstreamRunArgs, "codex", "codexbar");
+}
+
+const COST_WORKER_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+function costScanMarkerPath() {
+  return path.join(sharedProviderCacheDir(), "cost-scan.requested");
+}
+
+/**
+ * Spawn at most one detached cost scan. The marker is the interlock: every
+ * widget that reads a stale cost cache calls this, but only the first one wins,
+ * and the worker clears the marker when it finishes.
+ */
+function spawnCostWorker() {
+  const cacheDir = sharedProviderCacheDir();
+  fs.mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  const marker = costScanMarkerPath();
+  try {
+    const stat = fs.statSync(marker);
+    if (Date.now() - stat.mtimeMs < COST_WORKER_MIN_INTERVAL_MS) {
+      return;
+    }
+  } catch {
+    // No scan requested recently; fall through and request one.
+  }
+  fs.writeFileSync(marker, `${process.pid}\n${Date.now()}\n`, { mode: 0o600 });
+  try {
+    const child = spawn(process.execPath, [
+      fileURLToPath(import.meta.url),
+      ...rawArgs,
+      "--cost-worker",
+      "true",
+    ], { detached: true, stdio: "ignore", env: process.env });
+    child.unref();
+  } catch {
+    try { fs.unlinkSync(marker); } catch {}
+  }
+}
+
+/**
+ * Detached cost pass: the full scan with a long timeout, writing the shared
+ * cost caches the widget reads. Clears the scan marker on the way out.
+ */
+function runCostWorker() {
+  execTimeoutMs = Math.max(timeoutMs, costWorkerTimeoutMs);
+  try {
+    runCost({ synchronous: true });
+  } finally {
+    try { fs.unlinkSync(costScanMarkerPath()); } catch {}
+  }
+}
+
+/**
+ * Shared per-provider cache. Fresh successful results are reused for
+ * `cacheSeconds`; a failed refresh keeps the last good payload on screen and
+ * opens a short cooldown instead of replaying the error for the whole window.
+ * `cacheSeconds <= 0` (sharing disabled) bypasses the cache entirely, which
+ * also drops the stale-good safety net by design.
+ */
+function sharedFetch(namespace, identity, producer, cacheSeconds = sharedCacheSeconds, options = {}) {
   if (cacheSeconds <= 0) {
     return producer();
   }
@@ -669,92 +905,22 @@ function sharedFetch(namespace, identity, producer, cacheSeconds = sharedCacheSe
     .update(JSON.stringify(identity))
     .digest("hex");
   const cachePath = path.join(cacheDir, `${namespace}-${cacheKey}.json`);
-  const lockPath = `${cachePath}.lock`;
-  const waitDeadline = Date.now() + timeoutMs + 5000;
 
-  while (true) {
-    const cached = readSharedCache(cachePath, forceRefresh, cacheSeconds);
-    if (cached.hit) {
-      return cached.value;
-    }
-
-    let lockFd = null;
-    try {
-      lockFd = fs.openSync(lockPath, "wx", 0o600);
-      fs.writeFileSync(lockFd, `${process.pid}\n${Date.now()}\n`);
-
-      // Another helper may have populated the cache between our read and lock.
-      const afterLock = readSharedCache(cachePath, forceRefresh, cacheSeconds);
-      if (afterLock.hit) {
-        return afterLock.value;
-      }
-
-      const value = producer();
-      writeSharedCache(cachePath, value);
-      return value;
-    } catch (error) {
-      if (error?.code !== "EEXIST") {
-        throw error;
-      }
-      removeStaleLock(lockPath);
-      if (Date.now() >= waitDeadline) {
-        // A broken peer must not prevent this widget from refreshing forever.
-        return producer();
-      }
-      sleepMilliseconds(50);
-    } finally {
-      if (lockFd !== null) {
-        try { fs.closeSync(lockFd); } catch {}
-        try { fs.unlinkSync(lockPath); } catch {}
-      }
-    }
-  }
+  return fetchWithResilience({
+    cachePath,
+    producer,
+    cacheSeconds,
+    timeoutMs,
+    cooldownCapMs,
+    forceRefresh,
+    requestStartedAt,
+    ...options,
+  });
 }
 
 function sharedProviderCacheDir() {
   const cacheHome = clean(process.env.XDG_CACHE_HOME) || path.join(os.homedir(), ".cache");
   return path.join(cacheHome, "codexbar-plasmoid", "provider-cache");
-}
-
-function readSharedCache(cachePath, forced, cacheSeconds) {
-  try {
-    const stat = fs.statSync(cachePath);
-    const freshEnough = forced
-      ? stat.mtimeMs >= requestStartedAt
-      : Date.now() - stat.mtimeMs <= cacheSeconds * 1000;
-    if (!freshEnough) {
-      return { hit: false, value: null };
-    }
-    return { hit: true, value: JSON.parse(fs.readFileSync(cachePath, "utf8")) };
-  } catch {
-    return { hit: false, value: null };
-  }
-}
-
-function writeSharedCache(cachePath, value) {
-  const temporaryPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(value), { mode: 0o600 });
-    fs.renameSync(temporaryPath, cachePath);
-  } finally {
-    try { fs.unlinkSync(temporaryPath); } catch {}
-  }
-}
-
-function removeStaleLock(lockPath) {
-  try {
-    const stat = fs.statSync(lockPath);
-    if (Date.now() - stat.mtimeMs > timeoutMs + 10000) {
-      fs.unlinkSync(lockPath);
-    }
-  } catch {
-    // The lock disappeared between checks; the next loop will read the cache.
-  }
-}
-
-function sleepMilliseconds(milliseconds) {
-  const sleeper = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.wait(sleeper, 0, 0, milliseconds);
 }
 
 function hashSecret(value) {
@@ -797,7 +963,12 @@ function buildSyncUrl() {
  * per-provider error cards (never to JSON breakage).
  */
 async function syncHttpRequest(method, urlString, token, timeoutMs, requestBody = null) {
-  const url = new URL(urlString);
+  let url;
+  try {
+    url = new URL(urlString);
+  } catch {
+    return { ok: false, status: 0, text: "", error: `sync server URL is not valid: ${urlString}` };
+  }
   const transport = url.protocol === "https:" ? await import("node:https") : await import("node:http");
   return new Promise((resolve) => {
     let settled = false;
@@ -807,11 +978,12 @@ async function syncHttpRequest(method, urlString, token, timeoutMs, requestBody 
         resolve(result);
       }
     };
+    const hasBody = typeof requestBody === "string" && requestBody.length > 0;
     const headers = { Accept: "application/json" };
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
-    if (requestBody !== null) {
+    if (hasBody) {
       headers["Content-Type"] = "application/json";
       headers["Content-Length"] = String(Buffer.byteLength(requestBody, "utf8"));
     }
@@ -839,7 +1011,7 @@ async function syncHttpRequest(method, urlString, token, timeoutMs, requestBody 
     request.on("error", (error) => {
       finish({ ok: false, status: 0, text: "", error: shortError(error) });
     });
-    if (requestBody !== null) {
+    if (hasBody) {
       request.end(requestBody);
     } else {
       request.end();
@@ -1092,21 +1264,31 @@ function runJSON(command, commandArgs, providerId = "", apiKey = "", account = "
       encoding: "utf8",
       env: { ...cliEnvForProvider(providerId, apiKey, account), ...(extraEnv || {}) },
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: timeoutMs,
+      timeout: execTimeoutMs,
       windowsHide: true,
     });
   } catch (error) {
-    const partial = clean(error?.stdout?.toString?.());
-    if (partial) {
-      return JSON.parse(partial);
+    const partial = parseJSONOrNull(error?.stdout?.toString?.());
+    if (partial !== null) {
+      return partial;
     }
     throw error;
   }
-  const trimmed = stdout.trim();
+  const parsed = parseJSONOrNull(stdout);
+  return parsed === null ? [] : parsed;
+}
+
+/** Parse CLI stdout defensively; malformed output becomes "no data". */
+function parseJSONOrNull(text) {
+  const trimmed = clean(text);
   if (!trimmed) {
-    return [];
+    return null;
   }
-  return JSON.parse(trimmed);
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeSnapshot(usagePayload, costPayload, costError = null) {
@@ -1175,7 +1357,14 @@ function normalizeSnapshot(usagePayload, costPayload, costError = null) {
     if (!successProviders.has(providerId)) {
       const index = filteredEntries.findIndex((entry) => entry.provider === providerId && entry.error);
       if (index >= 0) {
-        filteredEntries[index] = normalizeProvider({ provider: providerId, source: "local" }, cost);
+        // The card falls back to local spend because the limits fetch failed.
+        // Carry the reason so it can say so instead of looking like a normal
+        // cost card with no bars.
+        filteredEntries[index] = normalizeProvider({
+          provider: providerId,
+          source: "local",
+          usageUnavailable: filteredEntries[index].error || null,
+        }, cost);
         successProviders.add(providerId);
       }
     }
@@ -1271,6 +1460,11 @@ function normalizeProvider(item, cost) {
   const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
   const tokenUsage = buildTokenUsage(cost, usage);
   const limitResetCredits = normalizeLimitResetCredits(usage);
+  // A stale entry is last known good data whose refresh failed. The card keeps
+  // rendering it and shows a soft retry note instead of a red error; the failed
+  // attempt is kept only for the tooltip. Cost refreshes in the background by
+  // design, so a stale cost cache must not mark fresh usage limits as stale.
+  const stale = item.stale === true;
   return {
     provider: providerId,
     account,
@@ -1282,6 +1476,10 @@ function normalizeProvider(item, cost) {
     updatedAt: usage.updatedAt || item.credits?.updatedAt || cost?.updatedAt || new Date().toISOString(),
     status: item.status || null,
     error: item.error || null,
+    stale,
+    staleSince: stale ? (item.staleSince || cost?.staleSince || null) : null,
+    lastAttemptError: stale ? (item.lastAttemptError || cost?.lastAttemptError || null) : null,
+    usageUnavailable: item.usageUnavailable || null,
     rows,
     creditsRemaining,
     limitResetCredits,
@@ -1522,15 +1720,19 @@ function extraRateWindowEntries(usage) {
   return entries;
 }
 
+/** Remaining percent, preferring the CLI's explicit value over `100 - used`. */
+function percentLeftFromWindow(window) {
+  const remaining = numberOrNull(window?.remainingPercent);
+  if (remaining !== null) {
+    return remaining;
+  }
+  const used = numberOrNull(window?.usedPercent);
+  return used === null ? null : Math.max(0, Math.min(100, 100 - used));
+}
+
 /** One usage bar row built from a CodexBar usage window. */
 function windowUsageRow(id, title, window, paceReport) {
-  const usedPercent = numberOrNull(window?.usedPercent);
-  const remainingPercent = numberOrNull(window?.remainingPercent);
-  const percentLeft = remainingPercent !== null
-    ? remainingPercent
-    : usedPercent !== null
-      ? Math.max(0, Math.min(100, 100 - usedPercent))
-      : null;
+  const percentLeft = percentLeftFromWindow(window);
   const resetsAt = window?.resetsAt || null;
   const windowMinutes = numberOrNull(window?.windowMinutes);
   return {
@@ -2003,8 +2205,8 @@ function usesNativeCli(providerId, requestedSource) {
   );
 }
 
-function commandForConfig(config) {
-  if (usesNativeCli(config.provider, config.source)) {
+function commandForConfig(config, requestedSource) {
+  if (usesNativeCli(config.provider, requestedSource ?? config.source)) {
     return nativeCliPath;
   }
   return currentCliPath();
@@ -2188,7 +2390,10 @@ function numberOrNull(value) {
 
 function integerOrNull(value) {
   const number = Number(value);
-  return Number.isInteger(number) ? number : Number.isFinite(number) ? Math.round(number) : null;
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+  return Number.isInteger(number) ? number : Math.round(number);
 }
 
 function errorSnapshot(error) {

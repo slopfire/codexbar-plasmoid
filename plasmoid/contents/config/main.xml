@@ -110,6 +110,24 @@
       <min>5</min>
       <max>300</max>
     </entry>
+    <entry name="providerRetryAttempts" type="Int">
+      <label>Attempts per provider refresh when a failure looks transient</label>
+      <default>2</default>
+      <min>1</min>
+      <max>4</max>
+    </entry>
+    <entry name="failureCooldownSeconds" type="Int">
+      <label>Longest wait before re-asking a provider that keeps failing</label>
+      <default>180</default>
+      <min>30</min>
+      <max>3600</max>
+    </entry>
+    <entry name="costScanTimeoutSeconds" type="Int">
+      <label>Background cost scan timeout in seconds</label>
+      <default>300</default>
+      <min>60</min>
+      <max>1800</max>
+    </entry>
     <entry name="compactMetric" type="String">
       <label>Compact display metric</label>
       <default>lowest</default>

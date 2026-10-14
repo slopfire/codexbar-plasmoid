@@ -107,6 +107,43 @@ else
   skp "node not installed"
 fi
 
+# --- static: helper unit tests ---
+section "helper unit tests"
+if command -v node >/dev/null 2>&1; then
+  shopt -s nullglob
+  test_files=(tests/*.test.mjs)
+  shopt -u nullglob
+  if [[ ${#test_files[@]} -eq 0 ]]; then
+    skp "no node test files"
+  elif node --test "${test_files[@]}" >/tmp/agent-check-node-test.out 2>&1; then
+    ok "node --test (${#test_files[@]} file(s))"
+  else
+    bad "node --test: $(tail -c 500 /tmp/agent-check-node-test.out | tr '\n' ' ')"
+  fi
+else
+  skp "node not installed"
+fi
+
+# --- reliability settings wiring ---
+section "reliability settings wiring"
+config_xml="plasmoid/contents/config/main.xml"
+general_qml="plasmoid/contents/ui/configGeneral.qml"
+main_qml="plasmoid/contents/ui/main.qml"
+for key in providerRetryAttempts failureCooldownSeconds costScanTimeoutSeconds; do
+  if grep -q "name=\"$key\"" "$config_xml" && grep -q "cfg_$key" "$general_qml"; then
+    ok "$key is in the schema and the General page"
+  else
+    bad "$key is not wired end to end"
+  fi
+done
+for arg in --retry-attempts --cooldown-cap-seconds --cost-timeout; do
+  if grep -q -- "$arg" "$main_qml"; then
+    ok "main.qml passes $arg"
+  else
+    bad "main.qml does not pass $arg"
+  fi
+done
+
 # --- package metadata ---
 section "package metadata"
 if [[ -f plasmoid/metadata.json ]]; then
@@ -221,41 +258,82 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
   run_helper() {
     XDG_CACHE_HOME="$3" node "$helper" --cli "$wrapper" --nativeCli "$wrapper" \
       --provider "$1" --source "$2" --timeout 5 \
+      --retry-attempts 2 --cooldown-cap-seconds 180 --cost-timeout 300 \
       --cache-seconds "${5:-300}" --cost-cache-seconds "${6:-3600}" \
       --force "$4" >/dev/null 2>&1 || true
   }
 
-  # Automatic refresh never asks the CLI to rescan.
+  # The cost scan runs in a detached worker; wait for it to clear its marker so
+  # the arg log is complete before asserting on it.
+  # Returns non-zero if the worker never cleared its marker.
+  wait_for_cost_worker() {
+    local marker="$1/codexbar-plasmoid/provider-cache/cost-scan.requested"
+    for ((_i = 0; _i < 300; _i += 1)); do
+      [[ -f "$marker" ]] || break
+      sleep 0.1
+    done
+    sleep 0.3
+    [[ ! -f "$marker" ]]
+  }
+
+  # The upstream Codex cost scan took over a minute, so the render path must
+  # never run a cost scan inline: the snapshot returns immediately and a
+  # worker fills the cache. (The native Rust scan takes ~1s, but the design
+  # stays: cost is background-only.)
   run_helper codex cli "$arglog_dir/cache-auto" false
-  if grep -q '^cost .*--provider codex$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
-    ok "automatic refresh sends the plain cost command"
+  if ! grep -q '^cost ' "$arglog"; then
+    ok "render path does not scan cost inline"
   else
-    bad "automatic refresh arguments ($(tr '\n' '|' <"$arglog"))"
+    bad "render path ran a cost command ($(tr '\n' '|' <"$arglog"))"
+  fi
+  wait_for_cost_worker "$arglog_dir/cache-auto"
+  if grep -q '^cost .*--provider codex$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
+    ok "automatic refresh worker sends the plain cost command"
+  else
+    bad "automatic cost worker arguments ($(tr '\n' '|' <"$arglog"))"
   fi
 
-  # A manual refresh bypasses the CLI scan debounce, on the cost call only.
+  # A manual refresh bypasses the CLI scan debounce, on the upstream cost
+  # call only. Codex cost runs on the native backend (see below), so cover
+  # the --refresh contract with the remaining upstream backend (claude).
   : >"$arglog"
-  run_helper codex cli "$arglog_dir/cache-manual" true
-  if grep -q '^cost .*--provider codex --refresh$' "$arglog" && ! grep -q '^usage .*--refresh' "$arglog"; then
+  run_helper claude cli "$arglog_dir/cache-manual" true
+  wait_for_cost_worker "$arglog_dir/cache-manual"
+  if grep -q '^cost .*--provider claude --refresh$' "$arglog" && ! grep -q '^usage .*--refresh' "$arglog"; then
     ok "manual refresh passes --refresh to the cost backend only"
   else
     bad "manual refresh arguments ($(tr '\n' '|' <"$arglog"))"
   fi
 
+  # Codex cost runs on the native backend: like every native backend it keeps
+  # its existing arguments (no --refresh), manual or not.
+  : >"$arglog"
+  run_helper codex cli "$arglog_dir/cache-manual-codex" true
+  wait_for_cost_worker "$arglog_dir/cache-manual-codex"
+  if grep -q '^cost .*--provider codex$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
+    ok "native codex cost arguments unchanged by manual refresh"
+  else
+    bad "native codex cost arguments ($(tr '\n' '|' <"$arglog"))"
+  fi
+
   # Native backends keep their existing arguments.
   : >"$arglog"
   run_helper opencode native "$arglog_dir/cache-native" true
+  wait_for_cost_worker "$arglog_dir/cache-native"
   if grep -q '^cost .*--provider opencode$' "$arglog" && ! grep -q '^cost .*--refresh' "$arglog"; then
     ok "native backend cost arguments unchanged"
   else
     bad "native backend arguments ($(tr '\n' '|' <"$arglog"))"
   fi
 
-  # The manual result has to land in the slot automatic polling reads.
+  # The manual result has to land in the slot automatic polling reads, so the
+  # next automatic refresh reuses the worker's scan instead of starting one.
   : >"$arglog"
   run_helper codex cli "$arglog_dir/cache-shared" true
+  wait_for_cost_worker "$arglog_dir/cache-shared"
   manual_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
   run_helper codex cli "$arglog_dir/cache-shared" false
+  wait_for_cost_worker "$arglog_dir/cache-shared"
   shared_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
   if [[ "$manual_calls" == "1" && "$shared_calls" == "1" ]]; then
     ok "manual refresh result is reused by the shared cache"
@@ -266,7 +344,9 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
   # Cost history keeps its longer cadence even when usage sharing is disabled.
   : >"$arglog"
   run_helper codex cli "$arglog_dir/cache-split" false 0 3600
+  wait_for_cost_worker "$arglog_dir/cache-split"
   run_helper codex cli "$arglog_dir/cache-split" false 0 3600
+  wait_for_cost_worker "$arglog_dir/cache-split"
   usage_calls="$(grep -c '^usage .*--provider codex' "$arglog" || true)"
   cost_calls="$(grep -c '^cost .*--provider codex' "$arglog" || true)"
   if [[ "$usage_calls" == "2" && "$cost_calls" == "1" ]]; then
@@ -292,6 +372,20 @@ if [[ "$use_mock" -eq 1 ]] && command -v node >/dev/null 2>&1; then
     ok "helper loads provider settings by applet id"
   else
     bad "applet provider settings were not loaded"
+  fi
+
+  # The detached worker resolves the same applet settings and writes the cache.
+  if wait_for_cost_worker "$arglog_dir/cache-applet"; then
+    shopt -s nullglob
+    applet_cost_files=("$arglog_dir/cache-applet/codexbar-plasmoid/provider-cache/cost-"*.json)
+    shopt -u nullglob
+  else
+    applet_cost_files=()
+  fi
+  if [[ ${#applet_cost_files[@]} -gt 0 ]]; then
+    ok "detached cost worker resolved applet settings"
+  else
+    bad "cost worker produced no cache from applet settings"
   fi
 
   rm -rf "$arglog_dir"

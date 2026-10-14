@@ -6,9 +6,26 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 
 ### Features
 
+- Add a **Reliability** section to General settings: retries per refresh, failure backoff cap (default 3 minutes), and background cost scan timeout
 - Add a self-hosted sync server (`codexbar-plasmoid sync-server`): widgets publish their locally fetched usage snapshots, and the server merges them per (provider, account) with cross-device daily cost/history totals
 - Publish locally fetched entries to the sync server after each refresh (best effort, failures never interrupt rendering) — filter them behind General → Sync server
 - New provider source **Sync server**: a widget without provider credentials can render the merged cross-device data (never sends credentials anywhere; publishes exclude remote-sourced entries so server data cannot loop back)
+
+### Improvements
+
+- Retry a provider call once when it failed early with a transient error (a busy Codex app-server socket, a 429, a reset connection), with jittered backoff
+- Cap the failure backoff at 3 minutes by default instead of 10, so a provider that recovers is picked up within a couple of refreshes
+- Spread automatic refreshes by ±15% so several widgets do not poll on the same boundary and invite provider rate limits
+- Say "Limits unavailable — showing local spend" when a provider falls back to local cost, instead of showing an unexplained cost-only card
+
+### Fixes
+
+- Scan Codex cost natively in the bundled Rust binary instead of the upstream CLI, which segfaults walking Codex history on Linux; one upstream `codexbar cost --provider codex` attempt remains as fallback when the native scan is missing or fails, and a cost failure still surfaces as `costError` without dropping usage
+- Scan cost in a detached worker instead of on the render path: a full Codex cost walk takes 60-120s, so the previous inline scan either blocked every refresh or was killed at the request timeout and reported as a cost error
+- Stop caching a failed refresh for the whole usage or cost window; a transient failure now opens only a short cooldown, so a provider that recovers is picked up on the next refresh
+- Keep the last good usage limits on screen with a soft "retrying" note when a refresh fails, instead of replacing live bars with a red error or a bare cost panel
+- Fall back to Codex's `oauth` source when the `cli` app-server bridge times out or the selected source is unsupported
+- Reset the failure cooldown after a successful refresh so a recovered provider is not held back by an old backoff
 
 ## 0.1.11 — 2026-09-19
 

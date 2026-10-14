@@ -1,5 +1,6 @@
 mod antigravity_auth;
 mod antigravity_oauth_discover;
+mod codex_cost;
 mod config;
 mod cookies;
 mod http;
@@ -248,8 +249,9 @@ Usage:
   codexbar-plasmoid sync-server [--bind <ip>] [--port <n>] [--token <t>] [--data-dir <path>]
 
 Providers:
-  antigravity, commandcode, cursor, devin, grok, opencode, opencodego, all
+  antigravity, codex, commandcode, cursor, devin, grok, opencode, opencodego, all
 Cost (token spend / API $):
+  codex — ~/.codex/sessions/**/*.jsonl + archived_sessions (CODEX_HOME override)
   opencode, opencodego — ~/.local/share/opencode/*.db
   cursor — dashboard usage events (session cookie)
   grok — ~/.grok/sessions/**/updates.jsonl (costUsdTicks or per-model API rates)
