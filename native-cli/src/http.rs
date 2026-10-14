@@ -176,10 +176,13 @@ impl HttpClient {
     }
 }
 
-/// Headers for the new OpenCode console API (`/console/api/*`): the
-/// `__Host-console_session` cookie for auth plus the `x-org-id` workspace
-/// header that every org-scoped route requires (`org_required` otherwise).
-pub fn console_headers(session_value: &str, org_id: &str) -> Result<HeaderMap> {
+/// Headers for the OpenCode console API (`/console/api/*`): the
+/// `__Host-console_session` cookie for auth plus, on org-scoped routes, the
+/// `x-org-id` workspace header those routes require (`org_required` otherwise).
+/// Only the console session is forwarded; the legacy sealed `auth` cookie stays
+/// local. Pass `None` for routes that resolve the workspace themselves
+/// (`/orgs`).
+pub fn console_headers(session_value: &str, org_id: Option<&str>) -> Result<HeaderMap> {
     let mut headers = HeaderMap::new();
     headers.insert(
         COOKIE,
@@ -187,10 +190,12 @@ pub fn console_headers(session_value: &str, org_id: &str) -> Result<HeaderMap> {
             .context("invalid console session cookie")?,
     );
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-    headers.insert(
-        HeaderName::from_static("x-org-id"),
-        HeaderValue::from_str(org_id).context("invalid workspace id")?,
-    );
+    if let Some(org_id) = org_id {
+        headers.insert(
+            HeaderName::from_static("x-org-id"),
+            HeaderValue::from_str(org_id).context("invalid workspace id")?,
+        );
+    }
     Ok(headers)
 }
 
@@ -201,19 +206,5 @@ pub fn cookie_header(value: &str) -> Result<HeaderMap> {
         HeaderValue::from_str(value).context("invalid cookie header")?,
     );
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-    Ok(headers)
-}
-
-/// Headers for the opencode.ai `/console/api/*` SPA backend. The session
-/// cookie (`__Host-console_session`) authenticates the request; scoped
-/// endpoints additionally require the workspace/organisation id.
-pub fn console_api_headers(cookie: &str, org_id: Option<&str>) -> Result<HeaderMap> {
-    let mut headers = cookie_header(cookie)?;
-    if let Some(org) = org_id {
-        headers.insert(
-            "x-org-id",
-            HeaderValue::from_str(org).context("invalid org id header")?,
-        );
-    }
     Ok(headers)
 }
