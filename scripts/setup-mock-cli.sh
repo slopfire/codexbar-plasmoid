@@ -52,6 +52,8 @@ in_1d="$(date -u -d '+1 day' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-
 in_3d="$(date -u -d '+3 days 12 hours' +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "2026-07-30T00:00:00Z")"
 
 # Shape matches real CLI: top-level provider + nested usage / cost fields.
+# `openaiDashboard` is a top-level sibling of `usage`; its days are
+# { day, services: [{ service, creditsUsed }], totalCreditsUsed }.
 usage_json='[
   {
     "provider": "codex",
@@ -65,19 +67,19 @@ usage_json='[
       "updatedAt": "'"$iso_now"'",
       "primary": { "usedPercent": 37, "remainingPercent": 63, "resetsAt": "'"$in_2h"'", "windowMinutes": 300 },
       "secondary": { "usedPercent": 20, "remainingPercent": 80, "resetsAt": "'"$in_1d"'", "windowMinutes": 10080 },
-      "codeReview": { "remainingPercent": 91 },
       "codexResetCredits": {
         "availableCount": 1,
         "nextExpiresAt": "2026-08-12T17:49:58Z",
         "items": [],
         "updatedAt": "'"$iso_now"'"
-      },
-      "openaiDashboard": {
-        "dailyBreakdown": [
-          { "date": "'"$day1"'", "totalTokens": 50000, "costUSD": 1.1 },
-          { "date": "'"$day0"'", "totalTokens": 128000, "costUSD": 2.45 }
-        ]
       }
+    },
+    "openaiDashboard": {
+      "codeReviewRemainingPercent": 91,
+      "dailyBreakdown": [
+        { "day": "'"$day1"'", "services": [ { "service": "codex", "creditsUsed": 1.1 } ], "totalCreditsUsed": 1.1 },
+        { "day": "'"$day0"'", "services": [ { "service": "codex", "creditsUsed": 2.45 } ], "totalCreditsUsed": 2.45 }
+      ]
     },
     "pace": {
       "primary": { "stage": "farBehind", "deltaPercent": -23, "expectedUsedPercent": 60, "willLastToReset": true, "summary": "23% in reserve | Expected 60% used | Lasts until reset" }
@@ -169,8 +171,8 @@ cost_json='[
     "currencyCode": "USD",
     "updatedAt": "'"$iso_now"'",
     "daily": [
-      { "date": "'"$day1"'", "costUSD": 1.1, "totalTokens": 50000, "modelBreakdowns": [ { "name": "gpt-mock", "costUSD": 1.1, "totalTokens": 50000 } ] },
-      { "date": "'"$day0"'", "costUSD": 2.45, "totalTokens": 128000, "modelBreakdowns": [ { "name": "gpt-mock", "costUSD": 2.45, "totalTokens": 128000 } ] }
+      { "date": "'"$day1"'", "totalCost": 1.1, "totalTokens": 50000, "modelBreakdowns": [ { "modelName": "gpt-mock", "cost": 1.1, "totalTokens": 50000 } ] },
+      { "date": "'"$day0"'", "totalCost": 2.45, "totalTokens": 128000, "modelBreakdowns": [ { "modelName": "gpt-mock", "cost": 2.45, "totalTokens": 128000 } ] }
     ]
   },
   {
@@ -182,7 +184,7 @@ cost_json='[
     "currencyCode": "USD",
     "updatedAt": "'"$iso_now"'",
     "daily": [
-      { "date": "'"$day0"'", "costUSD": 0.8, "totalTokens": 40000, "modelBreakdowns": [ { "name": "claude-mock", "costUSD": 0.8, "totalTokens": 40000 } ] }
+      { "date": "'"$day0"'", "totalCost": 0.8, "totalTokens": 40000, "modelBreakdowns": [ { "modelName": "claude-mock", "cost": 0.8, "totalTokens": 40000 } ] }
     ]
   }
 ]'
