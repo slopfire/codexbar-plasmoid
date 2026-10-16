@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compact widget: one provider, its tightest window.
+
+  targetCellWidth/Height are the Android 12+ cell hints; minWidth/minHeight keep
+  the widget usable on older launchers. updatePeriodMillis is the platform
+  minimum (30 minutes) — the widget also refreshes on every tap of its Refresh
+  action and whenever the app refreshes.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="org.slopfire.codexbar.widget.WidgetConfigActivity"
+    android:description="@string/widget_compact_description"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minHeight="60dp"
+    android:minWidth="180dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="1"
+    android:targetCellWidth="3"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />

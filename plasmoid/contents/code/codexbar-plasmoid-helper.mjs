@@ -172,6 +172,12 @@ const syncUrl = clean(args["sync-url"]) || "";
 const syncToken = clean(args["sync-token"]) || "";
 const syncDevice =
   sanitizeSyncDevice(clean(args["sync-device"]) || suggestedDeviceName()) || "plasmoid";
+// "Sync all from server": render the server's merged cross-device state for
+// every provider and skip local fetching entirely, so a credential-less
+// device (or one that should not poll providers) still shows usage. Work is
+// short-circuited in main(); these functions stay available for the normal
+// per-provider remote-source path.
+const syncAllFromServer = args["sync-all"] === "true" || args.syncAll === "true";
 
 const nativeProviders = new Set(["antigravity", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
@@ -258,6 +264,19 @@ function shouldAutoUpdate() {
 async function main() {
   if (args.costWorker === "true" || args["cost-worker"] === "true") {
     runCostWorker();
+    return;
+  }
+
+  if (args.syncTest === "true" || args["sync-test"] === "true") {
+    process.stdout.write(`${JSON.stringify(await testSyncServer())}\n`);
+    return;
+  }
+
+  if (syncAllFromServer) {
+    // Server-state mode owns the whole snapshot: no CLI update, no local
+    // fetches, no publish (there is nothing local to publish).
+    const snapshot = await buildServerOnlySnapshot();
+    process.stdout.write(`${JSON.stringify(snapshot)}\n`);
     return;
   }
 
@@ -1019,6 +1038,39 @@ async function syncHttpRequest(method, urlString, token, timeoutMs, requestBody 
   });
 }
 
+/** Connection check for the settings UI: health (no auth) + device list (auth). */
+async function testSyncServer() {
+  const base = buildSyncUrl();
+  if (!base) {
+    return { ok: false, error: "Sync server URL missing" };
+  }
+  const timeout = Math.min(timeoutMs, 15000);
+  const health = await syncHttpRequest("GET", `${base}/health`, "", timeout);
+  if (!health.ok) {
+    return { ok: false, error: health.error || `Server unreachable (status ${health.status})` };
+  }
+  let version = null;
+  try {
+    version = JSON.parse(health.text)?.version ?? null;
+  } catch {
+    version = null;
+  }
+  const devices = await syncHttpRequest("GET", `${base}/v1/devices`, syncToken, timeout);
+  if (!devices.ok) {
+    const hint = devices.status === 401
+      ? "Server reachable, but the token was rejected"
+      : (devices.error || `Device list failed (status ${devices.status})`);
+    return { ok: false, version, device: syncDevice, error: hint };
+  }
+  let deviceCount = null;
+  try {
+    deviceCount = devices.text ? (JSON.parse(devices.text)?.devices?.length ?? null) : null;
+  } catch {
+    deviceCount = null;
+  }
+  return { ok: true, version, device: syncDevice, deviceCount };
+}
+
 /** Best-effort publish; failures never affect the data the widget renders. */
 async function publishSnapshot(snapshot) {
   const base = buildSyncUrl();
@@ -1089,6 +1141,77 @@ async function fetchRemoteEntries() {
     entries.push(...(await remoteEntriesForProvider(config, base)));
   }
   return entries;
+}
+
+/**
+ * Server-state mode ("Sync all from server"): one snapshot built entirely from
+ * the server's merged cross-device view. `GET /v1/usage` without a provider
+ * filter returns every merged entry, so the widget can show providers this
+ * device never fetched and never touched a credential.
+ */
+async function buildServerOnlySnapshot() {
+  const entries = await fetchAllRemoteEntries();
+  assignStableEntryIds(entries);
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    requestedProvider: "all",
+    entries,
+    costError: null,
+    syncAllFromServer: true,
+  };
+}
+
+async function fetchAllRemoteEntries() {
+  const base = buildSyncUrl();
+  if (!base) {
+    return syncAllErrorEntries("Sync server URL missing");
+  }
+  const response = await syncHttpRequest(
+    "GET",
+    `${base}/v1/usage`,
+    syncToken,
+    Math.min(timeoutMs, 20000),
+  );
+  if (!response.ok) {
+    return syncAllErrorEntries(
+      response.error || `sync server request failed with status ${response.status}`,
+    );
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(response.text);
+  } catch {
+    return syncAllErrorEntries("Sync server returned invalid JSON");
+  }
+  const entries = asArray(parsed?.entries)
+    .map((entry) => (entry && typeof entry === "object" ? normalizeRemoteEntry(entry) : null))
+    .filter((entry) => entry && !entry.error && clean(entry.provider));
+  if (entries.length === 0) {
+    return syncAllErrorEntries("Nothing published on the sync server yet");
+  }
+  return entries;
+}
+
+/**
+ * Explain an empty server-state view with one card per configured provider (or
+ * a single Codex card when nothing is configured) instead of a blank widget.
+ */
+function syncAllErrorEntries(message) {
+  const providers = [];
+  for (const config of effectiveProviderConfigs()) {
+    if (config.enabled === false) {
+      continue;
+    }
+    const id = normalizeProviderId(config.provider);
+    if (id && id !== "demo" && !providers.includes(id)) {
+      providers.push(id);
+    }
+  }
+  if (providers.length === 0) {
+    providers.push("codex");
+  }
+  return providers.map((id) => remoteUsageErrorEntry(id, message));
 }
 
 async function mergeRemoteEntriesIntoSnapshot(snapshot) {
@@ -1178,6 +1301,7 @@ function normalizeRemoteEntry(entry) {
     codeReviewRemainingPercent: entry.codeReviewRemainingPercent ?? null,
     tokenUsage: entry.tokenUsage ?? null,
     dailyUsage: asArray(entry.dailyUsage),
+    historySource: entry.historySource ?? entry.tokenUsage?.historySource ?? null,
   };
   return { ...defaults, ...entry };
 }
@@ -1459,8 +1583,7 @@ function normalizeProvider(item, cost) {
 
   const itemSiteUrl = typeof item.siteUrl === "string" ? item.siteUrl : null;
   const tokenUsage = buildTokenUsage(cost, usage);
-  const limitResetCredits = normalizeLimitResetCredits(usage);
-  // A stale entry is last known good data whose refresh failed. The card keeps
+  const limitResetCredits = normalizeLimitResetCredits(usage);  // A stale entry is last known good data whose refresh failed. The card keeps
   // rendering it and shows a soft retry note instead of a red error; the failed
   // attempt is kept only for the tooltip. Cost refreshes in the background by
   // design, so a stale cost cache must not mark fresh usage limits as stale.
@@ -1486,6 +1609,10 @@ function normalizeProvider(item, cost) {
     codeReviewRemainingPercent: numberOrNull(dashboard.codeReviewRemainingPercent),
     tokenUsage,
     dailyUsage,
+    // Entry-level fallback for the sync-server merge when individual days
+    // predate fingerprints (dashboard dailyBreakdown implies cloud).
+    historySource: tokenUsage?.historySource
+      || (Array.isArray(dashboard.dailyBreakdown) && dashboard.dailyBreakdown.length > 0 ? "cloud" : null),
   };
 }
 
@@ -1556,6 +1683,10 @@ function buildTokenUsage(cost, usage) {
         currencyCode: cost.currencyCode || "USD",
         sessionLabel: cost.sessionLabel || "Today",
         last30DaysLabel: cost.last30DaysLabel || "30d",
+        // Local log scans sum across devices; account-global dashboards
+        // (Cursor) take freshest-wins on the server. The native cost scan
+        // reports source "dashboard" for the latter, "local" otherwise.
+        historySource: clean(cost.source) === "dashboard" ? "cloud" : "local",
       };
     }
   }
@@ -1830,15 +1961,22 @@ function dailyUsagePoints(dashboard, cost) {
         totalTokens: integerOrNull(day.totalTokens),
         costUSD: numberOrNull(day.totalCreditsUsed),
         models: normalizeModelBreakdowns(day.modelBreakdowns || day.models),
+        // Usage dashboards are account-global: every device sees the same
+        // numbers, so the server takes freshest-wins instead of summing.
+        historySource: "cloud",
+        historyFingerprint: clean(day.historyFingerprint || day.fingerprint) || null,
       });
     }
   } else if (cost && !cost.error && (Array.isArray(cost.daily) || cost.last30DaysCostUSD != null || cost.sessionCostUSD != null)) {
     hasSource = true;
+    const costHistorySource = clean(cost.source) === "dashboard" ? "cloud" : "local";
     for (const day of asArray(cost.daily)) {
       mergeDailyPoint(byDay, day.date, {
         totalTokens: integerOrNull(day.totalTokens),
         costUSD: numberOrNull(day.totalCost),
         models: normalizeModelBreakdowns(day.modelBreakdowns || day.models),
+        historySource: costHistorySource,
+        historyFingerprint: clean(day.historyFingerprint || day.fingerprint) || null,
       });
     }
   }
@@ -1862,6 +2000,8 @@ function mergeDailyPoint(byDay, dayKey, next) {
     totalTokens: 0,
     costUSD: 0,
     models: [],
+    historySource: next.historySource || null,
+    historyFingerprint: next.historyFingerprint || null,
   };
   const tokens = next.totalTokens;
   const cost = next.costUSD;
@@ -1872,6 +2012,14 @@ function mergeDailyPoint(byDay, dayKey, next) {
     existing.costUSD = (existing.costUSD || 0) + cost;
   }
   existing.models = mergeModelBreakdowns(existing.models, next.models || []);
+  // Same-device merge of two origins (dashboard + local scan): fingerprints
+  // only survive when both sides agree; sources survive when they agree.
+  if ((existing.historyFingerprint || null) !== (next.historyFingerprint || null)) {
+    existing.historyFingerprint = null;
+  }
+  if ((existing.historySource || null) !== (next.historySource || null)) {
+    existing.historySource = null;
+  }
   byDay.set(key, existing);
 }
 
@@ -1929,6 +2077,8 @@ function padLast30Days(byDay) {
       costUSD: existing?.costUSD ?? 0,
       models: existing?.models || [],
       limitResets: [],
+      ...(existing?.historyFingerprint ? { historyFingerprint: existing.historyFingerprint } : {}),
+      ...(existing?.historySource ? { historySource: existing.historySource } : {}),
     });
   }
   return days;

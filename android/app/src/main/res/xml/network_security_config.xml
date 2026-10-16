@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP is required because the CodexBar sync server is a self-hosted,
+  plain-HTTP endpoint that the user points the app at (a LAN or Tailscale
+  address such as http://10.0.0.5:8188). The bearer token plus the private
+  network are the security boundary here, not TLS.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

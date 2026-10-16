@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CodexBar</string>
+
+    <!-- Sync server settings -->
+    <string name="server_settings_title">Sync server</string>
+    <string name="server_url_label">Server URL</string>
+    <string name="server_url_hint">http://10.0.0.5:8188</string>
+    <string name="server_token_label">Access token</string>
+    <string name="server_connect">Connect</string>
+    <string name="server_disconnect">Disconnect</string>
+
+    <!-- Usage -->
+    <string name="usage_title">Usage</string>
+    <string name="action_refresh">Refresh</string>
+
+    <!-- Devices -->
+    <string name="devices_title">Devices</string>
+    <string name="forget_device">Forget device</string>
+
+    <!-- Errors -->
+    <string name="error_network">Could not reach the sync server.</string>
+    <string name="error_unauthorized">The access token was rejected.</string>
+
+    <!-- Home screen widgets -->
+    <string name="widget_compact_label">CodexBar usage</string>
+    <string name="widget_compact_description">The provider closest to running out, with its remaining limit and pace.</string>
+    <string name="widget_providers_label">CodexBar providers</string>
+    <string name="widget_providers_description">Every merged provider, tightest limit first.</string>
+    <string name="widget_spend_label">CodexBar spend</string>
+    <string name="widget_spend_description">Local token cost for today and the trailing 30 days.</string>
+</resources>

@@ -1,0 +1,3 @@
+# Keep Windows batch wrappers usable: store LF, check out CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -58,6 +58,15 @@ PlasmoidItem {
                 foundAll = foundAll || choices[index].kind === "all";
             }
             if (foundActive && foundDetected && foundAll) {
+                // The "Sync all from server" toggle must round-trip through the
+                // page property so KConfigXT persists it on Apply.
+                page.cfg_syncAllFromServer = true;
+                if (page.cfg_syncAllFromServer !== true) {
+                    console.error("CONFIG_SMOKE_FAIL sync-all toggle did not round-trip");
+                    Qt.quit();
+                    return;
+                }
+                page.cfg_syncAllFromServer = false;
                 harness.resultRecorded = true;
                 resultMarker.connectSource("/usr/bin/touch /tmp/codexbar-config-smoke.pass");
                 return;

@@ -55,6 +55,10 @@ pub fn run_sync_server(args: &HashMap<String, String>) -> Result<()> {
     fs::create_dir_all(&config.data_dir)
         .with_context(|| format!("create sync data dir {}", config.data_dir.display()))?;
     let token = resolve_token(args, &config.data_dir)?;
+    if args.contains_key("show-token") {
+        println!("{token}");
+        return Ok(());
+    }
     print_startup(&config, &token);
     let snapshots = snapshots_dir(&config.data_dir);
     fs::create_dir_all(&snapshots)
@@ -426,6 +430,7 @@ fn route(
         ("GET", "/v1/usage") => handle_get_usage(request, config),
         ("GET", "/v1/devices") => handle_get_devices(config),
         ("PUT", path) => handle_put_snapshot(path, request, config),
+        ("DELETE", path) => handle_delete_snapshot(path, config),
         _ => (405, json!({"ok": false, "error": "method not allowed"})),
     }
 }
@@ -530,6 +535,32 @@ fn validate_snapshot(payload: &Value) -> Result<(), String> {
         return Err("entries must all be objects".to_string());
     }
     Ok(())
+}
+
+/// DELETE /v1/snapshot/<device-id> — forget one device (rename/reinstall
+/// cleanup). Missing devices still return ok so retries stay idempotent.
+fn handle_delete_snapshot(path: &str, config: &Arc<SyncServerConfig>) -> (u16, Value) {
+    let raw_device = path.strip_prefix("/v1/snapshot/").unwrap_or("");
+    let device = match sanitize_device_id(&percent_decode(raw_device)) {
+        Some(device) => device,
+        None => {
+            return (
+                422,
+                json!({"ok": false, "error": "invalid device id (use letters, digits, . _ -, max 64 chars)"}),
+            )
+        }
+    };
+    let target = snapshot_path(&snapshots_dir(&config.data_dir), &device);
+    match fs::remove_file(&target) {
+        Ok(()) => (200, json!({"ok": true, "device": device, "removed": true})),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            (200, json!({"ok": true, "device": device, "removed": false}))
+        }
+        Err(error) => (
+            500,
+            json!({"ok": false, "error": format!("remove snapshot: {error:#}")}),
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -737,11 +768,7 @@ fn merge_entry_group(contributions: &[Contribution]) -> Value {
     }
 
     let mut merged = chosen.entry.clone();
-    let merged_daily = merge_daily_usage(
-        contributions
-            .iter()
-            .map(|contribution| &contribution.entry["dailyUsage"]),
-    );
+    let merged_daily = merge_daily_usage(contributions);
     if !merged_daily.is_empty() {
         merged["dailyUsage"] = Value::Array(merged_daily);
     }
@@ -775,10 +802,34 @@ fn merge_entry_group(contributions: &[Contribution]) -> Value {
 /// Sum contributions of the same day across devices; model breakdowns merge
 /// by name (mirrors the helper's mergeModelBreakdowns) and per-day reset
 /// annotations union across publishers.
-fn merge_daily_usage<'a>(usages: impl Iterator<Item = &'a Value>) -> Vec<Value> {
+///
+/// Dedup: days that carry the same non-empty `historyFingerprint` on every
+/// contributor were built from identical rows (same synced log dir, same
+/// Cursor dashboard page) and are counted once (freshest wins) instead of
+/// summed. Days whose every known source is `cloud` (Cursor dashboard,
+/// usage-dashboards) are account-global and also take freshest-wins.
+/// Anything else (distinct local sessions, legacy payloads without
+/// fingerprints) keeps the historical sum behavior.
+fn merge_daily_usage(contributions: &[Contribution]) -> Vec<Value> {
+    // dayKey -> per-device day contributions
     let mut by_day: Map<String, Value> = Map::new();
-    for usage in usages {
-        let Some(rows) = usage.as_array() else {
+    // dayKey -> day contributions for merge decisions (kept outside the JSON
+    // map so timestamps/sources survive grouping).
+    let mut day_notes: HashMap<String, Vec<DayContribution>> = HashMap::new();
+    for contribution in contributions {
+        let entry_source = contribution
+            .entry
+            .get("historySource")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                contribution
+                    .entry
+                    .pointer("/tokenUsage/historySource")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        let Some(rows) = contribution.entry.get("dailyUsage").and_then(Value::as_array) else {
             continue;
         };
         for row in rows {
@@ -788,7 +839,30 @@ fn merge_daily_usage<'a>(usages: impl Iterator<Item = &'a Value>) -> Vec<Value> 
             let Some(day_key) = row["dayKey"].as_str() else {
                 continue;
             };
-            let slot = by_day.entry(day_key.to_string()).or_insert_with(|| {
+            let fingerprint = row
+                .get("historyFingerprint")
+                .or_else(|| row.get("fingerprint"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .filter(|value| !value.is_empty());
+            let source = row
+                .get("historySource")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| entry_source.clone());
+            day_notes
+                .entry(day_key.to_string())
+                .or_default()
+                .push(DayContribution {
+                    fingerprint,
+                    source,
+                    updated_at: contribution.updated_at,
+                    received_at: contribution.received_at,
+                    row: row.clone(),
+                });
+            // Seed the JSON slot so every observed day appears even when a
+            // contributor omits totals.
+            by_day.entry(day_key.to_string()).or_insert_with(|| {
                 json!({
                     "dayKey": day_key,
                     "totalTokens": 0,
@@ -797,16 +871,55 @@ fn merge_daily_usage<'a>(usages: impl Iterator<Item = &'a Value>) -> Vec<Value> 
                     "limitResets": [],
                 })
             });
-            slot["totalTokens"] = number_value(
-                slot["totalTokens"].as_f64().unwrap_or(0.0)
-                    + row["totalTokens"].as_f64().unwrap_or(0.0),
-            );
-            slot["costUSD"] = json!(round_usd(
-                slot["costUSD"].as_f64().unwrap_or(0.0) + row["costUSD"].as_f64().unwrap_or(0.0)
-            ));
-            merge_models(&mut slot["models"], &row["models"]);
-            union_limit_resets(&mut slot["limitResets"], &row["limitResets"]);
         }
+    }
+    for (day_key, notes) in &day_notes {
+        let Some(slot) = by_day.get_mut(day_key) else {
+            continue;
+        };
+        if all_fingerprints_equal(notes) || all_sources_cloud(notes) {
+            // Identical underlying rows, or account-global cloud data:
+            // freshest contributor wins, resets still union.
+            let mut best = &notes[0];
+            for candidate in &notes[1..] {
+                if (candidate.updated_at, candidate.received_at)
+                    > (best.updated_at, best.received_at)
+                {
+                    best = candidate;
+                }
+            }
+            slot["totalTokens"] =
+                number_value(best.row["totalTokens"].as_f64().unwrap_or(0.0));
+            slot["costUSD"] = json!(round_usd(best.row["costUSD"].as_f64().unwrap_or(0.0)));
+            slot["models"] = best.row.get("models").cloned().unwrap_or(json!([]));
+            if let Some(fingerprint) = day_fingerprint(&best.row) {
+                slot["historyFingerprint"] = Value::String(fingerprint);
+            }
+            if let Some(source) = day_source(&best.row, contributions, day_key) {
+                slot["historySource"] = Value::String(source);
+            }
+            let mut resets = json!([]);
+            for note in notes {
+                union_limit_resets(&mut resets, &note.row["limitResets"]);
+            }
+            slot["limitResets"] = resets;
+            continue;
+        }
+        // Distinct local sessions (or legacy payloads): sum.
+        let mut total_tokens = 0.0;
+        let mut total_cost = 0.0;
+        let mut models = json!([]);
+        let mut resets = json!([]);
+        for note in notes {
+            total_tokens += note.row["totalTokens"].as_f64().unwrap_or(0.0);
+            total_cost += note.row["costUSD"].as_f64().unwrap_or(0.0);
+            merge_models(&mut models, &note.row["models"]);
+            union_limit_resets(&mut resets, &note.row["limitResets"]);
+        }
+        slot["totalTokens"] = number_value(total_tokens);
+        slot["costUSD"] = json!(round_usd(total_cost));
+        slot["models"] = models;
+        slot["limitResets"] = resets;
     }
     let mut merged: Vec<Value> = by_day.into_values().collect();
     merged.sort_by(|left, right| {
@@ -816,6 +929,58 @@ fn merge_daily_usage<'a>(usages: impl Iterator<Item = &'a Value>) -> Vec<Value> 
             .cmp(right["dayKey"].as_str().unwrap_or(""))
     });
     merged
+}
+
+struct DayContribution {
+    fingerprint: Option<String>,
+    source: Option<String>,
+    updated_at: DateTime<Utc>,
+    received_at: DateTime<Utc>,
+    row: Value,
+}
+
+fn all_fingerprints_equal(notes: &[DayContribution]) -> bool {
+    if notes.is_empty() {
+        return false;
+    }
+    let Some(first) = notes[0].fingerprint.as_deref() else {
+        return false;
+    };
+    notes
+        .iter()
+        .all(|note| note.fingerprint.as_deref() == Some(first))
+}
+
+fn all_sources_cloud(notes: &[DayContribution]) -> bool {
+    if notes.is_empty() {
+        return false;
+    }
+    let mut known = 0;
+    for note in notes {
+        match note.source.as_deref() {
+            Some("cloud") => known += 1,
+            // A known-local contributor means device-local sessions: sum.
+            Some(_) => return false,
+            // Unknown sources keep legacy sum behavior unless every known
+            // source is cloud (mixed known-cloud + unknown still sums).
+            None => return false,
+        }
+    }
+    known > 0
+}
+
+fn day_fingerprint(row: &Value) -> Option<String> {
+    row.get("historyFingerprint")
+        .or_else(|| row.get("fingerprint"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|value| !value.is_empty())
+}
+
+fn day_source(row: &Value, _contributions: &[Contribution], _day_key: &str) -> Option<String> {
+    row.get("historySource")
+        .and_then(Value::as_str)
+        .map(str::to_string)
 }
 
 /// Integer-ish sums stay JSON integers so numeric comparisons in readers see
@@ -1190,6 +1355,136 @@ mod tests {
             merged["costError"],
             "OpenCode not found | Cursor cookie missing"
         );
+    }
+
+    #[test]
+    fn identical_fingerprints_dedup_instead_of_sum() {
+        let day = |fingerprint: &str, tokens: i64, cost: f64| {
+            json!({
+                "dayKey": "2026-09-30",
+                "totalTokens": tokens,
+                "costUSD": cost,
+                "models": [],
+                "historyFingerprint": fingerprint,
+                "historySource": "local",
+            })
+        };
+        let alpha = snapshot(
+            "alpha",
+            "2026-09-30T10:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "codex",
+                    "account": "user@example.com",
+                    "updatedAt": "2026-09-30T09:55:00Z",
+                    "historySource": "local",
+                    "dailyUsage": [day("fp-1", 1000, 2.0)],
+                }],
+            }),
+        );
+        let beta = snapshot(
+            "beta",
+            "2026-09-30T11:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "codex",
+                    "account": "user@example.com",
+                    "updatedAt": "2026-09-30T10:55:00Z",
+                    "historySource": "local",
+                    "dailyUsage": [day("fp-1", 1000, 2.0)],
+                }],
+            }),
+        );
+        let merged = merge_snapshots(&[alpha, beta]);
+        let entry = &merged["entries"].as_array().unwrap()[0];
+        let day = entry["dailyUsage"].as_array().unwrap().iter().find(|row| row["dayKey"] == "2026-09-30").unwrap();
+        assert_eq!(day["totalTokens"], 1000, "identical synced logs count once");
+        assert_eq!(day["costUSD"], 2.0);
+    }
+
+    #[test]
+    fn distinct_fingerprints_still_sum() {
+        let alpha = snapshot(
+            "alpha",
+            "2026-09-30T10:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "codex",
+                    "account": "user@example.com",
+                    "updatedAt": "2026-09-30T09:55:00Z",
+                    "historySource": "local",
+                    "dailyUsage": [
+                        {"dayKey": "2026-09-30", "totalTokens": 1000, "costUSD": 2.0,
+                         "models": [], "historyFingerprint": "fp-a", "historySource": "local"},
+                    ],
+                }],
+            }),
+        );
+        let beta = snapshot(
+            "beta",
+            "2026-09-30T11:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "codex",
+                    "account": "user@example.com",
+                    "updatedAt": "2026-09-30T10:55:00Z",
+                    "historySource": "local",
+                    "dailyUsage": [
+                        {"dayKey": "2026-09-30", "totalTokens": 500, "costUSD": 1.0,
+                         "models": [], "historyFingerprint": "fp-b", "historySource": "local"},
+                    ],
+                }],
+            }),
+        );
+        let merged = merge_snapshots(&[alpha, beta]);
+        let entry = &merged["entries"].as_array().unwrap()[0];
+        let day = entry["dailyUsage"].as_array().unwrap().iter().find(|row| row["dayKey"] == "2026-09-30").unwrap();
+        assert_eq!(day["totalTokens"], 1500, "distinct sessions sum");
+        assert_eq!(day["costUSD"], 3.0);
+    }
+
+    #[test]
+    fn cloud_history_takes_freshest_not_sum() {
+        let alpha = snapshot(
+            "alpha",
+            "2026-09-30T10:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "cursor",
+                    "account": "",
+                    "updatedAt": "2026-09-30T09:55:00Z",
+                    "historySource": "cloud",
+                    "tokenUsage": {"historyCoverageIsEstablished": true},
+                    "dailyUsage": [
+                        {"dayKey": "2026-09-30", "totalTokens": 1000, "costUSD": 5.0,
+                         "models": [], "historySource": "cloud"},
+                    ],
+                }],
+            }),
+        );
+        let beta = snapshot(
+            "beta",
+            "2026-09-30T11:00:00Z",
+            json!({
+                "entries": [{
+                    "provider": "cursor",
+                    "account": "",
+                    "updatedAt": "2026-09-30T10:55:00Z",
+                    "historySource": "cloud",
+                    "tokenUsage": {"historyCoverageIsEstablished": true},
+                    "dailyUsage": [
+                        {"dayKey": "2026-09-30", "totalTokens": 1200, "costUSD": 6.0,
+                         "models": [], "historySource": "cloud"},
+                    ],
+                }],
+            }),
+        );
+        let merged = merge_snapshots(&[alpha, beta]);
+        let entry = &merged["entries"].as_array().unwrap()[0];
+        let day = entry["dailyUsage"].as_array().unwrap().iter().find(|row| row["dayKey"] == "2026-09-30").unwrap();
+        assert_eq!(day["totalTokens"], 1200, "cloud dashboard is account-global: freshest wins");
+        assert_eq!(day["costUSD"], 6.0);
+        assert_eq!(entry["tokenUsage"]["last30DaysTokens"], 1200);
     }
 
     #[test]

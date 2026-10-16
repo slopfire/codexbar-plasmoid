@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Modern (API 31+) backup/transfer rules. codexbar-sync.xml holds the sync
+  server bearer token, so it is excluded from both cloud backup and
+  device-to-device transfer.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="codexbar-sync.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="codexbar-sync.xml" />
+    </device-transfer>
+</data-extraction-rules>

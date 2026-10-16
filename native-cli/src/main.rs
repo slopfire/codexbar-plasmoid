@@ -246,7 +246,7 @@ Usage:
   codexbar-plasmoid cost --format json --json-only --provider <id>
   codexbar-plasmoid login --provider antigravity [--manual] [--no-browser] [--port <n>] [--timeout <seconds>]
   codexbar-plasmoid logout --provider antigravity [--account <email>] [--all]
-  codexbar-plasmoid sync-server [--bind <ip>] [--port <n>] [--token <t>] [--data-dir <path>]
+  codexbar-plasmoid sync-server [--bind <ip>] [--port <n>] [--token <t>] [--data-dir <path>] [--show-token]
 
 Providers:
   antigravity, codex, commandcode, cursor, devin, grok, opencode, opencodego, all

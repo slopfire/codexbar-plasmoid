@@ -10,6 +10,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Add a self-hosted sync server (`codexbar-plasmoid sync-server`): widgets publish their locally fetched usage snapshots, and the server merges them per (provider, account) with cross-device daily cost/history totals
 - Publish locally fetched entries to the sync server after each refresh (best effort, failures never interrupt rendering) — filter them behind General → Sync server
 - New provider source **Sync server**: a widget without provider credentials can render the merged cross-device data (never sends credentials anywhere; publishes exclude remote-sourced entries so server data cannot loop back)
+- Add a **Sync all from the server** mode on the Providers page: every provider renders the server's merged cross-device state and the widget skips local fetching entirely (no CLI, no cost scan, no publish). The per-provider list grays out because sources, accounts, and enabled flags no longer apply
 
 ### Improvements
 
@@ -20,6 +21,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 
 ### Fixes
 
+- Install the sync server binary where its systemd unit looks for it: `scripts/install-sync-server.sh` builds `native-cli` into `~/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid` and installs the unit. The shipped unit pointed at a path no installer created, so `codexbar-sync-server.service` exited `203/EXEC` in a restart loop and every widget showed `ECONNREFUSED` on the sync port
 - Scan Codex cost natively in the bundled Rust binary instead of the upstream CLI, which segfaults walking Codex history on Linux; one upstream `codexbar cost --provider codex` attempt remains as fallback when the native scan is missing or fails, and a cost failure still surfaces as `costError` without dropping usage
 - Scan cost in a detached worker instead of on the render path: a full Codex cost walk takes 60-120s, so the previous inline scan either blocked every refresh or was killed at the request timeout and reported as a cost error
 - Stop caching a failed refresh for the whole usage or cost window; a transient failure now opens only a short cooldown, so a provider that recovers is picked up on the next refresh

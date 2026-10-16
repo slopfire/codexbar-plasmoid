@@ -57,6 +57,13 @@ pub struct DailyCostPoint {
     pub total_tokens: i64,
     #[serde(rename = "modelBreakdowns")]
     pub model_breakdowns: Vec<ModelCostPoint>,
+    /// Dedup key for sync-server merges: sha1 over the sorted per-row keys
+    /// that built this day. Identical dirs polled from two devices (or the
+    /// same Cursor dashboard events) share a fingerprint, so the server
+    /// counts the day once instead of summing it twice. Absent for legacy
+    /// payloads, which merge with the old sum behavior.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_fingerprint: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -842,8 +849,8 @@ pub(crate) fn snapshot_from_rows(
     let mut session_tokens: i64 = 0;
     let mut last30_cost = 0.0;
     let mut last30_tokens: i64 = 0;
-    // day -> (total_cost, total_tokens, model -> (cost, tokens))
-    let mut daily: BTreeMap<String, (f64, i64, BTreeMap<String, (f64, i64)>)> = BTreeMap::new();
+    // day -> (total_cost, total_tokens, model -> (cost, tokens), row keys)
+    let mut daily: BTreeMap<String, (f64, i64, BTreeMap<String, (f64, i64)>, Vec<String>)> = BTreeMap::new();
 
     for row in rows {
         if row.created_ms >= day_start && row.created_ms <= now_ms {
@@ -860,9 +867,10 @@ pub(crate) fn snapshot_from_rows(
                 .unwrap_or_else(|| "unknown".to_string());
             let entry = daily
                 .entry(day_key)
-                .or_insert_with(|| (0.0, 0, BTreeMap::new()));
+                .or_insert_with(|| (0.0, 0, BTreeMap::new(), Vec::new()));
             entry.0 += row.cost;
             entry.1 += row.tokens;
+            entry.3.push(fingerprint_row_key(row));
             if let Some(model) = row
                 .model
                 .as_deref()
@@ -878,7 +886,7 @@ pub(crate) fn snapshot_from_rows(
 
     let daily_points: Vec<DailyCostPoint> = daily
         .into_iter()
-        .map(|(date, (total_cost, total_tokens, models))| {
+        .map(|(date, (total_cost, total_tokens, models, keys))| {
             let mut model_breakdowns: Vec<ModelCostPoint> = models
                 .into_iter()
                 .map(|(model_name, (cost, tokens))| ModelCostPoint {
@@ -899,6 +907,7 @@ pub(crate) fn snapshot_from_rows(
                 total_cost: round_money(total_cost),
                 total_tokens,
                 model_breakdowns,
+                history_fingerprint: Some(fingerprint_days(&keys)),
             }
         })
         .collect();
@@ -930,6 +939,33 @@ pub(crate) fn round_money(value: f64) -> f64 {
         return 0.0;
     }
     (value * 1_000_000.0).round() / 1_000_000.0
+}
+
+/// Stable per-row identity for history dedup: timestamp + exact cost bits +
+/// tokens + model. Two devices scanning the same files (or the same Cursor
+/// dashboard page) produce identical keys; distinct sessions do not.
+fn fingerprint_row_key(row: &CostRow) -> String {
+    let model = row.model.as_deref().unwrap_or("").trim();
+    format!(
+        "{}|{}|{}|{}",
+        row.created_ms,
+        row.cost.to_bits(),
+        row.tokens,
+        model
+    )
+}
+
+/// sha1 hex over sorted row keys (sha1 crate is already a dependency).
+fn fingerprint_days(keys: &[String]) -> String {
+    use sha1::{Digest, Sha1};
+    let mut sorted = keys.to_vec();
+    sorted.sort();
+    let mut hasher = Sha1::new();
+    for key in &sorted {
+        hasher.update(key.as_bytes());
+        hasher.update(b"\n");
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 const MESSAGE_COST_SQL_ALL: &str = r#"
@@ -969,8 +1005,7 @@ mod tests {
     use std::io::Write;
 
     #[test]
-    fn aggregates_today_and_window() {
-        let now = Utc.with_ymd_and_hms(2026, 7, 23, 12, 0, 0).unwrap();
+    fn aggregates_today_and_window() {        let now = Utc.with_ymd_and_hms(2026, 7, 23, 12, 0, 0).unwrap();
         let day_ms = start_of_utc_day(now).timestamp_millis();
         let rows = vec![
             CostRow {
@@ -1254,5 +1289,30 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].tokens, 120);
         assert!((rows[0].cost - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn identical_rows_share_fingerprint() {
+        let now = Utc.with_ymd_and_hms(2026, 7, 23, 12, 0, 0).unwrap();
+        let day_ms = start_of_utc_day(now).timestamp_millis();
+        let row = || CostRow {
+            created_ms: day_ms + 60_000,
+            cost: 1.25,
+            tokens: 1000,
+            model: Some("model-a".to_string()),
+        };
+        let first = snapshot_from_rows("opencode", "local", &[row()], now);
+        let second = snapshot_from_rows("opencode", "local", &[row()], now);
+        let third = snapshot_from_rows(
+            "opencode",
+            "local",
+            &[CostRow { tokens: 999, ..row() }],
+            now,
+        );
+        let fp = |snapshot: &CostSnapshot| {
+            snapshot.daily[0].history_fingerprint.clone().expect("fingerprint")
+        };
+        assert_eq!(fp(&first), fp(&second), "same rows hash equal");
+        assert_ne!(fp(&first), fp(&third), "different rows hash different");
     }
 }

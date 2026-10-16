@@ -170,5 +170,9 @@
       <label>Device id used when publishing to the sync server</label>
       <default></default>
     </entry>
+    <entry name="syncAllFromServer" type="Bool">
+      <label>Pull every provider from the sync server and ignore local fetching</label>
+      <default>false</default>
+    </entry>
   </group>
 </kcfg>

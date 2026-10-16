@@ -17,6 +17,7 @@ Kirigami.ScrollablePage {
     property string cfg_selectedEntryIds: "[]"
     property string cfg_selectedProviders: "[]"
     property string cfg_compactBarCatalog: "{}"
+    property bool cfg_syncAllFromServer: false
 
     ColumnLayout {
         width: page.availableWidth

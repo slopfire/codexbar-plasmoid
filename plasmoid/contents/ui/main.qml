@@ -177,6 +177,7 @@ PlasmoidItem {
                 "--sync-url", quote(plasmoid.configuration.syncServerUrl || ""),
                 "--sync-token", quote(plasmoid.configuration.syncServerToken || ""),
                 "--sync-device", quote(plasmoid.configuration.syncDeviceName || ""),
+                "--sync-all", quote(plasmoid.configuration.syncAllFromServer ? "true" : "false"),
                 "--force", quote(forceRefresh ? "true" : "false")
             ];
             return parts.join(" ");
@@ -1458,6 +1459,47 @@ PlasmoidItem {
         return "";
     }
 
+    function syncStatusIsError() {
+        const publish = root.snapshot && root.snapshot.publish;
+        return Boolean(publish && publish.ok === false && !publish.skipped);
+    }
+
+    // Publish failures plus cross-device provenance for remote rows, so a
+    // misconfigured URL/token and multi-device merges are visible inline.
+    function syncStatusLabel() {
+        const publish = root.snapshot && root.snapshot.publish;
+        if (publish && publish.ok === false && !publish.skipped) {
+            return i18n("Sync publish failed: %1", publish.error || i18n("unknown error"));
+        }
+        const entries = (root.snapshot && root.snapshot.entries) || [];
+        let remoteCount = 0;
+        let deviceNames = [];
+        for (let index = 0; index < entries.length; index += 1) {
+            const devices = entries[index] && entries[index].remoteDevices;
+            if (devices && devices.length > 1) {
+                remoteCount += 1;
+                for (let j = 0; j < devices.length; j += 1) {
+                    const name = devices[j] && devices[j].device;
+                    if (name && deviceNames.indexOf(name) === -1) {
+                        deviceNames.push(name);
+                    }
+                }
+            }
+        }
+        if (remoteCount > 0) {
+            return i18n("Merged from %1 (%2 provider(s))", deviceNames.join(", "), remoteCount);
+        }
+        if (plasmoid.configuration.syncAllFromServer) {
+            // Only claim server state when the server actually answered; when
+            // it did not, the error cards carry the reason instead.
+            const hasServerData = entries.some(function(entry) {
+                return entry && !entry.error;
+            });
+            return hasServerData ? i18n("Showing merged state from the sync server") : "";
+        }
+        return "";
+    }
+
     function tooltipText() {
         if (loading) {
             return i18n("Refreshing");
@@ -1711,6 +1753,16 @@ PlasmoidItem {
                 color: Kirigami.Theme.disabledTextColor
                 font: Kirigami.Theme.smallFont
                 horizontalAlignment: Text.AlignRight
+            }
+
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                Layout.margins: Kirigami.Units.smallSpacing
+                visible: root.syncStatusLabel().length > 0
+                text: root.syncStatusLabel()
+                color: root.syncStatusIsError() ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+                font: Kirigami.Theme.smallFont
+                wrapMode: Text.Wrap
             }
         }
     }

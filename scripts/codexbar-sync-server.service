@@ -1,0 +1,40 @@
+[Unit]
+Description=CodexBar plasmoid sync server (cross-device usage merge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Run on an always-on machine (NAS, home server). The widget publishes to
+# this over HTTP with a bearer token; put it behind Tailscale/WireGuard or a
+# reverse proxy rather than exposing it directly.
+#
+# Install (builds the Rust binary into the managed bin dir, copies this unit,
+# enables and starts it):
+#   scripts/install-sync-server.sh
+#
+# Or by hand, after `scripts/build-native-cli.sh` and
+# `install -m 755 native-cli/target/release/codexbar-plasmoid \
+#   ~/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid`:
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/codexbar-sync-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now codexbar-sync-server
+#
+# ExecStart below must point at the native-cli build, not at the managed
+# `codexbar` the widget auto-updates into the same bin dir: that binary has no
+# `sync-server` command, and a path that is not installed at all fails the unit
+# with status=203/EXEC.
+#
+# Token: pass --token explicitly, set CODEXBAR_SYNC_TOKEN, or read the
+# generated one with:
+#   codexbar-plasmoid sync-server --show-token
+ExecStart=%h/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid sync-server --bind 127.0.0.1 --port 8188
+Restart=on-failure
+RestartSec=5
+# Token via EnvironmentFile (preferred over the command line, which leaks
+# into `ps`): add  CODEXBAR_SYNC_TOKEN=<secret>  to
+# ~/.config/codexbar-sync-server.env with mode 0600.
+EnvironmentFile=-%h/.config/codexbar-sync-server.env
+
+[Install]
+WantedBy=default.target

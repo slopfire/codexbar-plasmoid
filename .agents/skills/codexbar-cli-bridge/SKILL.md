@@ -65,6 +65,18 @@ Sync server flags (all optional; empty values are ignored):
   spawning the CLI/native fetchers for that provider.
 - `--sync-token <token>` — bearer token for both publish and remote reads.
 - `--sync-device <id>` — device id for publications (default: hostname, sanitized).
+- `--sync-test true` — connection check for the settings UI (no `usage`/`cost`
+  scan): `GET <base>/health` then `GET <base>/v1/devices`, one JSON line
+  `{ok, version, device, deviceCount, error}`. The General page's Test
+  Connection button runs this via the executable DataSource engine.
+- `--sync-all true` — "Sync all from the server" mode (Providers page toggle).
+  The helper short-circuits before any local work: no CLI update, no
+  `usage`/`cost` scan, no publish. It calls `GET <base>/v1/usage` with no
+  provider filter and returns every merged entry as the snapshot (marker
+  `syncAllFromServer: true`), so a credential-less device shows the server's
+  cross-device state. When the URL is missing, unreachable, or unpublished it
+  returns one explanatory error card per configured provider instead of a blank
+  widget.
 
 Publish rules: only entries without `error` and only providers this device
 fetches locally fly to the server, so server-sourced data can never loop back
@@ -73,6 +85,17 @@ return the server's already-normalized merged entries (each carries
 `remoteDevices` provenance); they replace any local cards for the same
 provider and skip the local cost scan for that provider, since history totals
 are merged server-side.
+
+History dedup: native cost scans stamp each day with `historyFingerprint`
+(sha1 over the sorted per-row keys) and entries carry `historySource`
+(`cloud` for Cursor dashboard / usage-dashboards, `local` otherwise; days
+carry the same per-day `historySource`). The server counts a day once when
+every contributor shares one fingerprint, takes freshest-wins for all-cloud
+days, and sums otherwise (legacy payloads without fingerprints keep the old
+sum). Server routes: `GET /health`, `PUT /v1/snapshot/<device>`,
+`DELETE /v1/snapshot/<device>` (idempotent forget), `GET /v1/usage`,
+`GET /v1/devices`. `sync-server --show-token` prints the effective token
+without serving.
 
 Always keep helper output as one JSON object on stdout. Even failures should be normalized to JSON so QML can render an error instead of failing to parse.
 
@@ -190,10 +213,12 @@ The helper should output:
         "last30DaysTokens": 2180000,
         "provenance": "listPriceEstimate",
         "historyCoverageIsEstablished": false,
+        "historySource": "local",
         "currencyCode": "USD",
         "sessionLabel": "Today",
         "last30DaysLabel": "30d"
       },
+      "historySource": "local",
       "dailyUsage": [
         {
           "dayKey": "2026-06-10",
@@ -202,6 +227,8 @@ The helper should output:
           "models": [
             { "name": "gpt-5.6-sol", "costUSD": 2.45, "totalTokens": 128000 }
           ],
+          "historyFingerprint": "sha1-hex-of-day-rows",
+          "historySource": "local",
           "limitResets": [
             { "title": "Weekly", "percentLeft": 35, "resetsAt": "2026-06-10T12:00:00Z" }
           ]

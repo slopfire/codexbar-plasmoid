@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Legacy (API 23-30) full-backup rules. codexbar-sync.xml holds the sync
+  server bearer token, so it is never included in cloud backups.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="codexbar-sync.xml" />
+</full-backup-content>

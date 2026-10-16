@@ -201,6 +201,83 @@ fn publish_then_merged_read_over_http() {
         .unwrap();
     assert_eq!(bad_device.status().as_u16(), 422);
 
+    // DELETE forgets a device; repeat deletes stay ok (idempotent).
+    for _ in 0..2 {
+        let deleted = http
+            .delete(format!("{base}/v1/snapshot/unit-a"))
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .send()
+            .unwrap();
+        assert_eq!(deleted.status().as_u16(), 200);
+    }
+    let listing: serde_json::Value = http
+        .get(format!("{base}/v1/devices"))
+        .header("Authorization", format!("Bearer {TOKEN}"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(listing["devices"].as_array().unwrap().len(), 1);
+
     // All asserted — remove the temp data dir.
+    std::fs::remove_dir_all(&data_dir).expect("clean test data dir");
+}
+
+#[test]
+fn identical_fingerprints_dedup_over_http() {
+    let (_guard, socket, data_dir) = spawn_server();
+    let base = format!("http://{socket}");
+    let http = client();
+    let day = |fingerprint: &str, tokens: i64, cost: f64| {
+        serde_json::json!({
+            "dayKey": "2026-09-30",
+            "totalTokens": tokens,
+            "costUSD": cost,
+            "models": [],
+            "historyFingerprint": fingerprint,
+            "historySource": "local",
+        })
+    };
+    for (device, stamp) in [("dup-a", "2026-09-30T09:00:00Z"), ("dup-b", "2026-09-30T10:00:00Z")] {
+        let payload = serde_json::json!({
+            "ok": true,
+            "generatedAt": stamp,
+            "requestedProvider": "all",
+            "entries": [{
+                "provider": "codex",
+                "account": "unit@example.com",
+                "source": "native",
+                "updatedAt": stamp,
+                "rows": [],
+                "historySource": "local",
+                "dailyUsage": [day("same-fp", 1000, 2.0)],
+            }],
+            "costError": null,
+        });
+        let put = http
+            .put(format!("{base}/v1/snapshot/{device}"))
+            .header("Authorization", format!("Bearer {TOKEN}"))
+            .header("Content-Type", "application/json")
+            .body(payload.to_string())
+            .send()
+            .unwrap();
+        assert_eq!(put.status().as_u16(), 200);
+    }
+    let merged: serde_json::Value = http
+        .get(format!("{base}/v1/usage?provider=codex"))
+        .header("Authorization", format!("Bearer {TOKEN}"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let day30 = merged["entries"][0]["dailyUsage"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["dayKey"] == "2026-09-30")
+        .unwrap()
+        .clone();
+    assert_eq!(day30["totalTokens"], 1000, "same fingerprint counts once");
+    assert_eq!(day30["costUSD"], 2.0);
     std::fs::remove_dir_all(&data_dir).expect("clean test data dir");
 }

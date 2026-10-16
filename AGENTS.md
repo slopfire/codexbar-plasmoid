@@ -58,6 +58,10 @@ PATH=/tmp/codexbar-plasma-mock:$PATH \
 # Providers settings + account discovery (virtual KWin, no host window)
 ./scripts/run-config-smoke.sh
 
+# Sync server as a systemd --user service (build + install + start); needs
+# ~/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid, which it installs
+./scripts/install-sync-server.sh
+
 # Human-approved host window only
 ./scripts/run-windowed.sh --allow-host-window
 ```
@@ -87,5 +91,6 @@ PATH=/tmp/codexbar-plasma-mock:$PATH \
 | `kde-plasma-api` | PlasmoidItem, Kirigami, config |
 | `qml-qt-quick-reference` | QML / JS patterns |
 | `kde-dev-tools` | kpackagetool6, qmllint, paths |
+| `m3-expressive` | Android/Compose UI, M3 Expressive tokens, widgets |
 
 Also see `.agents/AGENTS.md` for QML conventions.

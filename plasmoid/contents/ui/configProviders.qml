@@ -12,6 +12,10 @@ Kirigami.ScrollablePage {
     property string cfg_provider: "codex"
     property string cfg_source: "auto"
     property string cfg_providerConfigs: ""
+    // "Sync all from server" mode: the widget renders the server's merged
+    // cross-device state for every provider and stops fetching locally, so the
+    // per-provider list (sources, accounts, enabled flags) is ignored.
+    property alias cfg_syncAllFromServer: syncAllFromServer.checked
     property string cfg_cliPath: "codexbar"
     property int cfg_requestTimeoutSeconds: 45
     property alias cfg_allowMultiProviderSelection: allowMultiProviderSelection.checked
@@ -120,6 +124,19 @@ Kirigami.ScrollablePage {
         spacing: Kirigami.Units.smallSpacing
 
             QtControls.CheckBox {
+                id: syncAllFromServer
+                Layout.fillWidth: true
+                text: i18n("Sync all from the server (ignore local providers)")
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: i18n("Every provider renders the merged cross-device state from General → Sync server. Local fetching, provider sources, accounts, and the list below are ignored while this is on.")
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
+            }
+
+            QtControls.CheckBox {
                 id: allowMultiProviderSelection
                 Layout.fillWidth: true
                 text: i18n("Allow selecting multiple providers in the widget")
@@ -151,15 +168,29 @@ Kirigami.ScrollablePage {
                 QtControls.Button {
                     text: i18n("Sync Read")
                     icon.name: "download"
-                    enabled: !page.providerSyncBusy
+                    enabled: !page.providerSyncBusy && !page.cfg_syncAllFromServer
                     onClicked: page.readSharedProviders()
                 }
 
                 QtControls.Button {
                     text: i18n("Sync Write")
                     icon.name: "upload"
-                    enabled: !page.providerSyncBusy
+                    enabled: !page.providerSyncBusy && !page.cfg_syncAllFromServer
                     onClicked: page.writeSharedProviders()
+                }
+
+                QtControls.Button {
+                    text: i18n("All Remote")
+                    icon.name: "network-connect"
+                    enabled: !page.providerSyncBusy && !page.cfg_syncAllFromServer
+                    onClicked: page.setAllSources("remote")
+                }
+
+                QtControls.Button {
+                    text: i18n("All Local")
+                    icon.name: "computer"
+                    enabled: !page.providerSyncBusy && !page.cfg_syncAllFromServer
+                    onClicked: page.restoreLocalSources()
                 }
 
                 Item {
@@ -182,6 +213,10 @@ Kirigami.ScrollablePage {
                 implicitHeight: contentHeight
                 interactive: false
                 spacing: Kirigami.Units.smallSpacing
+                // Providers (sources, accounts, enabled flags) are ignored
+                // while "Sync all from server" is on, so gray the list out.
+                enabled: !page.cfg_syncAllFromServer
+                opacity: page.cfg_syncAllFromServer ? 0.4 : 1.0
 
                 displaced: Transition {
                     NumberAnimation {
@@ -813,6 +848,7 @@ Kirigami.ScrollablePage {
                 QtControls.Button {
                     icon.name: "list-add"
                     text: i18n("Add Provider")
+                    enabled: !page.cfg_syncAllFromServer
                     onClicked: {
                         const provider = page.firstMissingProvider();
                         providerModel.append({
@@ -871,6 +907,34 @@ Kirigami.ScrollablePage {
     function syncConfig() {
         cfg_providerConfigs = serializeProviders();
         cfg_provider = enabledProviders().join(",");
+    }
+
+    // Thin-device setup: point every row (except demo) at the merged
+    // cross-device data. Local-device setup restores each row's default.
+    function setAllSources(source) {
+        for (let index = 0; index < providerModel.count; index += 1) {
+            const item = providerModel.get(index);
+            if (String(item.provider || "") === "demo") {
+                continue;
+            }
+            providerModel.setProperty(index, "source", source);
+        }
+        page.providerSyncStatus = source === "remote"
+            ? i18n("All providers read from the sync server (General → Sync server)")
+            : i18n("All providers read locally");
+        syncConfig();
+    }
+
+    function restoreLocalSources() {
+        for (let index = 0; index < providerModel.count; index += 1) {
+            const item = providerModel.get(index);
+            if (String(item.provider || "") === "demo") {
+                continue;
+            }
+            providerModel.setProperty(index, "source", catalogFor(item.provider).linuxDefault);
+        }
+        page.providerSyncStatus = i18n("All providers read locally");
+        syncConfig();
     }
 
     function providerSyncScriptPath() {

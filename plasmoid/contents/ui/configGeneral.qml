@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QtControls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasma5support as Plasma5Support
 
 Kirigami.ScrollablePage {
     id: page
@@ -19,11 +20,14 @@ Kirigami.ScrollablePage {
     property alias cfg_syncServerUrl: syncServerUrl.text
     property alias cfg_syncServerToken: syncServerToken.text
     property alias cfg_syncDeviceName: syncDeviceName.text
+    property string syncTestStatus: ""
+    property bool syncTestBusy: false
 
     // Preserve runtime keys when Apply rewrites the General group.
     property string cfg_selectedEntryIds: "[]"
     property string cfg_selectedProviders: "[]"
     property string cfg_compactBarCatalog: "{}"
+    property bool cfg_syncAllFromServer: false
 
     ColumnLayout {
         width: page.availableWidth
@@ -210,6 +214,90 @@ Kirigami.ScrollablePage {
                 text: i18n("When set, this widget publishes locally fetched usage to the sync server (codexbar-plasmoid sync-server) after each refresh. Provider rows set to the remote source read the merged cross-device data instead of fetching here. Credentials stay on the device with them; the anonymize option above applies to published data.")
                 color: Kirigami.Theme.disabledTextColor
                 wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                QtControls.Button {
+                    text: i18n("Test Connection")
+                    icon.name: "network-connect"
+                    enabled: !page.syncTestBusy && syncServerUrl.text.trim().length > 0
+                    onClicked: page.testSyncServer()
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+            }
+
+            QtControls.Label {
+                Layout.fillWidth: true
+                text: page.syncTestBusy
+                    ? i18n("Checking sync server…")
+                    : (page.syncTestStatus.length > 0 ? page.syncTestStatus : i18n("Leave Device name empty to use this machine's hostname. Identical history published from two devices is counted once; Cursor dashboard data takes the freshest copy."))
+                color: Kirigami.Theme.disabledTextColor
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+
+    function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\"'\"'") + "'";
+    }
+
+    function helperScriptPath() {
+        let scriptPath = Qt.resolvedUrl("../code/codexbar-plasmoid-helper.mjs").toString();
+        if (scriptPath.startsWith("file://")) {
+            scriptPath = decodeURIComponent(scriptPath.slice("file://".length));
+        }
+        return scriptPath;
+    }
+
+    function testSyncServer() {
+        page.syncTestBusy = true;
+        page.syncTestStatus = "";
+        syncTestRunner.connectSource(
+            shellQuote(helperScriptPath())
+                + " --sync-test true"
+                + " --sync-url " + shellQuote(syncServerUrl.text || "")
+                + " --sync-token " + shellQuote(syncServerToken.text || "")
+                + " --sync-device " + shellQuote(syncDeviceName.text || "")
+        );
+    }
+
+    Plasma5Support.DataSource {
+        id: syncTestRunner
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(sourceName, data) {
+            disconnectSource(sourceName);
+            page.syncTestBusy = false;
+            const output = String(data.stdout || data["stdout"] || "").trim();
+            if (!output.length) {
+                const stderr = String(data.stderr || data["stderr"] || "").trim();
+                page.syncTestStatus = stderr.length > 0 ? stderr.split("\n")[0] : i18n("Sync test returned no data");
+                return;
+            }
+            try {
+                const result = JSON.parse(output);
+                if (result.ok === true) {
+                    const parts = [i18n("Connected")];
+                    if (result.version) {
+                        parts.push(i18n("server %1", result.version));
+                    }
+                    if (result.device) {
+                        parts.push(i18n("as %1", result.device));
+                    }
+                    if (result.deviceCount !== null && result.deviceCount !== undefined) {
+                        parts.push(i18n("%1 device(s)", result.deviceCount));
+                    }
+                    page.syncTestStatus = parts.join(" · ");
+                } else {
+                    page.syncTestStatus = String(result.error || i18n("Sync test failed"));
+                }
+            } catch (error) {
+                page.syncTestStatus = String(error);
             }
         }
     }

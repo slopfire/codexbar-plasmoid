@@ -225,13 +225,47 @@ Run it on an always-on machine (NAS, home server):
 ```sh
 codexbar-plasmoid sync-server --bind 0.0.0.0 --port 8188 --token <secret>
 # optional: --data-dir /var/lib/codexbar-sync  (snapshots/<device>.json + token file)
+# print the effective token without starting the server:
+codexbar-plasmoid sync-server --show-token [--data-dir ...]
+# forget a renamed/reinstalled device:
+#   curl -X DELETE -H "Authorization: Bearer <secret>" http://host:8188/v1/snapshot/<device>
 ```
 
-Routes: `GET /health` (no token), `PUT /v1/snapshot/<device>` (publish), `GET /v1/usage?provider=<id>`
+A user-level systemd unit ships at `scripts/codexbar-sync-server.service`
+(`--bind 127.0.0.1` by default):
+
+```sh
+./scripts/install-sync-server.sh          # build + install binary, unit, start
+# or by hand, after scripts/build-native-cli.sh:
+#   install -m 755 native-cli/target/release/codexbar-plasmoid \
+#     ~/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/codexbar-sync-server.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now codexbar-sync-server
+```
+
+The unit runs `~/.local/share/codexbar-plasmoid/bin/codexbar-plasmoid`, which is the
+native-cli build (`codexbar-plasmoid sync-server …` in the block above is that
+binary). The `bin/` dir also holds the managed upstream `codexbar` the widget
+auto-updates; that binary has no `sync-server` command, so a unit pointed at it
+exits with `Unknown command 'sync-server'`, and one pointed at a path that was
+never installed fails with `status=203/EXEC` and restart-loops while every
+widget shows `ECONNREFUSED` on the sync port.
+
+Optionally put the token in `~/.config/codexbar-sync-server.env` as
+`CODEXBAR_SYNC_TOKEN=<secret>` instead of leaving it in the data-dir token file.
+
+Routes: `GET /health` (no token), `PUT /v1/snapshot/<device>` (publish), `DELETE /v1/snapshot/<device>` (forget a device, idempotent), `GET /v1/usage?provider=<id>`
 (merged entries in the helper's JSON shape), `GET /v1/devices`. Every `/v1` route needs the bearer
 token; without `--token` or `CODEXBAR_SYNC_TOKEN` the server generates one at `<data-dir>/token` and
-never prints it. Plain HTTP carries that token on every request — put the server behind a reverse
+never prints it (read it back with `sync-server --show-token`). Plain HTTP carries that token on every request — put the server behind a reverse
 proxy or a Tailscale/WireGuard tunnel rather than exposing it directly.
+
+History merging is dedup-aware: each local cost scan stamps its days with a
+content fingerprint, so identical history published from two devices (a synced
+`~/.codex`, the same Cursor dashboard page) is counted once instead of summed.
+Distinct sessions still sum; Cursor-style cloud data takes the freshest copy.
 
 Widget setup: under Configure → General → **Sync server**, set the base URL (`http://host:8188`,
 optional token, optional device name; defaults to the hostname). Every successful refresh then
@@ -240,6 +274,35 @@ new **Sync server** source to render the merged cross-device data instead of fet
 the last-published entry per (provider, account) wins for limits, and daily cost/history rows are
 summed across devices. This is an addition, not a replacement: without a configured sync server,
 or for provider rows left on their usual sources, everything works exactly as before.
+
+For a device that should not fetch any provider itself (no CLI, no credentials), turn on
+**Sync all from the server** at the top of the Providers page. Every provider then renders the
+server's merged cross-device state and the widget skips local fetching entirely — the CLI is never
+invoked, no cost scan runs, and nothing is published back. The per-provider list grays out because
+sources, accounts, and enabled flags no longer affect what is shown. The popup footer notes when it
+is showing merged server state. Providers the server has never seen still appear as an explanatory
+card rather than leaving a blank widget.
+
+### Android client
+
+`android/` is a Jetpack Compose app (Material 3 Expressive) that reads the same sync server, so a
+phone can show the merged cross-device usage without holding any provider credentials:
+
+- `GET /health`, `GET /v1/usage?provider=<id>`, `GET /v1/devices`, and an explicit
+  `DELETE /v1/snapshot/<device>` behind the same bearer token
+- Provider cards with remaining-limit bars and pace indicators, credits, reset credits, token cost,
+  a tappable 30-day history chart with per-model breakdowns, and per-device provenance
+- Material You dynamic color on Android 12+, `MotionScheme.expressive()`, the expressive shape
+  scale, a short navigation bar, and the `MaterialShapes` cookie avatar for provider icons
+
+```sh
+cd android
+./gradlew :app:assembleDebug        # APK at app/build/outputs/apk/debug/
+./gradlew :app:testDebugUnitTest    # 69 JVM unit tests over parsing, HTTP and the repository
+```
+
+The app is plain HTTP + bearer token, so point it at the server over a LAN or a
+Tailscale/WireGuard tunnel. See `android/README.md` for details.
 
 ### Environment Variables on Linux (esp. NixOS)
 
