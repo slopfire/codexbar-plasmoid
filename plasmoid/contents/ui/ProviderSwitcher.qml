@@ -209,7 +209,7 @@ Item {
 
     readonly property var knownProviderIconIds: [
         "abacus", "alibaba", "amp", "antigravity", "augment", "bedrock", "claude",
-        "clinepass", "codebuff", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram",
+        "clinepass", "codebuff", "codebuddy", "codex", "commandcode", "copilot", "crof", "cursor", "deepgram",
         "deepseek", "demo", "devin", "doubao", "elevenlabs", "factory", "gemini", "grok",
         "groq", "jetbrains", "kilo", "kimi", "kiro", "llmproxy", "manus", "mimo",
         "minimax", "mistral", "ollama", "opencode", "opencodego", "openrouter",
@@ -660,6 +660,7 @@ Item {
             azureopenai: "Azure OpenAI",
             claude: "Claude",
             clinepass: "ClinePass",
+            codebuddy: "CodeBuddy",
             commandcode: "Command Code",
             cursor: "Cursor",
             gemini: "Gemini",
@@ -705,6 +706,7 @@ Item {
         const colors = {
             codex: "#4b929b",
             claude: "#b57861",
+            codebuddy: "#00bc90",
             commandcode: "#a1579c",
             cursor: "#3c9487",
             gemini: "#8972b5",

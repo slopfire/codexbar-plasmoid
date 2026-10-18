@@ -39,7 +39,7 @@ refresh-only entry.
 
 Codex cost is scanned by the bundled Rust binary first (upstream `codexbar cost` SIGSEGVs walking Codex history on Linux); only a missing-or-all-errors native result triggers one upstream `--provider codex` attempt. Claude keeps its own upstream scan.
 
-For Linux-native providers (`antigravity`, `commandcode`, `cursor`, `devin`, `grok`, `opencode`, `opencodego`) with `source=native` or
+For Linux-native providers (`antigravity`, `codebuddy`, `commandcode`, `cursor`, `devin`, `grok`, `opencode`, `opencodego`) with `source=native` or
 `source=native-auth`, the helper calls the bundled Rust binary at `plasmoid/contents/code/codexbar-plasmoid`
 instead of `codexbar`. Antigravity `native-auth` uses user tokens under `~/.config/antigravity-usage` from
 `codexbar-plasmoid login --provider antigravity` (browser OAuth) or `antigravity-usage login`; plain `native`

@@ -179,7 +179,7 @@ const syncDevice =
 // per-provider remote-source path.
 const syncAllFromServer = args["sync-all"] === "true" || args.syncAll === "true";
 
-const nativeProviders = new Set(["antigravity", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
+const nativeProviders = new Set(["antigravity", "codebuddy", "commandcode", "cursor", "devin", "grok", "opencode", "opencodego"]);
 
 // Upstream codexbar cost scans Claude local logs. Codex cost is scanned
 // natively in Rust instead: upstream `codexbar cost` walks Codex history in
@@ -196,6 +196,9 @@ const linuxAutoFallbacks = {
   codex: "cli",
   claude: "cli",
   clinepass: "api",
+  // CodeBuddy has no Linux-capable upstream source. The native fetcher reads the
+  // bearer token the CLI stores under ~/.local/share/CodeBuddyExtension.
+  codebuddy: "native",
   // Command Code's web source needs a logged-in commandcode.ai browser session;
   // the native fetcher reuses the `cmd login` key in ~/.commandcode/auth.json.
   commandcode: "native",
@@ -1343,6 +1346,7 @@ function discoverInstalledAgents() {
   const candidates = [
     { provider: "codex", commands: ["codex"], paths: [path.join(home, ".codex")] },
     { provider: "claude", commands: ["claude"], paths: [path.join(home, ".claude")] },
+    { provider: "codebuddy", commands: ["codebuddy"], paths: [path.join(home, ".codebuddy"), path.join(home, ".local", "share", "CodeBuddyExtension")] },
     { provider: "commandcode", commands: ["cmd", "command-code"], paths: [path.join(home, ".commandcode")] },
     { provider: "cursor", commands: ["cursor"], paths: [path.join(configHome, "Cursor"), path.join(home, ".cursor")] },
     { provider: "antigravity", commands: ["antigravity", "agy"], paths: [path.join(configHome, "Antigravity"), path.join(configHome, "antigravity"), path.join(configHome, "antigravity-usage")] },
@@ -2189,6 +2193,11 @@ function providerLabels(providerId) {
     case "grok":
       // xAI UI labels this "Weekly SuperGrok Limit"; primary window is the weekly pool.
       return { session: "Weekly", weekly: "Weekly", tertiary: "Extra" };
+    case "codebuddy":
+      // Every CodeBuddy allowance is a monthly credit cycle and the native
+      // fetcher titles each row after its package, so these labels are only a
+      // fallback for generic responses.
+      return { session: "Monthly", weekly: "Weekly", tertiary: "Extra" };
     case "commandcode":
       // /alpha/billing/credits reports a rolling 5-hour and a weekly credit
       // window; the native helper rebuilds the plan's monthly allowance as the

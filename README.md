@@ -394,13 +394,18 @@ usage unless the corresponding logs are present on this computer.
 
 ## Linux Helper
 
-Antigravity, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
+Antigravity, CodeBuddy, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go need Linux-specific handling. This repository ships a Rust binary,
 `codexbar-plasmoid`, bundled inside the plasmoid at `plasmoid/contents/code/codexbar-plasmoid`. It reads browser cookies
 or `~/.codexbar/config.json` manual cookie headers and calls provider APIs directly where possible. Antigravity can either
 probe a running `agy`/IDE language server locally, or use **Native Auth** (browser Google OAuth via
 `codexbar-plasmoid login --provider antigravity`, or tokens from `antigravity-usage login`, stored under
 `~/.config/antigravity-usage`) to call the Cloud Code API without the IDE.
 Devin calls the `app.devin.ai/api/<org>/billing/quota/usage` endpoint with a Bearer token.
+CodeBuddy calls `www.codebuddy.ai/billing/meter/{get-user-resource-summary,get-user-resource-free-packages}` with the
+Bearer token that `codebuddy` sign-in writes to
+`~/.local/share/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info` (overrides:
+`CODEBUDDY_ACCESS_TOKEN`, `CODEBUDDY_AUTH_FILE`, `CODEBUDDY_API_BASE`). Every CodeBuddy allowance is a monthly credit
+cycle, so each credit package becomes one usage row.
 Command Code calls `api.commandcode.ai/alpha/{billing/credits,billing/subscriptions,whoami}` with the API key that
 `cmd login` writes to `~/.commandcode/auth.json` (overrides: `COMMANDCODE_API_KEY`, `COMMANDCODE_AUTH_FILE`,
 `COMMANDCODE_HOME`, `COMMANDCODE_API_BASE`). Its token spend is read from the local session transcripts under
@@ -455,6 +460,7 @@ Authentication options:
 - OpenCode / OpenCode Go local token spend from `~/.local/share/opencode/*.db` (cost)
 - Codex local token spend from `~/.codex/sessions` plus `archived_sessions` (`$CODEX_HOME` overrides the base dir; cost, scanned natively in seconds with one upstream attempt as fallback)
 - Devin: `DEVIN_BEARER_TOKEN` (or `DEVIN_AUTHORIZATION`) env var, or `~/.codexbar/config.json` provider `cookie_header`; pair with `DEVIN_ORGANIZATION` (or `DEVIN_ORG`) for the org slug, internal `org_...` ID, or full `app.devin.ai/org/<slug>` URL
+- CodeBuddy: `~/.local/share/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info` from `codebuddy` sign-in (or `CODEBUDDY_ACCESS_TOKEN`); monthly credit packages only, no token spend
 - Command Code: `~/.commandcode/auth.json` from `cmd login` (or `COMMANDCODE_API_KEY`); Command Code token spend from `~/.commandcode/projects/**/*.jsonl` (cost)
 
 Native cookie / auth configuration uses a provider list (local only — do not commit real secrets):

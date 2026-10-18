@@ -239,7 +239,7 @@ fn parse_args(args: &[String]) -> std::collections::HashMap<String, String> {
 
 fn print_help() {
     println!(
-        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go
+        "codexbar-plasmoid — Linux-native usage fetcher for Antigravity, CodeBuddy, Command Code, Cursor, Devin, Grok, OpenCode, and OpenCode Go
 
 Usage:
   codexbar-plasmoid usage --format json --json-only --provider <id> --source native|native-auth [--status] [--web-timeout <seconds>]
@@ -249,7 +249,7 @@ Usage:
   codexbar-plasmoid sync-server [--bind <ip>] [--port <n>] [--token <t>] [--data-dir <path>] [--show-token]
 
 Providers:
-  antigravity, codex, commandcode, cursor, devin, grok, opencode, opencodego, all
+  antigravity, codebuddy, codex, commandcode, cursor, devin, grok, opencode, opencodego, all
 Cost (token spend / API $):
   codex — ~/.codex/sessions/**/*.jsonl + archived_sessions (CODEX_HOME override)
   opencode, opencodego — ~/.local/share/opencode/*.db
@@ -257,9 +257,12 @@ Cost (token spend / API $):
   grok — ~/.grok/sessions/**/updates.jsonl (costUsdTicks or per-model API rates)
   commandcode — ~/.commandcode/projects/**/*.jsonl (per-message costUsd)
   all — soft-merge of the above
-  (antigravity / devin: quota % only, no absolute token history)
+  (antigravity / codebuddy / devin: quota % only, no absolute token history)
 
 Authentication:
+  - CodeBuddy: ~/.local/share/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info
+    (written by `codebuddy` sign-in), or CODEBUDDY_ACCESS_TOKEN / CODEBUDDY_AUTH_FILE /
+    CODEBUDDY_API_BASE overrides
   - Command Code: ~/.commandcode/auth.json (written by `cmd login`), or
     COMMANDCODE_API_KEY / COMMANDCODE_HOME / COMMANDCODE_AUTH_FILE overrides
   - Antigravity (--source native): running agy/IDE first, then Cloud Code OAuth fallback
