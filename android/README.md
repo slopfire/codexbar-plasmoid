@@ -62,7 +62,7 @@ after the platform's `updatePeriodMillis` tick:
 | Widget | Cells | Shows |
 | --- | --- | --- |
 | `CompactWidget` | 3x1 | The provider closest to running out: emphasized percent, bar, pace verdict |
-| `ProvidersWidget` | 4x2 | Every merged provider, tightest first, plus a tap-to-refresh action |
+| `ProvidersWidget` | 4x2 | Every merged provider, tightest first |
 | `SpendWidget` | 3x2 | Today and 30-day cost, top model, per-provider breakdown |
 
 They are pinnable from **Settings → Home screen widgets** via
@@ -85,12 +85,15 @@ Two ways in:
 
 The options are provider selection (multi-select, "All" clears the filter), order
 (tightest first or name), an explicit row count for the providers widget, the
-reset/pace caption line, and the palette — Material You, Light, or Dark, so a
-widget can be pinned to an appearance instead of following the system.
+reset/pace caption line, the surface and its translucency, corner radius, bar
+thickness, provider badges, the pacing marker style, and the palette — Material
+You, Light, or Dark, so a widget can be pinned to an appearance instead of
+following the system.
 
-The widget header shows the product name and how fresh the payload is, tinted once
-it goes stale or a refresh fails. It deliberately does **not** show the sync server
-address: that is noise on a home screen.
+There is deliberately no header: no product name and no refresh affordance. Both
+were chrome the data did not need, and each row already flags its own degraded
+state in its caption ("showing last good data", "last refresh failed"). The
+widgets re-render on the launcher's own `updatePeriodMillis` tick.
 
 Widget-specific notes:
 
@@ -98,6 +101,21 @@ Widget-specific notes:
   the app share one Material You palette. Glance's Material 3 provider omits the
   Expressive `surface container` roles, so the container fill is supplied
   explicitly from the real `ColorScheme` instead of substituting a wrong role.
+- **Text is resolved per background.** The opaque-surface roles do not hold up
+  once the shell is see-through, so `WidgetShell` resolves the palette for the
+  chosen background and provides it: `onShell` for titles and values,
+  `onShellVariant` for captions. On Translucent and Transparent the secondary role
+  leans 35% toward the primary one, which is what keeps the caption under every
+  bar readable against a wallpaper.
+- **Translucent is a scrim, not a hint.** `WidgetTheme.TRANSLUCENT_ALPHA` is 0.82:
+  M3's answer for text over imagery is a scrim, and a weaker fill let the wallpaper
+  dominate the surface roles the text is paired with.
+- **The health scale has day/night values.** The app can paint the semantic
+  remaining-limit colors on an opaque `surface container`, so one value each is
+  fine there; a widget cannot assume an opaque backdrop, and the shared scale's
+  `Neutral` is a mid-gray that all but disappears on a translucent dark widget —
+  and it colors the caption under every bar. `WidgetPalette.healthFor` supplies the
+  tuned pair.
 - Provider badges draw the same brand icons as the app: white silhouettes
   rasterized from the plasmoid's `ProviderIcon-*.svg` set, tinted with the
   provider's accent color. See **Provider icons** below.

@@ -334,20 +334,6 @@ private fun WidgetConfigScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Show header",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = settings.showHeader,
-                            onCheckedChange = { onChange(settings.copy(showHeader = it)) },
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
                             text = "Show provider badges",
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),

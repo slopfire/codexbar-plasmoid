@@ -1,12 +1,16 @@
 package org.slopfire.codexbar.widget
 
 import android.content.Context
+import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.unit.ColorProvider
+import org.slopfire.codexbar.data.widget.WidgetBackground
 import org.slopfire.codexbar.data.widget.WidgetColorMode
+import org.slopfire.codexbar.ui.common.Health
 import org.slopfire.codexbar.ui.theme.codexBarColorScheme
 import androidx.glance.text.FontWeight
 import androidx.glance.text.TextStyle
@@ -61,6 +65,25 @@ object WidgetType {
 }
 
 /**
+ * The colors a widget paints its **text** in, resolved for one shell.
+ *
+ * A widget has no opaque backdrop guarantee: the user can pick a Translucent or
+ * Transparent fill, and then the wallpaper shows through. The generic theme roles
+ * are tuned for an opaque surface, so `onSurfaceVariant` in particular drops below
+ * a comfortable contrast once the shell is see-through. [WidgetPalette.surfaceFor]
+ * resolves the pair per render and leans the secondary role toward the primary one
+ * exactly when the shell is not opaque.
+ */
+class WidgetSurface(
+    /** Shell fill to draw, or null when the launcher/wallpaper owns the backdrop. */
+    val fill: ColorProvider?,
+    /** Primary text: titles and the numbers that matter. */
+    val onShell: ColorProvider,
+    /** Secondary text: captions and labels. */
+    val onShellVariant: ColorProvider,
+)
+
+/**
  * The widget palette, resolved once per render.
  *
  * A widget has no Compose theme to inherit, so the palette is built from the same
@@ -69,39 +92,87 @@ object WidgetType {
  *
  * Glance's Material 3 provider exposes the baseline role set but not the
  * Expressive `surface container` steps, so those are supplied explicitly from the
- * real ColorScheme rather than substituted with a wrong role.
+ * real ColorScheme rather than substituted with a wrong role. The two schemes are
+ * kept so [surfaceFor] and [healthFor] can derive day/night pairs on demand.
  */
 class WidgetPalette(
     val colors: androidx.glance.color.ColorProviders,
     val shell: ColorProvider,
     val container: ColorProvider,
     val track: ColorProvider,
-    private val shellDay: Color,
-    private val shellNight: Color,
+    private val day: ColorScheme,
+    private val night: ColorScheme,
 ) {
     /**
-     * Shell fill for a background style.
+     * The shell fill and the text colors that survive it.
      *
      * From M3: containment uses a `surface container` role. My design decision
-     * (not in M3): translucent is the same role at 55% alpha so the wallpaper
-     * breathes through; transparent leaves the launcher's own widget background
-     * in charge. Returns null when no fill should be drawn.
+     * (not in M3): translucent is the same role at [WidgetTheme.TRANSLUCENT_ALPHA]
+     * so the wallpaper breathes through — but still an opaque-*enough* scrim that
+     * text keeps its contrast, which is the role M3 gives a scrim over imagery.
+     * Transparent draws no fill at all and leaves the launcher's own widget
+     * background in charge.
      */
-    fun shellFor(background: org.slopfire.codexbar.data.widget.WidgetBackground): ColorProvider? =
-        when (background) {
-            org.slopfire.codexbar.data.widget.WidgetBackground.Solid -> shell
-            org.slopfire.codexbar.data.widget.WidgetBackground.Translucent -> dayNight(
-                shellDay.copy(alpha = 0.55f),
-                shellNight.copy(alpha = 0.55f),
-            )
-            org.slopfire.codexbar.data.widget.WidgetBackground.Transparent -> null
-        }
+    fun surfaceFor(background: WidgetBackground): WidgetSurface {
+        val opaque = background == WidgetBackground.Solid
+        // The weaker secondary role is what fails first on a see-through shell, so
+        // it is the only one that moves; the primary role is already at full strength.
+        val emphasis = if (opaque) 0f else WidgetTheme.SECONDARY_TEXT_EMPHASIS
+        return WidgetSurface(
+            fill = shellFor(background),
+            onShell = dayNight(day.onSurface, night.onSurface),
+            onShellVariant = dayNight(
+                lerp(day.onSurfaceVariant, day.onSurface, emphasis),
+                lerp(night.onSurfaceVariant, night.onSurface, emphasis),
+            ),
+        )
+    }
+
+    private fun shellFor(background: WidgetBackground): ColorProvider? = when (background) {
+        WidgetBackground.Solid -> shell
+        WidgetBackground.Translucent -> dayNight(
+            day.surfaceContainerHigh.copy(alpha = WidgetTheme.TRANSLUCENT_ALPHA),
+            night.surfaceContainerHigh.copy(alpha = WidgetTheme.TRANSLUCENT_ALPHA),
+        )
+        WidgetBackground.Transparent -> null
+    }
+
+    /**
+     * The remaining-limit health scale as a day/night pair.
+     *
+     * The app can paint these on an opaque `surface container`, so one value works
+     * there. A widget cannot assume that, so each semantic step gets a light and a
+     * dark value with the same meaning and enough contrast against its own shell.
+     * The shared scale's Neutral is a mid-gray that all but disappears on a
+     * translucent dark widget, and it is the color of the caption under every bar.
+     */
+    fun healthFor(color: Color): ColorProvider = when (color) {
+        Health.Good -> dayNight(Color(0xFF1E6B4C), Color(0xFF86DDB4))
+        Health.Tight -> dayNight(Color(0xFF8A6100), Color(0xFFFFCF70))
+        Health.Low -> dayNight(Color(0xFFA8431F), Color(0xFFFFAD84))
+        Health.Critical -> dayNight(Color(0xFFB3261E), Color(0xFFFFB4AB))
+        Health.Neutral -> dayNight(Color(0xFF49555A), Color(0xFFC3CDCF))
+        else -> dayNight(color, color)
+    }
 }
 
 object WidgetTheme {
 
-    /** Translucency for the `Translucent` background style (not an M3 token). */
-    const val TRANSLUCENT_ALPHA = 0.55f
+    /**
+     * Scrim alpha for the `Translucent` background style (not an M3 token).
+     *
+     * M3's answer for text over imagery is a scrim, and this is that scrim: high
+     * enough that the surface roles still describe what is behind the text, low
+     * enough that the wallpaper is still visibly there. The previous 0.55 let the
+     * wallpaper dominate and pushed secondary text under a readable contrast.
+     */
+    const val TRANSLUCENT_ALPHA = 0.82f
+
+    /**
+     * How far the secondary text role leans toward the primary one on a
+     * see-through shell (not an M3 token — a contrast correction).
+     */
+    const val SECONDARY_TEXT_EMPHASIS = 0.35f
 
     fun palette(context: Context, mode: WidgetColorMode): WidgetPalette {
         val day = codexBarColorScheme(
@@ -121,8 +192,8 @@ object WidgetTheme {
             shell = dayNight(day.surfaceContainerHigh, night.surfaceContainerHigh),
             container = dayNight(day.surfaceContainer, night.surfaceContainer),
             track = dayNight(day.surfaceVariant, night.surfaceVariant),
-            shellDay = day.surfaceContainerHigh,
-            shellNight = night.surfaceContainerHigh,
+            day = day,
+            night = night,
         )
     }
 

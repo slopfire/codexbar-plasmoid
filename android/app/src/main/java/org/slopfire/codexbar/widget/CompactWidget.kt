@@ -3,21 +3,15 @@ package org.slopfire.codexbar.widget
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.currentState
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.height
 import org.slopfire.codexbar.data.widget.WidgetProvider
 import org.slopfire.codexbar.data.widget.WidgetRefresher
 import org.slopfire.codexbar.data.widget.WidgetSettings
-import org.slopfire.codexbar.data.widget.WidgetSnapshot
 import org.slopfire.codexbar.data.widget.configured
 
 /**
@@ -54,10 +48,6 @@ class CompactWidget : GlanceAppWidget() {
                             )
 
                             else -> {
-                                if (settings.showHeader) {
-                                    WidgetHeader(snapshot)
-                                    Spacer(modifier = GlanceModifier.height(6.dp))
-                                }
                                 LimitLine(
                                     provider = provider,
                                     compact = true,

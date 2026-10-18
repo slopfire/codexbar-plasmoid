@@ -8,14 +8,10 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.LocalSize
-import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
@@ -24,7 +20,6 @@ import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
-import androidx.glance.text.Text
 import org.slopfire.codexbar.data.widget.WidgetRefresher
 import org.slopfire.codexbar.data.widget.WidgetSettings
 import org.slopfire.codexbar.data.widget.configured
@@ -32,9 +27,12 @@ import org.slopfire.codexbar.data.widget.configured
 /**
  * The multi-provider widget: the merged list, tightest first.
  *
- * A contained list uses **gaps** between rows rather than dividers (M3 Expressive
- * containment), and each row keeps the same anatomy as the app's provider card so
- * the phone and the desktop agree at a glance.
+ * No header: the product title and the refresh affordance were chrome the data
+ * did not need, and every row already flags its own degraded state ("showing last
+ * good data", "last refresh failed") in its caption. A contained list uses
+ * **gaps** between rows rather than dividers (M3 Expressive containment), and
+ * each row keeps the same anatomy as the app's provider card so the phone and the
+ * desktop agree at a glance.
  */
 class ProvidersWidget : GlanceAppWidget() {
 
@@ -78,24 +76,6 @@ class ProvidersWidget : GlanceAppWidget() {
                             )
 
                             else -> {
-                                if (settings.showHeader) {
-                                    WidgetHeader(
-                                        snapshot = snapshot,
-                                        trailing = {
-                                            Text(
-                                                text = "Refresh",
-                                                style = WidgetType.colored(
-                                                    WidgetType.labelMedium,
-                                                    GlanceTheme.colors.primary,
-                                                ),
-                                                modifier = GlanceModifier
-                                                    .padding(start = 8.dp)
-                                                    .clickable(actionRunCallback<RefreshCallback>()),
-                                            )
-                                        },
-                                    )
-                                    Spacer(modifier = GlanceModifier.height(8.dp))
-                                }
                                 providers.forEachIndexed { index, provider ->
                                     if (index > 0) {
                                         Spacer(modifier = GlanceModifier.height(ROW_GAP))
@@ -127,8 +107,11 @@ class ProvidersWidget : GlanceAppWidget() {
     private companion object {
         val ROW_GAP = 10.dp
 
-        /** Header line plus the shell's own vertical padding. */
-        val CHROME_HEIGHT = 34.dp
+        /**
+         * The shell's own vertical padding. The header row used to add to this;
+         * with the title gone the list starts at the top of the container.
+         */
+        val CHROME_HEIGHT = 24.dp
 
         /** Provider title, bar and caption, measured from a rendered widget. */
         val ROW_HEIGHT = 46.dp
@@ -142,18 +125,6 @@ class ProvidersWidget : GlanceAppWidget() {
             if (usable <= 0f) return 1
             return (usable / ROW_HEIGHT.value).toInt().coerceIn(1, 6)
         }
-    }
-}
-
-/** Re-fetches the merged view from the widget itself. */
-class RefreshCallback : ActionCallback {
-    override suspend fun onAction(
-        context: Context,
-        glanceId: GlanceId,
-        parameters: androidx.glance.action.ActionParameters,
-    ) {
-        WidgetRefresher.refresh(context)
-        WidgetRefresher.updateAllWidgets(context)
     }
 }
 

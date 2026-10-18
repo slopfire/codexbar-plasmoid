@@ -13,7 +13,6 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Row
@@ -65,10 +64,6 @@ class SpendWidget : GlanceAppWidget() {
                             )
 
                             else -> {
-                                if (settings.showHeader) {
-                                    WidgetHeader(snapshot)
-                                    Spacer(modifier = GlanceModifier.height(8.dp))
-                                }
                                 Row(modifier = GlanceModifier.fillMaxWidth()) {
                                     MetricBlock(
                                         label = "Today",
@@ -90,7 +85,7 @@ class SpendWidget : GlanceAppWidget() {
                                         "Top model: $model" +
                                             (totals.topModelCost?.let { " · ${Fmt.money(it, totals.currency)}" }
                                                 ?: ""),
-                                        GlanceTheme.colors.onSurfaceVariant,
+                                        LocalWidgetSurface.current.onShellVariant,
                                     )
                                 }
                                 val breakdown = totals.byProvider(LocalSize.current.height)
@@ -100,7 +95,7 @@ class SpendWidget : GlanceAppWidget() {
                                         text = "By provider",
                                         style = WidgetType.colored(
                                             WidgetType.labelMedium,
-                                            GlanceTheme.colors.onSurfaceVariant,
+                                            LocalWidgetSurface.current.onShellVariant,
                                         ),
                                     )
                                     Spacer(modifier = GlanceModifier.height(4.dp))
@@ -113,7 +108,7 @@ class SpendWidget : GlanceAppWidget() {
                                                 text = line.label,
                                                 style = WidgetType.colored(
                                                     WidgetType.titleSmall,
-                                                    GlanceTheme.colors.onSurface,
+                                                    LocalWidgetSurface.current.onShell,
                                                 ),
                                                 maxLines = 1,
                                                 modifier = GlanceModifier.defaultWeight(),
@@ -122,7 +117,7 @@ class SpendWidget : GlanceAppWidget() {
                                                 text = line.value,
                                                 style = WidgetType.colored(
                                                     WidgetType.labelMedium,
-                                                    GlanceTheme.colors.onSurfaceVariant,
+                                                    LocalWidgetSurface.current.onShellVariant,
                                                 ),
                                                 maxLines = 1,
                                             )
@@ -156,7 +151,9 @@ internal data class SpendTotals(
 
     /** Per-provider 30-day cost, biggest first, limited to what fits. */
     fun byProvider(available: Dp): List<SpendLine> {
-        val limit = ((available.value - 84f) / 20f).toInt().coerceIn(0, 4)
+        // 56dp is the heuristic cost of everything above the breakdown: the shell's
+        // own padding plus the two metric blocks. It used to include the header row.
+        val limit = ((available.value - 56f) / 20f).toInt().coerceIn(0, 4)
         if (limit == 0) return emptyList()
         return providers
             .filter { (it.cost30d ?: 0.0) > 0.0 }

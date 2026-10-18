@@ -100,8 +100,6 @@ data class WidgetSettings(
     val background: WidgetBackground = WidgetBackground.Solid,
     val corners: WidgetCorners = WidgetCorners.Large,
     val barHeight: WidgetBarHeight = WidgetBarHeight.Standard,
-    /** The CodexBar title and freshness line. */
-    val showHeader: Boolean = true,
     /** Provider brand badges next to row titles. */
     val showBadges: Boolean = true,
     /** Pacing marker style for the split progress bar. */
@@ -117,7 +115,6 @@ data class WidgetSettings(
         val BACKGROUND_KEY = stringPreferencesKey("background")
         val CORNERS_KEY = stringPreferencesKey("corners")
         val BAR_HEIGHT_KEY = stringPreferencesKey("barHeight")
-        val HEADER_KEY = booleanPreferencesKey("showHeader")
         val BADGES_KEY = booleanPreferencesKey("showBadges")
         val PACE_KEY = stringPreferencesKey("paceStyle")
 
@@ -143,7 +140,6 @@ data class WidgetSettings(
             barHeight = preferences[BAR_HEIGHT_KEY]
                 ?.let { name -> WidgetBarHeight.entries.firstOrNull { it.name == name } }
                 ?: WidgetBarHeight.Standard,
-            showHeader = preferences[HEADER_KEY] ?: true,
             showBadges = preferences[BADGES_KEY] ?: true,
             paceStyle = preferences[PACE_KEY]
                 ?.let { name -> WidgetPaceStyle.entries.firstOrNull { it.name == name } }
@@ -161,7 +157,6 @@ data class WidgetSettings(
             preferences[BACKGROUND_KEY] = settings.background.name
             preferences[CORNERS_KEY] = settings.corners.name
             preferences[BAR_HEIGHT_KEY] = settings.barHeight.name
-            preferences[HEADER_KEY] = settings.showHeader
             preferences[BADGES_KEY] = settings.showBadges
             preferences[PACE_KEY] = settings.paceStyle.name
         }

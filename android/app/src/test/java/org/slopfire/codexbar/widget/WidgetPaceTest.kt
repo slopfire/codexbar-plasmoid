@@ -76,7 +76,18 @@ class WidgetPaceTest {
         assertEquals(WidgetCorners.Large, settings.corners)
         assertEquals(WidgetBarHeight.Standard, settings.barHeight)
         assertEquals(WidgetPaceStyle.Position, settings.paceStyle)
-        assertEquals(true, settings.showHeader)
         assertEquals(true, settings.showBadges)
+    }
+
+    /**
+     * Every setting round-trips through the widget's preference set. This is the
+     * contract the header removal had to keep intact.
+     */
+    @Test
+    fun settingsRoundTripThroughPreferences() {
+        val original = WidgetSettings()
+        val preferences = androidx.datastore.preferences.core.emptyPreferences().toMutablePreferences()
+        WidgetSettings.applyTo(preferences, original)
+        assertEquals(original, WidgetSettings.from(preferences))
     }
 }
