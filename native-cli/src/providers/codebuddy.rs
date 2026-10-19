@@ -10,9 +10,10 @@
 //!   cycle capacity, remaining capacity, and the cycle reset stamp
 //!
 //! CodeBuddy has no rolling 5-hour or weekly window: every allowance is a
-//! monthly credit cycle, so each package becomes one usage row. The API never
-//! serves token spend, and the local transcripts carry no per-request cost, so
-//! this provider reports quota only.
+//! monthly credit cycle, so each package becomes one usage row. Packs that
+//! share a display name (a stack of "Bonus Pack" grants) merge into a single
+//! row. The API never serves token spend, and the local transcripts carry no
+//! per-request cost, so this provider reports quota only.
 
 use crate::http::HttpClient;
 use crate::output::{
@@ -246,36 +247,116 @@ fn non_empty_env(name: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// One package row, sorted so the subscription package leads and larger
-/// allowances follow.
+/// Packages that share a display name, e.g. a stack of "Bonus Pack" grants.
+struct PackageGroup<'a> {
+    title: String,
+    is_plan: bool,
+    packages: Vec<&'a AccountPackage>,
+}
+
+/// A merged row plus the keys the final ordering needs.
+struct MergedRow {
+    is_plan: bool,
+    granted: f64,
+    row: UsageRowSnapshot,
+}
+
+/// One row per distinct package name, sorted so the subscription package leads
+/// and larger allowances follow.
+///
+/// Packs that share a name are merged, and only the packs with credits left
+/// count toward the merged balance. A spent pack would otherwise divide its
+/// zero remainder by its full grant and drag a live pack down with it: a
+/// drained 9999-credit pack next to a fresh 30-credit pack belongs at 100%, not
+/// at 0.3%. A name whose packs are all spent is dropped outright — except the
+/// subscription package, whose 0% is the signal that the plan ran out.
 fn usage_rows(accounts: &[AccountPackage], plan_code: Option<&str>) -> Vec<UsageRowSnapshot> {
-    let mut rows: Vec<&AccountPackage> = accounts
-        .iter()
-        .filter(|account| account.capacity().is_some())
-        .collect();
-    rows.sort_by(|left, right| {
-        let left_plan = plan_code.is_some() && plan_code == left.package_code.as_deref();
-        let right_plan = plan_code.is_some() && plan_code == right.package_code.as_deref();
-        right_plan
-            .cmp(&left_plan)
-            .then_with(|| {
-                let left_size = left.capacity().map(|(size, _)| size).unwrap_or(0.0);
-                let right_size = right.capacity().map(|(size, _)| size).unwrap_or(0.0);
-                right_size.total_cmp(&left_size)
-            })
-            .then_with(|| left.title().cmp(&right.title()))
-    });
-    rows.into_iter()
-        .filter_map(|account| {
-            let (size, remain) = account.capacity()?;
-            Some(UsageRowSnapshot {
-                id: account.row_id(),
-                title: account.title(),
-                percent_left: clamp_percent(remain / size * 100.0),
-                resets_at: account.deduction_end_time.and_then(epoch_ms_to_datetime),
+    let mut groups: Vec<PackageGroup> = Vec::new();
+    for account in accounts {
+        if account.capacity().is_none() {
+            continue;
+        }
+        let is_plan = plan_code.is_some() && plan_code == account.package_code.as_deref();
+        let title = account.title();
+        match groups
+            .iter_mut()
+            .find(|group| group.is_plan == is_plan && group.title == title)
+        {
+            Some(group) => group.packages.push(account),
+            None => groups.push(PackageGroup {
+                title,
+                is_plan,
+                packages: vec![account],
+            }),
+        }
+    }
+
+    let mut merged: Vec<MergedRow> = groups
+        .into_iter()
+        .filter_map(|group| {
+            let live: Vec<&AccountPackage> = group
+                .packages
+                .iter()
+                .copied()
+                .filter(|package| package.remaining() > 0.0)
+                .collect();
+            if live.is_empty() && !group.is_plan {
+                return None;
+            }
+            let counted = if live.is_empty() { group.packages } else { live };
+            let mut granted = 0.0;
+            let mut remaining = 0.0;
+            let mut resets_at = None;
+            for package in counted {
+                let Some((size, remain)) = package.capacity() else {
+                    continue;
+                };
+                granted += size;
+                remaining += remain;
+                resets_at = earliest(
+                    resets_at,
+                    package.deduction_end_time.and_then(epoch_ms_to_datetime),
+                );
+            }
+            if !(granted > 0.0) {
+                return None;
+            }
+            Some(MergedRow {
+                is_plan: group.is_plan,
+                granted,
+                row: UsageRowSnapshot {
+                    // The name is the stable key: it survives packs joining
+                    // and leaving the group, which the tray bar selection
+                    // persists across refreshes.
+                    id: group.title.clone(),
+                    title: group.title,
+                    percent_left: clamp_percent(remaining / granted * 100.0),
+                    resets_at,
+                },
             })
         })
-        .collect()
+        .collect();
+
+    merged.sort_by(|left, right| {
+        right
+            .is_plan
+            .cmp(&left.is_plan)
+            .then_with(|| right.granted.total_cmp(&left.granted))
+            .then_with(|| left.row.title.cmp(&right.row.title))
+    });
+    merged.into_iter().map(|merged| merged.row).collect()
+}
+
+/// Merged rows expire when their first pack does, so the soonest stamp wins.
+fn earliest(
+    current: Option<DateTime<Utc>>,
+    candidate: Option<DateTime<Utc>>,
+) -> Option<DateTime<Utc>> {
+    match (current, candidate) {
+        (Some(current), Some(candidate)) => Some(current.min(candidate)),
+        (None, candidate) => candidate,
+        (current, None) => current,
+    }
 }
 
 fn credits_snapshot(accounts: &[AccountPackage]) -> Option<CreditsSnapshot> {
@@ -490,13 +571,9 @@ impl AccountPackage {
             .unwrap_or_else(|| "Credits".to_string())
     }
 
-    fn row_id(&self) -> String {
-        self.package_code
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| self.title())
+    /// Credits still available on this pack; a spent pack leaves zero.
+    fn remaining(&self) -> f64 {
+        self.capacity().map(|(_, remain)| remain).unwrap_or(0.0)
     }
 }
 
@@ -549,7 +626,7 @@ mod tests {
 
         let rows = usage_rows(&accounts, Some("TCACA_code_002"));
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[0].id, "TCACA_code_002");
+        assert_eq!(rows[0].id, "Pro Plan Monthly Subscription");
         assert_eq!(rows[0].title, "Pro Plan Monthly Subscription");
         assert!((rows[0].percent_left - 25.0).abs() < 1e-9);
         assert_eq!(
@@ -579,7 +656,14 @@ mod tests {
 
         let rows = usage_rows(&accounts, Some("plan"));
         let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
-        assert_eq!(ids, vec!["plan", "extra", "bonus"]);
+        assert_eq!(
+            ids,
+            vec![
+                "Pro Plan Monthly Subscription",
+                "Plan Bonus Quota",
+                "Bonus Pack"
+            ]
+        );
     }
 
     #[test]
@@ -595,8 +679,65 @@ mod tests {
 
         let rows = usage_rows(&accounts, Some("plan"));
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, "plan");
+        assert_eq!(rows[0].id, "Pro Plan Monthly Subscription");
         assert!(credits_snapshot(&accounts).is_some());
+    }
+
+    #[test]
+    fn same_named_packs_merge_and_leave_spent_packs_out() {
+        // Two "Bonus Pack" grants: one long drained, one untouched. The drained
+        // pack must not drag the merged balance down with its spent credits.
+        let accounts = accounts_from(
+            r#"{
+              "Accounts": [
+                {"PackageCode": "bonus-old", "PackageName": "Bonus Pack", "CycleCapacitySize": 9999, "CycleCapacityRemain": 0, "DeductionEndTime": 1794962813000},
+                {"PackageCode": "bonus-new", "PackageName": "Bonus Pack", "CycleCapacitySize": 30, "CycleCapacityRemain": 30, "DeductionEndTime": 1797971474000}
+              ]
+            }"#,
+        );
+
+        let rows = usage_rows(&accounts, None);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "Bonus Pack");
+        assert_eq!(rows[0].percent_left, 100.0);
+        // The merged row expires with its first live pack.
+        assert_eq!(
+            rows[0].resets_at.map(|value| value.timestamp_millis()),
+            Some(1797971474000)
+        );
+    }
+
+    #[test]
+    fn merged_packs_weight_their_live_credits_together() {
+        let accounts = accounts_from(
+            r#"{
+              "Accounts": [
+                {"PackageCode": "bonus-a", "PackageName": "Bonus Pack", "CycleCapacitySize": 30, "CycleCapacityRemain": 15},
+                {"PackageCode": "bonus-b", "PackageName": "Bonus Pack", "CycleCapacitySize": 10, "CycleCapacityRemain": 10},
+                {"PackageCode": "drained", "PackageName": "Bonus Pack", "CycleCapacitySize": 500, "CycleCapacityRemain": 0}
+              ]
+            }"#,
+        );
+
+        let rows = usage_rows(&accounts, None);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].percent_left, 62.5);
+    }
+
+    #[test]
+    fn a_spent_pack_with_no_plan_is_dropped() {
+        let accounts = accounts_from(
+            r#"{
+              "Accounts": [
+                {"PackageCode": "bonus", "PackageName": "Bonus Pack", "CycleCapacitySize": 30, "CycleCapacityRemain": 0},
+                {"PackageCode": "plan", "PackageName": "Pro Plan Monthly Subscription", "CycleCapacitySize": 1000, "CycleCapacityRemain": 900}
+              ]
+            }"#,
+        );
+
+        let rows = usage_rows(&accounts, Some("plan"));
+        let ids: Vec<&str> = rows.iter().map(|row| row.id.as_str()).collect();
+        assert_eq!(ids, vec!["Pro Plan Monthly Subscription"]);
     }
 
     #[test]

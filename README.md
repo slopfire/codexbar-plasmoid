@@ -405,7 +405,8 @@ CodeBuddy calls `www.codebuddy.ai/billing/meter/{get-user-resource-summary,get-u
 Bearer token that `codebuddy` sign-in writes to
 `~/.local/share/CodeBuddyExtension/Data/Public/auth/Tencent-Cloud.coding-copilot.info` (overrides:
 `CODEBUDDY_ACCESS_TOKEN`, `CODEBUDDY_AUTH_FILE`, `CODEBUDDY_API_BASE`). Every CodeBuddy allowance is a monthly credit
-cycle, so each credit package becomes one usage row.
+cycle, so each credit package becomes one usage row; packages that share a name (repeated bonus grants) merge into a
+single row whose balance counts only the packs that still have credits left.
 Command Code calls `api.commandcode.ai/alpha/{billing/credits,billing/subscriptions,whoami}` with the API key that
 `cmd login` writes to `~/.commandcode/auth.json` (overrides: `COMMANDCODE_API_KEY`, `COMMANDCODE_AUTH_FILE`,
 `COMMANDCODE_HOME`, `COMMANDCODE_API_BASE`). Its token spend is read from the local session transcripts under
