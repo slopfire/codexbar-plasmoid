@@ -2,10 +2,12 @@
 
 All notable changes to the CodexBar Plasma widget are documented in this file.
 
-## Unreleased
+## 0.1.12 — 2026-10-22
 
 ### Features
 
+- Add CodeBuddy usage support
+- Fetch OpenCode Go usage from the OpenCode console API
 - Add a **Reliability** section to General settings: retries per refresh, failure backoff cap (default 3 minutes), and background cost scan timeout
 - Add a self-hosted sync server (`codexbar-plasmoid sync-server`): widgets publish their locally fetched usage snapshots, and the server merges them per (provider, account) with cross-device daily cost/history totals
 - Publish locally fetched entries to the sync server after each refresh (best effort, failures never interrupt rendering) — filter them behind General → Sync server
@@ -13,6 +15,7 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Add a **Sync all from the server** mode on the Providers page: every provider renders the server's merged cross-device state and the widget skips local fetching entirely (no CLI, no cost scan, no publish). The per-provider list grays out because sources, accounts, and enabled flags no longer apply
 
 ### Improvements
+
 
 - Retry a provider call once when it failed early with a transient error (a busy Codex app-server socket, a 429, a reset connection), with jittered backoff
 - Cap the failure backoff at 3 minutes by default instead of 10, so a provider that recovers is picked up within a couple of refreshes
@@ -28,6 +31,11 @@ All notable changes to the CodexBar Plasma widget are documented in this file.
 - Keep the last good usage limits on screen with a soft "retrying" note when a refresh fails, instead of replacing live bars with a red error or a bare cost panel
 - Fall back to Codex's `oauth` source when the `cli` app-server bridge times out or the selected source is unsupported
 - Reset the failure cooldown after a successful refresh so a recovered provider is not held back by an old backoff
+
+### Fixes
+
+- Merge CodeBuddy packs with the same name and drop spent packs
+- Update the bundled TLS root data after the eMudhra CA compromise
 
 ## 0.1.11 — 2026-09-19
 
