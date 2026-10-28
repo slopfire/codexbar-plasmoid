@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="sage" data-scheme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodexBar widget — final concept</title>
+<style>
+/* Material 3 role tokens, generated per wallpaper seed (illustrative tones). */
+html[data-seed="sage"][data-scheme="dark"]{--primary:#85d89c; --on-primary:#233427; --primary-container:#18512d; --on-primary-container:#caebd1; --secondary:#aeceb5; --on-secondary:#28332a; --secondary-container:#344c3a; --on-secondary-container:#d5e7d9; --tertiary:#5fd7e5; --on-tertiary:#1b3437; --tertiary-container:#024f56; --on-tertiary-container:#c1eaef; --surface:#101411; --surface-container-lowest:#0b0f0c; --surface-container-low:#191c19; --surface-container:#1d211d; --surface-container-high:#262b27; --surface-container-highest:#303632; --on-surface:#dee4df; --on-surface-variant:#bfc9c1; --outline:#879489; --outline-variant:#404942; --inverse-surface:#dee4df; --inverse-on-surface:#2c322d; --inverse-primary:#206b3c; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="sage"][data-scheme="light"]{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"][data-scheme="dark"]{--primary:#ffafd3; --on-primary:#402a34; --primary-container:#703150; --on-primary-container:#fed8e8; --secondary:#e5bbcd; --on-secondary:#3b2c33; --secondary-container:#5c3e4b; --on-secondary-container:#f4dce6; --tertiary:#fdb697; --on-tertiary:#3d2d25; --tertiary-container:#673c28; --on-tertiary-container:#fcdcce; --surface:#171214; --surface-container-lowest:#120d0f; --surface-container-low:#1f1a1c; --surface-container:#231e20; --surface-container-high:#2f282b; --surface-container-highest:#3a3336; --on-surface:#e8e1e3; --on-surface-variant:#d1c3c8; --outline:#9e8c93; --outline-variant:#4f4448; --inverse-surface:#e8e1e3; --inverse-on-surface:#362e31; --inverse-primary:#94426b; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="rose"][data-scheme="light"]{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"][data-scheme="dark"]{--primary:#a0caff; --on-primary:#243142; --primary-container:#064a77; --on-primary-container:#d2e4ff; --secondary:#b2c8e8; --on-secondary:#29313c; --secondary-container:#35485f; --on-secondary-container:#d8e3f5; --tertiary:#edb5e8; --on-tertiary:#392c38; --tertiary-container:#5e3a5c; --on-tertiary-container:#f3dbf1; --surface:#111418; --surface-container-lowest:#0c0e12; --surface-container-low:#191c1f; --surface-container:#1d2024; --surface-container-high:#272a30; --surface-container-highest:#31353a; --on-surface:#dfe3e8; --on-surface-variant:#c0c7d1; --outline:#89919e; --outline-variant:#414750; --inverse-surface:#dfe3e8; --inverse-on-surface:#2d3136; --inverse-primary:#00629d; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="indigo"][data-scheme="light"]{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"][data-scheme="dark"]{--primary:#ffb781; --on-primary:#3d2d21; --primary-container:#663d1a; --on-primary-container:#fedcc5; --secondary:#e1c0a9; --on-secondary:#3a2e26; --secondary-container:#594231; --on-secondary-container:#f3dfd2; --tertiary:#b9cf90; --on-tertiary:#2d3224; --tertiary-container:#3d4c23; --on-tertiary-container:#dde6cc; --surface:#17120f; --surface-container-lowest:#110d0a; --surface-container-low:#1f1b18; --surface-container:#231f1c; --surface-container-high:#2f2925; --surface-container-highest:#3a3430; --on-surface:#e7e1dd; --on-surface-variant:#d0c4bd; --outline:#9c8e84; --outline-variant:#4e453f; --inverse-surface:#e7e1dd; --inverse-on-surface:#352f2b; --inverse-primary:#885124; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="amber"][data-scheme="light"]{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+html[data-seed="sage"] .is-light{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"] .is-light{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"] .is-light{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"] .is-light{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+
+:root {
+  --r-xs: 4px; --r-s: 8px; --r-m: 12px; --r-l: 16px; --r-lp: 20px;
+  --r-xl: 28px; --r-xlp: 32px; --r-full: 999px;
+  --ease-fast: cubic-bezier(.42, 1.67, .21, .9);
+  --ease-spatial: cubic-bezier(.38, 1.21, .22, 1);
+  --ease-effects: cubic-bezier(.34, .8, .34, 1);
+  --dur-fast: 350ms; --dur-spatial: 500ms; --dur-fx: 200ms;
+  --sans: Roboto, "Roboto Flex", system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects);
+}
+@media (prefers-reduced-motion: reduce) { * { transition-duration: 1ms !important; } }
+
+/* ---------- M3 type scale ---------- */
+.display-l { font-size: 57px; line-height: 64px; letter-spacing: -.2px; font-weight: 500; }
+.display-m { font-size: 45px; line-height: 52px; letter-spacing: 0; font-weight: 500; }
+.display-s { font-size: 36px; line-height: 44px; letter-spacing: 0; font-weight: 500; }
+.headline-m{ font-size: 28px; line-height: 36px; letter-spacing: 0; font-weight: 500; }
+.headline-s{ font-size: 24px; line-height: 32px; letter-spacing: 0; font-weight: 500; }
+.title-l   { font-size: 22px; line-height: 28px; letter-spacing: 0; font-weight: 500; }
+.title-m   { font-size: 16px; line-height: 24px; letter-spacing: .2px; font-weight: 700; }
+.title-s   { font-size: 14px; line-height: 20px; letter-spacing: .1px; font-weight: 700; }
+.body-l    { font-size: 16px; line-height: 24px; letter-spacing: .5px; font-weight: 400; }
+.body-m    { font-size: 14px; line-height: 20px; letter-spacing: .25px; font-weight: 500; }
+.body-s    { font-size: 12px; line-height: 16px; letter-spacing: .4px; font-weight: 500; }
+.label-l   { font-size: 14px; line-height: 20px; letter-spacing: .1px; font-weight: 700; }
+.label-m   { font-size: 12px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.label-s   { font-size: 11px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--on-surface-variant); }
+.on-pri { color: var(--primary); }
+.on-ter { color: var(--tertiary); }
+.on-err { color: var(--error); }
+
+/* ---------- page chrome ---------- */
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px 110px; }
+.toolbar {
+  position: sticky; top: 12px; z-index: 20;
+  margin: 12px auto 0; max-width: 1100px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-container-high); color: var(--on-surface);
+  border-radius: var(--r-full); padding: 8px 8px 8px 18px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25), 0 12px 28px -18px rgba(0,0,0,.55);
+}
+.toolbar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14px; letter-spacing: -.01em; }
+.toolbar .spacer { flex: 1; }
+.seeds { display: flex; gap: 6px; }
+.seed {
+  width: 30px; height: 30px; border-radius: var(--r-full); border: 0; padding: 0; cursor: pointer;
+  outline: 2px solid transparent; outline-offset: 2px;
+  transition: outline-color var(--dur-fx) var(--ease-effects), transform var(--dur-fast) var(--ease-fast);
+}
+.seed:hover { transform: scale(1.08); }
+.seed[aria-pressed="true"] { outline-color: var(--on-surface); }
+.scheme { display: flex; background: var(--surface-container-highest); border-radius: var(--r-full); padding: 3px; gap: 3px; }
+.scheme button {
+  height: 28px; padding: 0 12px; border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--on-surface-variant);
+  font: 700 11px/16px var(--sans); letter-spacing: .5px; cursor: pointer;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects);
+}
+.scheme button[aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
+
+.hero { padding: 60px 0 4px; max-width: 760px; }
+.kicker { font: 700 11px/16px var(--sans); letter-spacing: .6px; text-transform: uppercase; color: var(--primary); }
+h1 { margin: 12px 0 14px; font-weight: 500; }
+h1 em { font-style: normal; color: var(--primary); }
+.lede { font-size: 17px; line-height: 27px; color: var(--on-surface-variant); margin: 0; max-width: 62ch; }
+.lede b { color: var(--on-surface); font-weight: 700; }
+
+.section { margin-top: 56px; }
+.section > header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.section h2 { margin: 0; }
+.section header span { font-size: 12px; letter-spacing: .4px; color: var(--on-surface-variant); }
+
+/* ---------- stages ---------- */
+.stage {
+  position: relative; border-radius: var(--r-xl); padding: 28px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background:
+    radial-gradient(120% 100% at 8% 0%, color-mix(in oklab, var(--primary-container) 62%, var(--surface)) 0%, transparent 60%),
+    radial-gradient(100% 100% at 96% 6%, color-mix(in oklab, var(--tertiary-container) 55%, var(--surface)) 0%, transparent 58%),
+    var(--surface-container-lowest);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--outline-variant) 55%, transparent);
+}
+.stage.tight { padding: 20px; }
+.wrapstage { display: grid; place-items: center; gap: 14px; }
+.wlabel { font-size: 11px; letter-spacing: .5px; color: var(--on-surface-variant); text-align: center; }
+
+/* ---------- the widget ---------- */
+.w {
+  width: 312px; max-width: 100%;
+  background: var(--surface-container);
+  color: var(--on-surface);
+  border-radius: var(--r-xl);
+  padding: 12px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 16px 34px -22px rgba(0,0,0,.8);
+  transition: background-color var(--dur-fx) var(--ease-effects), border-radius var(--dur-fast) var(--ease-fast);
+}
+.w:hover { background: var(--surface-container-high); }
+.w:active { border-radius: var(--r-lp); }  /* pressed: squarer */
+.w.small { width: 156px; padding: 10px; border-radius: var(--r-lp); }
+.w.mid { width: 312px; }
+
+.prow { display: flex; align-items: center; gap: 9px; }
+.pmark {
+  width: 24px; height: 24px; border-radius: var(--r-full); flex: 0 0 auto;
+  display: grid; place-items: center; background: var(--surface-container-highest);
+  color: var(--on-surface-variant); font: 700 10px/1 var(--sans); letter-spacing: .3px;
+}
+.name { flex: 1; min-width: 0; }
+
+/* linear progress indicator: active / track / 4dp stop */
+.pi { position: relative; height: 4px; border-radius: var(--r-full); background: var(--secondary-container); }
+.pi > i { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-full); background: var(--primary); }
+.pi.t6 { height: 6px; }
+.pi > .stop {
+  position: absolute; right: -1px; top: 50%; width: 4px; height: 4px; margin-top: -2px;
+  border-radius: 50%; background: var(--primary);
+}
+.pi > .pace {
+  position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 2px;
+  background: var(--on-surface); box-shadow: 0 0 0 2px var(--surface-container);
+}
+.pi > i.err { background: var(--error); }
+.pi > i.ter { background: var(--tertiary); }
+
+/* wavy linear indicator (M3 Expressive shape configuration) */
+.pi.wavy { height: 14px; background: none; border-radius: 0; overflow: hidden; }
+.wave {
+  position: absolute; inset: 0;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-size: 16px 14px; mask-size: 16px 14px;
+}
+.pi.wavy .track { background: var(--secondary-container); }
+.pi.wavy .fill { position: absolute; inset: 0 auto 0 0; overflow: hidden; }
+.pi.wavy .fill .wave { width: 288px; background: var(--primary); }
+.pi.wavy.err .fill .wave { background: var(--error); }
+.pi.wavy.ter .fill .wave { background: var(--tertiary); }
+
+/* pills (custom: M3 has no non-interactive status chip) */
+.pill {
+  height: 20px; padding: 0 8px; border-radius: var(--r-s);
+  display: inline-flex; align-items: center; white-space: nowrap;
+  font: 700 11px/16px var(--sans); letter-spacing: .5px;
+}
+.pill.pri { background: var(--primary-container); color: var(--on-primary-container); }
+.pill.sec { background: var(--secondary-container); color: var(--on-secondary-container); }
+.pill.ter { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.pill.err { background: var(--error-container); color: var(--on-error-container); }
+
+.pmark.dot { position: relative; }
+.pmark .dot { position: absolute; top: -1px; right: -1px; width: 6px; height: 6px; border-radius: 3px; background: var(--error); }
+
+.divider { height: 1px; background: var(--outline-variant); }
+.list { display: grid; }
+.li { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+
+/* annotation markers for the anatomy drawing */
+.k {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; flex: 0 0 auto;
+  border-radius: var(--r-full); background: var(--primary); color: var(--on-primary);
+  font: 700 10px/1 var(--sans);
+}
+
+/* grids */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) {
+  .grid2, .grid4 { grid-template-columns: 1fr; }
+  .w { width: 100%; max-width: 340px; }
+}
+
+/* ---------- anatomy ---------- */
+.anatomy { display: grid; grid-template-columns: 360px 1fr; gap: 32px; align-items: start; }
+@media (max-width: 800px) { .anatomy { grid-template-columns: 1fr; gap: 20px; } }
+.legend { display: grid; gap: 12px; }
+.legend div { display: flex; gap: 10px; align-items: flex-start; }
+.legend p { margin: 0; font-size: 13px; line-height: 19px; color: var(--on-surface-variant); }
+.legend b { color: var(--on-surface); }
+.legend .k { margin-top: 2px; }
+
+/* ---------- rules table ---------- */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 12px 14px; vertical-align: top; }
+thead th { font: 700 11px/16px var(--sans); letter-spacing: .5px; text-transform: uppercase; color: var(--on-surface-variant); }
+tbody tr { background: var(--surface-container-high); }
+tbody tr:nth-child(even) { background: var(--surface-container); }
+tbody td:first-child { border-radius: var(--r-m) 0 0 var(--r-m); }
+tbody td:last-child { border-radius: 0 var(--r-m) var(--r-m) 0; }
+td code, p code, li code { font-family: ui-monospace, "Roboto Mono", monospace; font-size: 11.5px; color: var(--primary); }
+.tblwrap { border-radius: var(--r-l); overflow: hidden; }
+
+/* ---------- implementation ---------- */
+.impl { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 760px) { .impl { grid-template-columns: 1fr; } }
+.impl article { background: var(--surface-container-high); border-radius: var(--r-l); padding: 20px; }
+.impl h3 { margin: 0 0 10px; }
+.impl ol { margin: 0; padding-left: 18px; }
+.impl li { font-size: 13px; line-height: 20px; color: var(--on-surface-variant); margin-bottom: 8px; }
+.impl li b { color: var(--on-surface); }
+.foot { margin-top: 34px; font-size: 12px; line-height: 18px; color: var(--on-surface-variant); }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="13" width="3.4" height="8" rx="1.7" fill="var(--primary)"/>
+      <rect x="8.2" y="9" width="3.4" height="12" rx="1.7" fill="var(--primary)"/>
+      <rect x="13.4" y="5" width="3.4" height="16" rx="1.7" fill="var(--primary)"/>
+      <rect x="18.6" y="2" width="3.4" height="19" rx="1.7" fill="var(--primary)"/>
+    </svg>
+    CodexBar · final
+  </div>
+  <div class="spacer"></div>
+  <div class="seeds" role="group" aria-label="Wallpaper seed">
+    <button class="seed" data-set-seed="sage" aria-pressed="true" aria-label="Sage" style="background:#85d89c"></button>
+    <button class="seed" data-set-seed="rose" aria-pressed="false" aria-label="Rose" style="background:#ffafd3"></button>
+    <button class="seed" data-set-seed="indigo" aria-pressed="false" aria-label="Indigo" style="background:#a0caff"></button>
+    <button class="seed" data-set-seed="amber" aria-pressed="false" aria-label="Amber" style="background:#ffb781"></button>
+  </div>
+  <div class="scheme" role="group" aria-label="Theme">
+    <button data-set-scheme="dark" aria-pressed="true">Dark</button>
+    <button data-set-scheme="light" aria-pressed="false">Light</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">CodexBar · Android widget · final concept</div>
+    <h1 class="display-l">Every window, one verdict, <em>one wavy meter</em></h1>
+    <p class="lede">
+      The three picks fused: the tightest window gets the headline and a wavy indicator with a clock
+      notch (<b>02</b>), its siblings sit below as a list (<b>04</b>), and every row ends in a
+      plain-language verdict (<b>11</b>). Nothing here needs data the widget doesn't already cache.
+    </p>
+  </header>
+
+  <!-- ============ final, 1:1 ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">The widget</h2><span>4 × 4 · ≈250 dp · drawn at 1.25×</span></header>
+    <div class="stage" style="max-width:640px;margin:0 auto">
+      <div class="w">
+
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">dry in 4d</span>
+        </div>
+
+        <div style="display:flex;align-items:baseline;gap:7px;margin:8px 0 2px">
+          <span class="display-s num on-err">17%</span>
+          <span class="title-s on-err">left</span>
+        </div>
+        <div class="body-s muted" style="margin-bottom:10px">monthly · resets in 11d 14h</div>
+
+        <div class="pi wavy err">
+          <span class="wave track"></span>
+          <span class="fill" style="width:17%"><span class="wave"></span></span>
+          <span class="pace" style="left:38%;top:0;bottom:0"></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;position:relative;height:16px">
+          <span class="label-s muted">0%</span>
+          <span class="label-s muted" style="position:absolute;left:38%;transform:translateX(-50%)">clock 38%</span>
+          <span class="label-s muted">100%</span>
+        </div>
+
+        <div class="divider" style="margin:10px 0 2px"></div>
+
+        <div class="list">
+          <div class="li">
+            <span class="body-s muted" style="width:66px">5h session</span>
+            <div class="pi" style="flex:1"><i style="width:74%"></i><span class="stop"></span></div>
+            <span class="label-m num on-pri" style="width:30px;text-align:right">74%</span>
+          </div>
+          <div class="li">
+            <span class="body-s muted" style="width:66px">Weekly</span>
+            <div class="pi" style="flex:1"><i class="ter" style="width:52%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+            <span class="label-m num" style="width:30px;text-align:right">52%</span>
+          </div>
+        </div>
+
+        <div class="divider" style="margin:2px 0"></div>
+
+        <div class="li">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="body-s muted">weekly</span>
+          <span class="title-s num on-ter" style="margin-left:6px">28%</span>
+          <span class="pill ter">tight</span>
+        </div>
+        <div class="li" style="padding-top:0">
+          <span class="pmark">CB</span>
+          <span class="name title-s">CodeBuddy</span>
+          <span class="body-s muted">monthly</span>
+          <span class="title-s num on-pri" style="margin-left:6px">40%</span>
+          <span class="pill pri">on pace</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ anatomy ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">Anatomy</h2><span>seven parts, no decoration</span></header>
+    <div class="anatomy">
+      <div class="w">
+
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">dry in 4d</span>
+          <span class="k">1</span>
+        </div>
+
+        <div style="display:flex;align-items:baseline;gap:7px;margin:8px 0 2px">
+          <span class="display-s num on-err">17%</span>
+          <span class="title-s on-err">left</span>
+          <span class="k">2</span>
+        </div>
+        <div class="body-s muted" style="margin-bottom:10px">monthly · resets in 11d 14h</div>
+
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="pi wavy err" style="flex:1">
+            <span class="wave track"></span>
+            <span class="fill" style="width:17%"><span class="wave"></span></span>
+            <span class="pace" style="left:38%;top:0;bottom:0"></span>
+          </div>
+          <span class="k">3</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;position:relative;height:16px">
+          <span class="label-s muted">0%</span>
+          <span class="label-s muted" style="position:absolute;left:38%;transform:translateX(-50%)">clock 38%</span>
+          <span class="label-s muted">100%</span>
+        </div>
+
+        <div class="divider" style="margin:10px 0 2px"></div>
+
+        <div class="list">
+          <div class="li">
+            <span class="body-s muted" style="width:66px">5h session</span>
+            <div class="pi" style="flex:1"><i style="width:74%"></i><span class="stop"></span></div>
+            <span class="label-m num on-pri" style="width:30px;text-align:right">74%</span>
+            <span class="k">4</span>
+          </div>
+          <div class="li">
+            <span class="body-s muted" style="width:66px">Weekly</span>
+            <div class="pi" style="flex:1"><i class="ter" style="width:52%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+            <span class="label-m num" style="width:30px;text-align:right">52%</span>
+          </div>
+        </div>
+
+        <div class="divider" style="margin:2px 0"></div>
+
+        <div class="li">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="body-s muted">weekly</span>
+          <span class="title-s num on-ter" style="margin-left:6px">28%</span>
+          <span class="pill ter">tight</span>
+          <span class="k">5</span>
+        </div>
+        <div class="li" style="padding-top:0">
+          <span class="pmark">CB</span>
+          <span class="name title-s">CodeBuddy</span>
+          <span class="body-s muted">monthly</span>
+          <span class="title-s num on-pri" style="margin-left:6px">40%</span>
+          <span class="pill pri">on pace</span>
+        </div>
+
+      </div>
+
+      <div class="legend">
+        <div><span class="k">1</span><p><b>Verdict pill.</b> The row's answer in words: <em>dry in 4d</em>, <em>tight</em>,
+          <em>on pace</em>. Container role = severity. 20 dp tall, 8 dp corners, label-small bold.</p></div>
+        <div><span class="k">2</span><p><b>Value + unit + window.</b> The percent is never alone: <em>left</em> is a
+          title-small attached to the display-small number, and the window name sits directly under it.</p></div>
+        <div><span class="k">3</span><p><b>Wavy indicator + clock notch.</b> M3 Expressive's optional shape, 14 dp tall,
+          active in the severity role, track in secondary-container. The 2 dp notch sits at
+          <code>(resetsAt − now) / (windowMinutes × 60000)</code>: fill left of it means burning too fast.
+          The 4 dp end stop stays.</p></div>
+        <div><span class="k">4</span><p><b>Sibling windows.</b> The list that fixes "17 % of what?" — every other limit
+          of the same provider, one thin 4 dp indicator each, tightest first.</p></div>
+        <div><span class="k">5</span><p><b>Collapsed providers.</b> Everything healthy is one line, one pill, one number.
+          No bars where they would not change a decision.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ states ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">Four states</h2><span>the pill and the color do the same job twice, on purpose</span></header>
+    <div class="grid4">
+
+      <div class="wrapstage">
+        <div class="w small">
+          <div class="prow" style="gap:6px">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">OC</span>
+            <span class="name title-s" style="font-size:12px">OpenCode Go</span>
+          </div>
+          <div class="display-s num on-err" style="margin-top:6px">17%</div>
+          <div class="body-s muted" style="margin-bottom:6px">monthly · left</div>
+          <div class="pi t6"><i class="err" style="width:17%"></i><span class="stop" style="background:var(--error)"></span></div>
+          <div style="margin-top:8px"><span class="pill err">dry in 4d</span></div>
+        </div>
+        <div class="wlabel">critical · will not last</div>
+      </div>
+
+      <div class="wrapstage">
+        <div class="w small">
+          <div class="prow" style="gap:6px">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">C</span>
+            <span class="name title-s" style="font-size:12px">Claude</span>
+          </div>
+          <div class="display-s num on-ter" style="margin-top:6px">28%</div>
+          <div class="body-s muted" style="margin-bottom:6px">weekly · left</div>
+          <div class="pi t6"><i class="ter" style="width:28%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+          <div style="margin-top:8px"><span class="pill ter">tight</span></div>
+        </div>
+        <div class="wlabel">watch · under 30 %</div>
+      </div>
+
+      <div class="wrapstage">
+        <div class="w small">
+          <div class="prow" style="gap:6px">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">CB</span>
+            <span class="name title-s" style="font-size:12px">CodeBuddy</span>
+          </div>
+          <div class="display-s num on-pri" style="margin-top:6px">40%</div>
+          <div class="body-s muted" style="margin-bottom:6px">monthly · left</div>
+          <div class="pi t6"><i style="width:40%"></i><span class="stop"></span></div>
+          <div style="margin-top:8px"><span class="pill pri">on pace</span></div>
+        </div>
+        <div class="wlabel">healthy · reaches reset</div>
+      </div>
+
+      <div class="wrapstage">
+        <div class="w small">
+          <div class="prow" style="gap:6px">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">C</span>
+            <span class="name title-s" style="font-size:12px">Claude</span>
+          </div>
+          <div class="display-s num muted" style="margin-top:6px">—</div>
+          <div class="body-s muted" style="margin-bottom:6px">last sync 2h ago</div>
+          <div class="pi t6"><i style="width:0"></i></div>
+          <div style="margin-top:8px"><span class="pill sec">last good data</span></div>
+        </div>
+        <div class="wlabel">stale · never blank</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ sizes ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">Three sizes</h2><span>same parts, fewer of them</span></header>
+    <div class="grid2" style="grid-template-columns:repeat(3,1fr);align-items:start">
+
+      <div class="wrapstage">
+        <div class="w" style="width:100%;max-width:300px">
+          <div class="prow">
+            <span class="pmark">OC</span>
+            <span class="name title-s">OpenCode Go</span>
+            <span class="pill err">dry in 4d</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin:6px 0 2px">
+            <span class="display-s num on-err">17%</span>
+            <span class="title-s on-err">left</span>
+          </div>
+          <div class="body-s muted" style="margin-bottom:8px">monthly · resets in 11d 14h</div>
+          <div class="pi wavy err" style="height:12px">
+            <span class="wave track"></span>
+            <span class="fill" style="width:17%"><span class="wave"></span></span>
+            <span class="pace" style="left:38%;top:0;bottom:0"></span>
+          </div>
+          <div class="divider" style="margin:8px 0 2px"></div>
+          <div class="li">
+            <span class="body-s muted" style="width:54px">5h</span>
+            <div class="pi" style="flex:1"><i style="width:74%"></i><span class="stop"></span></div>
+            <span class="label-m num on-pri" style="width:28px;text-align:right">74%</span>
+          </div>
+          <div class="li" style="padding-top:0">
+            <span class="body-s muted" style="width:54px">Weekly</span>
+            <div class="pi" style="flex:1"><i class="ter" style="width:52%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+            <span class="label-m num" style="width:28px;text-align:right">52%</span>
+          </div>
+          <div class="divider" style="margin:6px 0 0"></div>
+          <div class="li" style="padding-bottom:0">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">C</span>
+            <span class="name title-s" style="font-size:12px">Claude</span>
+            <span class="title-s num on-ter">28%</span>
+            <span class="pill ter">tight</span>
+          </div>
+        </div>
+        <div class="wlabel">4 × 4 · ≈250 × 250 dp</div>
+      </div>
+
+      <div class="wrapstage">
+        <div class="w" style="width:100%;max-width:300px">
+          <div class="prow">
+            <span class="pmark">OC</span>
+            <span class="name title-s">OpenCode Go</span>
+            <span class="pill err">dry in 4d</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin:6px 0 2px">
+            <span class="display-s num on-err">17%</span>
+            <span class="title-s on-err">left</span>
+          </div>
+          <div class="body-s muted" style="margin-bottom:8px">monthly · resets in 11d 14h</div>
+          <div class="pi wavy err" style="height:12px">
+            <span class="wave track"></span>
+            <span class="fill" style="width:17%"><span class="wave"></span></span>
+            <span class="pace" style="left:38%;top:0;bottom:0"></span>
+          </div>
+        </div>
+        <div class="wlabel">4 × 2 · ≈250 × 110 dp</div>
+      </div>
+
+      <div class="wrapstage">
+        <div class="w small">
+          <div class="prow" style="gap:6px">
+            <span class="pmark" style="width:20px;height:20px;font-size:8px">OC</span>
+            <span class="name title-s" style="font-size:12px">OpenCode Go</span>
+          </div>
+          <div class="display-s num on-err" style="margin-top:6px">17%</div>
+          <div class="body-s muted" style="margin-bottom:6px">monthly · left</div>
+          <div class="pi t6"><i class="err" style="width:17%"></i><span class="stop" style="background:var(--error)"></span></div>
+          <div style="margin-top:7px"><span class="pill err">dry in 4d</span></div>
+        </div>
+        <div class="wlabel">2 × 2 · ≈110 × 110 dp</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ rules ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">Rules</h2><span>the whole decision layer</span></header>
+    <div class="tblwrap">
+      <table>
+        <thead>
+          <tr><th>Condition (all cached today)</th><th>Pill</th><th>Role</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>pace.willLastToReset === false</code></td>
+            <td>dry in <code>etaSeconds</code> → <b>4d</b></td>
+            <td><span class="pill err">error</span></td>
+          </tr>
+          <tr>
+            <td><code>percentLeft &lt; 30</code>, pace absent or on track</td>
+            <td><b>tight</b></td>
+            <td><span class="pill ter">tertiary</span></td>
+          </tr>
+          <tr>
+            <td><code>percentLeft &lt; 20</code> with no pace data</td>
+            <td><b>low</b></td>
+            <td><span class="pill err">error</span></td>
+          </tr>
+          <tr>
+            <td>otherwise</td>
+            <td><b>on pace</b></td>
+            <td><span class="pill pri">primary</span></td>
+          </tr>
+          <tr>
+            <td><code>provider.stale</code></td>
+            <td><b>last good data</b></td>
+            <td><span class="pill sec">secondary</span></td>
+          </tr>
+          <tr>
+            <td><code>provider.hasError</code></td>
+            <td><b>refresh failed</b></td>
+            <td><span class="pill err">error</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="impl" style="margin-top:20px">
+      <article>
+        <h3 class="title-m">Severity drives color, everywhere</h3>
+        <ol>
+          <li><b>≥ 50 %</b> → primary</li>
+          <li><b>20–49 %</b> → tertiary</li>
+          <li><b>&lt; 20 %</b> → error</li>
+          <li>The notch and stop stay on-surface / primary so they never read as a second status.</li>
+        </ol>
+      </article>
+      <article>
+        <h3 class="title-m">Notch math, one line</h3>
+        <p class="body-s muted" style="margin:0 0 8px">
+          <code>WidgetPace.timeLeftFraction()</code> already returns it. Draw it at
+          <code>left: fraction * 100%</code>, 2 dp wide, 4 dp taller than the track.
+        </p>
+        <p class="body-s muted" style="margin:0">Unknown (no reset, no window length, fraction &gt; 1) draws no notch —
+          never pin it to an edge.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ implementation ============ -->
+  <section class="section">
+    <header><h2 class="headline-s">What changes in the code</h2><span>ordered by cost</span></header>
+    <div class="impl">
+      <article>
+        <h3 class="title-m">Cheap — this week</h3>
+        <ol>
+          <li><b><code>WidgetContent.kt</code>:</b> split <code>LimitLine</code> into a headline row and a
+            <code>WindowRow</code>; render <code>provider.rows</code> instead of only <code>row</code>.</li>
+          <li><b>Verdict:</b> replace the free-form <code>captionFor()</code> string with a
+            <code>Verdict(text, role)</code> from the table above.</li>
+          <li><b><code>LimitBar</code>:</b> keep the 4 dp stop, drop the 24-cell quantisation for a weighted
+            fill (<code>LinearProgressIndicator</code> semantics).</li>
+          <li><b>Notch:</b> reuse <code>WidgetPace.timeLeftFraction</code>, draw a 2 dp box on the track.</li>
+        </ol>
+      </article>
+      <article>
+        <h3 class="title-m">Expensive — needs RemoteViews work</h3>
+        <ol>
+          <li><b>Wavy indicator:</b> Glance has no canvas; a wavy drawable means either a generated bitmap
+            clipped by width or a custom <code>RemoteViews</code> view. Ship flat first.</li>
+          <li><b>Config:</b> expose “show sibling windows” and “wavy / flat” in the widget settings, default
+            on and flat.</li>
+          <li><b>Sizes:</b> one composable, three paddings — 4×4 full, 4×2 drops the window list, 2×2 keeps the
+            headline only.</li>
+        </ol>
+      </article>
+    </div>
+    <p class="foot">
+      Palette tones are generated approximations of M3 roles, not Material Theme Builder output. Demo data:
+      OpenCode Go monthly 17 % (dry in 4d), Claude weekly 28 %, CodeBuddy monthly 40 % — plus OC Go's 5h and
+      weekly meters, which the current widget never renders.
+    </p>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  function sync(sel, attr, value) {
+    document.querySelectorAll(sel).forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset[attr] === value));
+    });
+  }
+  sync('[data-set-seed]', 'setSeed', root.dataset.seed);
+  sync('[data-set-scheme]', 'setScheme', root.dataset.scheme);
+  document.querySelectorAll('[data-set-seed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      root.dataset.seed = b.dataset.setSeed;
+      sync('[data-set-seed]', 'setSeed', root.dataset.seed);
+    });
+  });
+  document.querySelectorAll('[data-set-scheme]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      root.dataset.scheme = b.dataset.setScheme;
+      sync('[data-set-scheme]', 'setScheme', root.dataset.scheme);
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="sage" data-scheme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodexBar widget — eight directions</title>
+<style>
+/* M3 role tokens per wallpaper seed (generated approximations). */
+html[data-seed="sage"][data-scheme="dark"]{--primary:#85d89c; --on-primary:#233427; --primary-container:#18512d; --on-primary-container:#caebd1; --secondary:#aeceb5; --on-secondary:#28332a; --secondary-container:#344c3a; --on-secondary-container:#d5e7d9; --tertiary:#5fd7e5; --on-tertiary:#1b3437; --tertiary-container:#024f56; --on-tertiary-container:#c1eaef; --surface:#101411; --surface-container-lowest:#0b0f0c; --surface-container-low:#191c19; --surface-container:#1d211d; --surface-container-high:#262b27; --surface-container-highest:#303632; --on-surface:#dee4df; --on-surface-variant:#bfc9c1; --outline:#879489; --outline-variant:#404942; --inverse-surface:#dee4df; --inverse-on-surface:#2c322d; --inverse-primary:#206b3c; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="sage"][data-scheme="light"]{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"][data-scheme="dark"]{--primary:#ffafd3; --on-primary:#402a34; --primary-container:#703150; --on-primary-container:#fed8e8; --secondary:#e5bbcd; --on-secondary:#3b2c33; --secondary-container:#5c3e4b; --on-secondary-container:#f4dce6; --tertiary:#fdb697; --on-tertiary:#3d2d25; --tertiary-container:#673c28; --on-tertiary-container:#fcdcce; --surface:#171214; --surface-container-lowest:#120d0f; --surface-container-low:#1f1a1c; --surface-container:#231e20; --surface-container-high:#2f282b; --surface-container-highest:#3a3336; --on-surface:#e8e1e3; --on-surface-variant:#d1c3c8; --outline:#9e8c93; --outline-variant:#4f4448; --inverse-surface:#e8e1e3; --inverse-on-surface:#362e31; --inverse-primary:#94426b; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="rose"][data-scheme="light"]{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"][data-scheme="dark"]{--primary:#a0caff; --on-primary:#243142; --primary-container:#064a77; --on-primary-container:#d2e4ff; --secondary:#b2c8e8; --on-secondary:#29313c; --secondary-container:#35485f; --on-secondary-container:#d8e3f5; --tertiary:#edb5e8; --on-tertiary:#392c38; --tertiary-container:#5e3a5c; --on-tertiary-container:#f3dbf1; --surface:#111418; --surface-container-lowest:#0c0e12; --surface-container-low:#191c1f; --surface-container:#1d2024; --surface-container-high:#272a30; --surface-container-highest:#31353a; --on-surface:#dfe3e8; --on-surface-variant:#c0c7d1; --outline:#89919e; --outline-variant:#414750; --inverse-surface:#dfe3e8; --inverse-on-surface:#2d3136; --inverse-primary:#00629d; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="indigo"][data-scheme="light"]{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"][data-scheme="dark"]{--primary:#ffb781; --on-primary:#3d2d21; --primary-container:#663d1a; --on-primary-container:#fedcc5; --secondary:#e1c0a9; --on-secondary:#3a2e26; --secondary-container:#594231; --on-secondary-container:#f3dfd2; --tertiary:#b9cf90; --on-tertiary:#2d3224; --tertiary-container:#3d4c23; --on-tertiary-container:#dde6cc; --surface:#17120f; --surface-container-lowest:#110d0a; --surface-container-low:#1f1b18; --surface-container:#231f1c; --surface-container-high:#2f2925; --surface-container-highest:#3a3430; --on-surface:#e7e1dd; --on-surface-variant:#d0c4bd; --outline:#9c8e84; --outline-variant:#4e453f; --inverse-surface:#e7e1dd; --inverse-on-surface:#352f2b; --inverse-primary:#885124; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="amber"][data-scheme="light"]{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+html[data-seed="sage"] .is-light{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"] .is-light{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"] .is-light{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"] .is-light{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+
+:root {
+  --r-xs: 4px; --r-s: 8px; --r-m: 12px; --r-l: 16px; --r-lp: 20px;
+  --r-xl: 28px; --r-full: 999px;
+  --ease-fast: cubic-bezier(.42, 1.67, .21, .9);
+  --ease-effects: cubic-bezier(.34, .8, .34, 1);
+  --dur-fast: 350ms; --dur-fx: 200ms;
+  --sans: Roboto, "Roboto Flex", system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects);
+}
+@media (prefers-reduced-motion: reduce) { * { transition-duration: 1ms !important; } }
+
+/* M3 type scale (emphasized weights) */
+.display-l { font-size: 52px; line-height: 58px; letter-spacing: -.3px; font-weight: 500; }
+.display-m { font-size: 45px; line-height: 52px; font-weight: 500; }
+.display-s { font-size: 36px; line-height: 44px; font-weight: 500; }
+.headline-m{ font-size: 28px; line-height: 36px; font-weight: 500; }
+.headline-s{ font-size: 24px; line-height: 32px; font-weight: 500; }
+.title-l   { font-size: 22px; line-height: 28px; font-weight: 500; }
+.title-m   { font-size: 16px; line-height: 24px; letter-spacing: .2px; font-weight: 700; }
+.title-s   { font-size: 14px; line-height: 20px; letter-spacing: .1px; font-weight: 700; }
+.body-m    { font-size: 14px; line-height: 20px; letter-spacing: .25px; font-weight: 500; }
+.body-s    { font-size: 12px; line-height: 16px; letter-spacing: .4px; font-weight: 500; }
+.label-m   { font-size: 12px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.label-s   { font-size: 11px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--on-surface-variant); }
+.on-pri { color: var(--primary); }
+.on-ter { color: var(--tertiary); }
+.on-err { color: var(--error); }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding: 0 20px 110px; }
+
+/* toolbar */
+.toolbar {
+  position: sticky; top: 12px; z-index: 20; margin: 12px auto 0; max-width: 1120px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface-container-high); border-radius: var(--r-full); padding: 8px 8px 8px 18px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25), 0 12px 28px -18px rgba(0,0,0,.55);
+}
+.toolbar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14px; }
+.toolbar .spacer { flex: 1; }
+.seeds { display: flex; gap: 6px; }
+.seed { width: 30px; height: 30px; border-radius: var(--r-full); border: 0; padding: 0; cursor: pointer;
+  outline: 2px solid transparent; outline-offset: 2px;
+  transition: outline-color var(--dur-fx) var(--ease-effects), transform var(--dur-fast) var(--ease-fast); }
+.seed:hover { transform: scale(1.08); }
+.seed[aria-pressed="true"] { outline-color: var(--on-surface); }
+.scheme { display: flex; background: var(--surface-container-highest); border-radius: var(--r-full); padding: 3px; gap: 3px; }
+.scheme button { height: 28px; padding: 0 12px; border: 0; border-radius: var(--r-full); background: transparent;
+  color: var(--on-surface-variant); font: 700 11px/16px var(--sans); letter-spacing: .5px; cursor: pointer;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects); }
+.scheme button[aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
+
+.hero { padding: 56px 0 8px; max-width: 780px; }
+.kicker { font: 700 11px/16px var(--sans); letter-spacing: .6px; text-transform: uppercase; color: var(--primary); }
+h1 { margin: 12px 0 14px; font-weight: 500; }
+h1 em { font-style: normal; color: var(--primary); }
+.lede { font-size: 16.5px; line-height: 27px; color: var(--on-surface-variant); margin: 0; max-width: 64ch; }
+.lede b { color: var(--on-surface); font-weight: 700; }
+
+/* gallery */
+.gallery { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 30px 22px; }
+.variant { display: flex; flex-direction: column; }
+.vstage {
+  position: relative; border-radius: var(--r-xl); padding: 26px 22px;
+  display: flex; align-items: center; justify-content: center; min-height: 300px;
+  background:
+    radial-gradient(120% 100% at 8% 0%, color-mix(in oklab, var(--primary-container) 58%, var(--surface)) 0%, transparent 60%),
+    radial-gradient(100% 100% at 96% 6%, color-mix(in oklab, var(--tertiary-container) 50%, var(--surface)) 0%, transparent 58%),
+    var(--surface-container-lowest);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--outline-variant) 55%, transparent);
+}
+.vstage.short { min-height: 210px; }
+.vhead { display: flex; align-items: baseline; gap: 9px; margin-top: 14px; }
+.vhead .vid { font: 700 11px/16px var(--sans); letter-spacing: .5px; color: var(--primary); }
+.vhead h2 { margin: 0; font-size: 16px; line-height: 22px; font-weight: 700; letter-spacing: -.01em; }
+.vhead .size { margin-left: auto; font: 700 10px/14px var(--sans); letter-spacing: .6px; text-transform: uppercase;
+  color: var(--on-surface-variant); border: 1px solid var(--outline-variant); border-radius: var(--r-xs); padding: 2px 5px; }
+.vpitch { margin: 5px 0 0 20px; font-size: 12.5px; line-height: 18px; color: var(--on-surface-variant); }
+.vnote { margin: 8px 0 0 20px; display: grid; gap: 3px; font-size: 11.5px; line-height: 17px; color: var(--on-surface-variant); }
+.vnote b { color: var(--on-surface); font-weight: 700; }
+
+/* ---------- shared widget ---------- */
+.w {
+  width: 312px; max-width: 100%;
+  background: var(--surface-container);
+  color: var(--on-surface);
+  border-radius: var(--r-xl);
+  padding: 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 16px 34px -22px rgba(0,0,0,.8);
+  transition: background-color var(--dur-fx) var(--ease-effects), border-radius var(--dur-fast) var(--ease-fast);
+}
+.w:hover { background: var(--surface-container-high); }
+.w:active { border-radius: var(--r-lp); }
+.w.r20 { border-radius: var(--r-lp); padding: 10px; }
+.prow { display: flex; align-items: center; gap: 9px; }
+.pmark { width: 24px; height: 24px; border-radius: var(--r-full); flex: 0 0 auto; display: grid; place-items: center;
+  background: var(--surface-container-highest); color: var(--on-surface-variant);
+  font: 700 10px/1 var(--sans); letter-spacing: .3px; }
+.pmark.sm { width: 20px; height: 20px; font-size: 8px; }
+.name { flex: 1; min-width: 0; }
+
+.pi { position: relative; height: 4px; border-radius: var(--r-full); background: var(--secondary-container); }
+.pi > i { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-full); background: var(--primary); }
+.pi.t6 { height: 6px; }
+.pi > .stop { position: absolute; right: -1px; top: 50%; width: 4px; height: 4px; margin-top: -2px;
+  border-radius: 50%; background: var(--primary); }
+.pi > .pace { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 2px;
+  background: var(--on-surface); box-shadow: 0 0 0 2px var(--surface-container); }
+
+.pi.wavy { height: 14px; background: none; border-radius: 0; overflow: hidden; }
+.wave { position: absolute; inset: 0;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-size: 16px 14px; mask-size: 16px 14px; }
+.pi.wavy .track { background: var(--secondary-container); }
+.pi.wavy .fill { position: absolute; inset: 0 auto 0 0; overflow: hidden; }
+.pi.wavy .fill .wave { width: 288px; background: var(--primary); }
+.pi.wavy.err .fill .wave { background: var(--error); }
+
+.pill { height: 20px; padding: 0 8px; border-radius: var(--r-s); display: inline-flex; align-items: center;
+  white-space: nowrap; font: 700 11px/16px var(--sans); letter-spacing: .5px; }
+.pill.sm { height: 18px; padding: 0 6px; font-size: 10px; }
+.pill.pri { background: var(--primary-container); color: var(--on-primary-container); }
+.pill.sec { background: var(--secondary-container); color: var(--on-secondary-container); }
+.pill.ter { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.pill.err { background: var(--error-container); color: var(--on-error-container); }
+
+.divider { height: 1px; background: var(--outline-variant); }
+.li { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.cap { color: var(--on-surface-variant); }
+
+/* variant bits */
+.pager { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+.pager i { width: 8px; height: 8px; border-radius: 50%; background: var(--outline-variant); }
+.pager i.on { width: 24px; border-radius: var(--r-full); background: var(--primary); }
+
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile { background: var(--surface-container-highest); border-radius: var(--r-m); padding: 10px; }
+.tile .tname { font: 700 10px/14px var(--sans); letter-spacing: .3px; color: var(--on-surface-variant); margin-bottom: 5px; }
+.tile .tnum { font-size: 24px; line-height: 28px; font-weight: 700; letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.tile .tbot { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+
+.matrix { width: 100%; border-collapse: collapse; font-size: 12px; }
+.matrix th { font: 700 10px/14px var(--sans); letter-spacing: .4px; color: var(--on-surface-variant); text-align: right; padding: 0 0 7px; }
+.matrix th:first-child { text-align: left; }
+.matrix td { padding: 7px 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.matrix td:first-child { text-align: left; font-weight: 700; }
+.matrix tr + tr td { border-top: 1px solid var(--outline-variant); }
+.matrix td.na { color: var(--outline); font-weight: 500; }
+
+.focus {
+  background: var(--surface-container-highest); border-radius: var(--r-l); padding: 12px;
+}
+.spark { display: block; }
+.oneline { display: grid; gap: 6px; }
+.oneline .orow { display: flex; align-items: center; gap: 7px; }
+
+/* table at the end */
+.compare { margin-top: 56px; }
+.compare h2 { margin: 0 0 14px; }
+.tblwrap { border-radius: var(--r-l); overflow: hidden; }
+table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.cmp th, table.cmp td { text-align: left; padding: 11px 14px; vertical-align: top; }
+table.cmp thead th { font: 700 10.5px/16px var(--sans); letter-spacing: .5px; text-transform: uppercase; color: var(--on-surface-variant); }
+table.cmp tbody tr { background: var(--surface-container-high); }
+table.cmp tbody tr:nth-child(even) { background: var(--surface-container); }
+table.cmp td:first-child { border-radius: var(--r-m) 0 0 var(--r-m); font-weight: 700; }
+table.cmp td:last-child { border-radius: 0 var(--r-m) var(--r-m) 0; }
+table.cmp .yes { color: var(--primary); font-weight: 700; }
+table.cmp .no { color: var(--on-surface-variant); }
+.foot { margin-top: 26px; font-size: 12px; line-height: 18px; color: var(--on-surface-variant); max-width: 70ch; }
+
+@media (max-width: 720px) {
+  .gallery { grid-template-columns: 1fr; }
+  .vstage { padding: 18px 14px; }
+  .hero { padding-top: 40px; }
+  .toolbar { padding-left: 14px; gap: 8px; }
+  .toolbar .brand span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="13" width="3.4" height="8" rx="1.7" fill="var(--primary)"/>
+      <rect x="8.2" y="9" width="3.4" height="12" rx="1.7" fill="var(--primary)"/>
+      <rect x="13.4" y="5" width="3.4" height="16" rx="1.7" fill="var(--primary)"/>
+      <rect x="18.6" y="2" width="3.4" height="19" rx="1.7" fill="var(--primary)"/>
+    </svg>
+    <span>CodexBar · eight directions</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="seeds" role="group" aria-label="Wallpaper seed">
+    <button class="seed" data-set-seed="sage" aria-pressed="true" aria-label="Sage" style="background:#85d89c"></button>
+    <button class="seed" data-set-seed="rose" aria-pressed="false" aria-label="Rose" style="background:#ffafd3"></button>
+    <button class="seed" data-set-seed="indigo" aria-pressed="false" aria-label="Indigo" style="background:#a0caff"></button>
+    <button class="seed" data-set-seed="amber" aria-pressed="false" aria-label="Amber" style="background:#ffb781"></button>
+  </div>
+  <div class="scheme" role="group" aria-label="Theme">
+    <button data-set-scheme="dark" aria-pressed="true">Dark</button>
+    <button data-set-scheme="light" aria-pressed="false">Light</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">CodexBar · Android widget · concept set</div>
+    <h1 class="display-l">Eight widgets, <em>one dataset</em></h1>
+    <p class="lede">
+      Every version shows the same four numbers with the same parts — real indicators, a verdict in
+      words, one emphasized number. What changes is what the widget <b>argues for</b>: the window list,
+      the scan, the forecast, the single provider. Pick a shape; the data layer is already there.
+    </p>
+  </header>
+
+  <div class="gallery">
+
+    <!-- A · LEDGER -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div class="prow">
+            <span class="pmark">OC</span>
+            <span class="name title-s">OpenCode Go</span>
+            <span class="pill err">dry in 4d</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:7px;margin:8px 0 2px">
+            <span class="display-s num on-err">17%</span>
+            <span class="title-s on-err">left</span>
+          </div>
+          <div class="body-s muted" style="margin-bottom:10px">monthly · resets in 11d 14h</div>
+          <div class="pi wavy err">
+            <span class="wave track"></span>
+            <span class="fill" style="width:17%"><span class="wave"></span></span>
+            <span class="pace" style="left:38%;top:0;bottom:0"></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;position:relative;height:16px">
+            <span class="label-s muted">0%</span>
+            <span class="label-s muted" style="position:absolute;left:38%;transform:translateX(-50%)">clock 38%</span>
+            <span class="label-s muted">100%</span>
+          </div>
+          <div class="divider" style="margin:10px 0 2px"></div>
+          <div class="li">
+            <span class="body-s muted" style="width:66px">5h session</span>
+            <div class="pi" style="flex:1"><i style="width:74%"></i><span class="stop"></span></div>
+            <span class="label-m num on-pri" style="width:30px;text-align:right">74%</span>
+          </div>
+          <div class="li" style="padding-top:0">
+            <span class="body-s muted" style="width:66px">Weekly</span>
+            <div class="pi" style="flex:1"><i class="ter" style="width:52%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+            <span class="label-m num" style="width:30px;text-align:right">52%</span>
+          </div>
+          <div class="divider" style="margin:4px 0 0"></div>
+          <div class="li" style="padding-bottom:2px">
+            <span class="pmark">C</span>
+            <span class="name title-s">Claude</span>
+            <span class="body-s muted">weekly</span>
+            <span class="title-s num on-ter" style="margin-left:4px">28%</span>
+            <span class="pill ter">tight</span>
+          </div>
+          <div class="li" style="padding-top:0;padding-bottom:2px">
+            <span class="pmark">CB</span>
+            <span class="name title-s">CodeBuddy</span>
+            <span class="body-s muted">monthly</span>
+            <span class="title-s num on-pri" style="margin-left:4px">40%</span>
+            <span class="pill pri">on pace</span>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">A</span><h2>Ledger</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">The tightest provider opens up; its other windows sit under it, everyone else collapses to a line.</p>
+      <div class="vnote"><span><b>Best at:</b> answering “17 % of what?” without a tap.</span>
+      <span><b>Drops:</b> nothing — it is the fullest one.</span></div>
+    </article>
+
+    <!-- B · VERDICTS -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+            <span class="label-m muted">3 providers</span>
+            <span class="label-m on-err">1 needs you</span>
+          </div>
+          <div class="li" style="padding:9px 0;align-items:flex-start">
+            <span class="pmark" style="margin-top:2px">OC</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="title-s">OpenCode Go</span>
+                <span class="pill err sm">dry in 4d</span>
+              </div>
+              <div class="body-s muted">monthly · resets 11d 14h</div>
+              <div class="pi" style="margin-top:7px"><i class="err" style="width:17%"></i><span class="stop" style="background:var(--error)"></span></div>
+            </div>
+            <span class="title-l num on-err">17%</span>
+          </div>
+          <div class="li" style="padding:9px 0;align-items:flex-start">
+            <span class="pmark" style="margin-top:2px">C</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="title-s">Claude</span>
+                <span class="pill ter sm">tight</span>
+              </div>
+              <div class="body-s muted">weekly · resets 1d 0h</div>
+              <div class="pi" style="margin-top:7px"><i class="ter" style="width:28%"></i><span class="stop" style="background:var(--tertiary)"></span></div>
+            </div>
+            <span class="title-l num on-ter">28%</span>
+          </div>
+          <div class="li" style="padding:9px 0;align-items:flex-start">
+            <span class="pmark" style="margin-top:2px">CB</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="title-s">CodeBuddy</span>
+                <span class="pill pri sm">on pace</span>
+              </div>
+              <div class="body-s muted">monthly · resets 27d 4h</div>
+              <div class="pi" style="margin-top:7px"><i style="width:40%"></i><span class="stop"></span></div>
+            </div>
+            <span class="title-l num on-pri">40%</span>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">B</span><h2>Verdicts</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">Three stacked cards, each with a verdict next to the name and the number on the edge. No expansion, no siblings.</p>
+      <div class="vnote"><span><b>Best at:</b> one-glance triage — who needs attention now.</span>
+      <span><b>Drops:</b> the other windows; a tap has to show them.</span></div>
+    </article>
+
+    <!-- C · HERO -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div class="focus">
+            <div class="prow">
+              <span class="pmark">OC</span>
+              <span class="name title-s">OpenCode Go</span>
+              <span class="pill err">dry in 4d</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:8px;margin:10px 0 0">
+              <span class="display-m num on-err">17<span class="title-l">%</span></span>
+              <span class="body-s muted" style="padding-bottom:6px">left of monthly</span>
+            </div>
+            <div class="pi wavy err" style="margin-top:8px">
+              <span class="wave track"></span>
+              <span class="fill" style="width:17%"><span class="wave"></span></span>
+              <span class="pace" style="left:38%;top:0;bottom:0"></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;position:relative;height:16px">
+              <span class="label-s muted">0%</span>
+              <span class="label-s muted" style="position:absolute;left:38%;transform:translateX(-50%)">clock 38%</span>
+              <span class="label-s muted">100%</span>
+            </div>
+          </div>
+          <div class="li" style="padding:9px 1px 6px">
+            <span class="pmark sm">C</span>
+            <span class="name title-s">Claude</span>
+            <span class="body-s muted">weekly</span>
+            <span class="title-s num on-ter" style="margin-left:4px">28%</span>
+            <div class="pi" style="width:56px"><i class="ter" style="width:28%"></i></div>
+          </div>
+          <div class="li" style="padding:2px 1px 2px">
+            <span class="pmark sm">CB</span>
+            <span class="name title-s">CodeBuddy</span>
+            <span class="body-s muted">monthly</span>
+            <span class="title-s num on-pri" style="margin-left:4px">40%</span>
+            <div class="pi" style="width:56px"><i style="width:40%"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">C</span><h2>Hero</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">One provider takes 60 % of the card in a tonal container. The other two are evidence, not subjects.</p>
+      <div class="vnote"><span><b>Best at:</b> a single urgent number at a real distance.</span>
+      <span><b>Drops:</b> equality — the healthy providers get tiny bars.</span></div>
+    </article>
+
+    <!-- D · SCORECARD -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w r20">
+          <div class="tiles">
+            <div class="tile">
+              <div class="tname">OPENCODE GO</div>
+              <div class="tnum on-err">17%</div>
+              <div class="tbot"><span class="pill err sm">dry 4d</span></div>
+              <div class="pi" style="margin-top:7px"><i class="err" style="width:17%"></i></div>
+            </div>
+            <div class="tile">
+              <div class="tname">CLAUDE</div>
+              <div class="tnum on-ter">28%</div>
+              <div class="tbot"><span class="pill ter sm">tight</span></div>
+              <div class="pi" style="margin-top:7px"><i class="ter" style="width:28%"></i></div>
+            </div>
+            <div class="tile">
+              <div class="tname">CODEBUDDY</div>
+              <div class="tnum on-pri">40%</div>
+              <div class="tbot"><span class="pill pri sm">on pace</span></div>
+              <div class="pi" style="margin-top:7px"><i style="width:40%"></i></div>
+            </div>
+            <div class="tile">
+              <div class="tname">SPEND TODAY</div>
+              <div class="tnum">$3.42</div>
+              <div class="tbot"><span class="label-s muted">across 3</span></div>
+              <div class="pi" style="margin-top:7px"><i style="width:62%"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">D</span><h2>Scorecard</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">Four equal tiles: three providers plus spend. Every tile answers in the same three parts.</p>
+      <div class="vnote"><span><b>Best at:</b> comparison and a settled, quiet layout.</span>
+      <span><b>Drops:</b> the window story entirely; also no pace notch.</span></div>
+    </article>
+
+    <!-- E · FORECAST -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div class="prow" style="margin-bottom:4px">
+            <span class="label-m muted">Before the next reset</span>
+            <span class="pill err sm" style="margin-left:auto">1 will fail</span>
+          </div>
+          <div class="divider" style="margin:6px 0"></div>
+          <div class="li" style="align-items:flex-start">
+            <svg class="spark" width="46" height="22" viewBox="0 0 46 22" aria-hidden="true">
+              <path d="M0 3 L11 7 L22 12 L33 17 L40 20" fill="none" stroke="var(--error)" stroke-width="2" stroke-linecap="round"/>
+              <path d="M40 20 L46 22" fill="none" stroke="var(--error)" stroke-width="1.5" stroke-dasharray="2 3"/>
+            </svg>
+            <div class="name">
+              <div class="title-s">OpenCode Go</div>
+              <div class="body-s muted">runs dry Oct 26 · 4d early</div>
+            </div>
+            <span class="pill err">dry in 4d</span>
+          </div>
+          <div class="li" style="align-items:flex-start">
+            <svg class="spark" width="46" height="22" viewBox="0 0 46 22" aria-hidden="true">
+              <path d="M0 4 L11 8 L22 11 L33 15 L46 18" fill="none" stroke="var(--tertiary)" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="name">
+              <div class="title-s">Claude</div>
+              <div class="body-s muted">weekly · resets in 1d 0h</div>
+            </div>
+            <span class="pill ter">tight</span>
+          </div>
+          <div class="li" style="align-items:flex-start">
+            <svg class="spark" width="46" height="22" viewBox="0 0 46 22" aria-hidden="true">
+              <path d="M0 12 L11 13 L22 14 L33 15 L46 16" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="name">
+              <div class="title-s">CodeBuddy</div>
+              <div class="body-s muted">lasts to reset · 27d 4h</div>
+            </div>
+            <span class="pill pri">on pace</span>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">E</span><h2>Forecast</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">Sorted by when you run out, not by provider. The sparkline is the burn, the sentence is the outcome.</p>
+      <div class="vnote"><span><b>Best at:</b> planning the next few days.</span>
+      <span><b>Drops:</b> percentages as the lead — they become support.</span></div>
+    </article>
+
+    <!-- F · FOCUS -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div class="prow">
+            <span class="pmark">OC</span>
+            <span class="name title-s">OpenCode Go</span>
+            <span class="body-s muted">1 / 3</span>
+          </div>
+          <div style="text-align:center;padding:6px 0 2px">
+            <div class="display-m num on-err">17%</div>
+            <div class="body-s muted">left of your monthly budget</div>
+          </div>
+          <div class="pi t6"><i class="err" style="width:17%"></i><span class="stop" style="background:var(--error)"></span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:7px">
+            <span class="label-m on-err">dry in 4d</span>
+            <span class="label-m muted">resets 11d 14h</span>
+          </div>
+          <div class="divider" style="margin:10px 0 6px"></div>
+          <div style="display:flex;gap:6px">
+            <span class="pill pri sm">5h 74%</span>
+            <span class="pill ter sm">wk 52%</span>
+            <span class="pill err sm">mo 17%</span>
+          </div>
+          <div class="pager"><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">F</span><h2>Focus</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">One provider per page, swipe for the rest. The three window pills replace a list with a row of chips.</p>
+      <div class="vnote"><span><b>Best at:</b> a calm, large, one-topic widget.</span>
+      <span><b>Drops:</b> cross-provider glance — you must swipe.</span></div>
+    </article>
+
+    <!-- G · MATRIX -->
+    <article class="variant">
+      <div class="vstage">
+        <div class="w">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+            <span class="label-m muted">% left by window</span>
+            <span class="pill err sm">dry 4d</span>
+          </div>
+          <table class="matrix">
+            <thead>
+              <tr><th></th><th>5H</th><th>WEEK</th><th>MONTH</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>OpenCode Go</td>
+                <td class="on-pri">74</td>
+                <td class="on-ter">52</td>
+                <td class="on-err">17</td>
+              </tr>
+              <tr>
+                <td>Claude</td>
+                <td class="on-pri">62</td>
+                <td class="on-ter">28</td>
+                <td class="na">—</td>
+              </tr>
+              <tr>
+                <td>CodeBuddy</td>
+                <td class="na">—</td>
+                <td class="na">—</td>
+                <td class="on-pri">40</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="divider" style="margin:4px 0 8px"></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="label-s muted">severity:</span>
+            <span class="label-s on-pri">50+</span>
+            <span class="label-s on-ter">20–49</span>
+            <span class="label-s on-err">&lt;20</span>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">G</span><h2>Matrix</h2><span class="size">4 × 4</span></div>
+      <p class="vpitch">Every window of every provider at once, as numbers in a table. No bars, one legend.</p>
+      <div class="vnote"><span><b>Best at:</b> power users with several limits each.</span>
+      <span><b>Drops:</b> pace and reset times — this is a snapshot, not a forecast.</span></div>
+    </article>
+
+    <!-- H · ONE-LINER -->
+    <article class="variant">
+      <div class="vstage short">
+        <div class="w">
+          <div class="oneline">
+            <div class="orow">
+              <span class="pmark sm">OC</span>
+              <span class="title-s" style="width:96px">OpenCode Go</span>
+              <span class="title-s num on-err">17% left</span>
+              <div class="pi" style="flex:1"><i class="err" style="width:17%"></i></div>
+              <span class="pill err sm">dry 4d</span>
+            </div>
+            <div class="orow">
+              <span class="pmark sm">C</span>
+              <span class="title-s" style="width:96px">Claude</span>
+              <span class="title-s num on-ter">28% left</span>
+              <div class="pi" style="flex:1"><i class="ter" style="width:28%"></i></div>
+              <span class="pill ter sm">tight</span>
+            </div>
+            <div class="orow">
+              <span class="pmark sm">CB</span>
+              <span class="title-s" style="width:96px">CodeBuddy</span>
+              <span class="title-s num on-pri">40% left</span>
+              <div class="pi" style="flex:1"><i style="width:40%"></i></div>
+              <span class="pill pri sm">on pace</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="vhead"><span class="vid">H</span><h2>One-liner</h2><span class="size">4 × 2</span></div>
+      <p class="vpitch">Three rows, each a full sentence: name, percent left, bar, verdict. The densest honest version.</p>
+      <div class="vnote"><span><b>Best at:</b> small widgets and people who check hourly.</span>
+      <span><b>Drops:</b> windows, resets, and the notch.</span></div>
+    </article>
+
+  </div>
+
+  <section class="compare">
+    <h2 class="headline-s">How they differ</h2>
+    <div class="tblwrap">
+      <table class="cmp">
+        <thead>
+          <tr><th>Widget</th><th>Windows</th><th>Verdict</th><th>Pace</th><th>Density</th><th>Best for</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>A · Ledger</td><td class="yes">yes, nested</td><td class="yes">yes</td><td class="yes">notch</td><td>high</td><td>“why 17 %?”</td></tr>
+          <tr><td>B · Verdicts</td><td class="no">tap</td><td class="yes">yes</td><td class="no">—</td><td>medium</td><td>triage</td></tr>
+          <tr><td>C · Hero</td><td class="no">tightest</td><td class="yes">yes</td><td class="yes">notch</td><td>low</td><td>one urgent limit</td></tr>
+          <tr><td>D · Scorecard</td><td class="no">no</td><td class="yes">yes</td><td class="no">—</td><td>medium</td><td>comparison</td></tr>
+          <tr><td>E · Forecast</td><td class="no">tightest</td><td class="yes">yes</td><td class="yes">burn line</td><td>medium</td><td>planning</td></tr>
+          <tr><td>F · Focus</td><td class="yes">chips</td><td class="yes">yes</td><td class="no">—</td><td>low</td><td>one provider</td></tr>
+          <tr><td>G · Matrix</td><td class="yes">all</td><td class="yes">one</td><td class="no">—</td><td>high</td><td>power users</td></tr>
+          <tr><td>H · One-liner</td><td class="no">no</td><td class="yes">yes</td><td class="no">—</td><td>highest</td><td>2-row widgets</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="foot">
+      A and H are the two ends of one axis: A explains the number, H trusts you to know it. B, D and G are
+      the same data at three densities. C and F are single-subject widgets — the right answer only if you
+      care about one provider at a time, which the current widget implicitly assumes anyway.
+    </p>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  function sync(sel, attr, value) {
+    document.querySelectorAll(sel).forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset[attr] === value));
+    });
+  }
+  sync('[data-set-seed]', 'setSeed', root.dataset.seed);
+  sync('[data-set-scheme]', 'setScheme', root.dataset.scheme);
+  document.querySelectorAll('[data-set-seed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      root.dataset.seed = b.dataset.setSeed;
+      sync('[data-set-seed]', 'setSeed', root.dataset.seed);
+    });
+  });
+  document.querySelectorAll('[data-set-scheme]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      root.dataset.scheme = b.dataset.setScheme;
+      sync('[data-set-scheme]', 'setScheme', root.dataset.scheme);
+    });
+  });
+})();
+</script>
+</body>
+</html>

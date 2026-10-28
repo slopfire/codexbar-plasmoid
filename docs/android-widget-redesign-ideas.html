@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="sage" data-scheme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CodexBar widget — 20 M3 Expressive layouts</title>
+<style>
+/* =========================================================================
+   Material 3 role tokens. Generated tones (CIELAB L* = M3 tone), one palette
+   per wallpaper seed, light + dark. Values are illustrative, not official
+   Material Theme Builder output.
+   ========================================================================= */
+html[data-seed="sage"][data-scheme="dark"]{--primary:#85d89c; --on-primary:#233427; --primary-container:#18512d; --on-primary-container:#caebd1; --secondary:#aeceb5; --on-secondary:#28332a; --secondary-container:#344c3a; --on-secondary-container:#d5e7d9; --tertiary:#5fd7e5; --on-tertiary:#1b3437; --tertiary-container:#024f56; --on-tertiary-container:#c1eaef; --surface:#101411; --surface-container-lowest:#0b0f0c; --surface-container-low:#191c19; --surface-container:#1d211d; --surface-container-high:#262b27; --surface-container-highest:#303632; --on-surface:#dee4df; --on-surface-variant:#bfc9c1; --outline:#879489; --outline-variant:#404942; --inverse-surface:#dee4df; --inverse-on-surface:#2c322d; --inverse-primary:#206b3c; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="sage"][data-scheme="light"]{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"][data-scheme="dark"]{--primary:#ffafd3; --on-primary:#402a34; --primary-container:#703150; --on-primary-container:#fed8e8; --secondary:#e5bbcd; --on-secondary:#3b2c33; --secondary-container:#5c3e4b; --on-secondary-container:#f4dce6; --tertiary:#fdb697; --on-tertiary:#3d2d25; --tertiary-container:#673c28; --on-tertiary-container:#fcdcce; --surface:#171214; --surface-container-lowest:#120d0f; --surface-container-low:#1f1a1c; --surface-container:#231e20; --surface-container-high:#2f282b; --surface-container-highest:#3a3336; --on-surface:#e8e1e3; --on-surface-variant:#d1c3c8; --outline:#9e8c93; --outline-variant:#4f4448; --inverse-surface:#e8e1e3; --inverse-on-surface:#362e31; --inverse-primary:#94426b; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="rose"][data-scheme="light"]{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"][data-scheme="dark"]{--primary:#a0caff; --on-primary:#243142; --primary-container:#064a77; --on-primary-container:#d2e4ff; --secondary:#b2c8e8; --on-secondary:#29313c; --secondary-container:#35485f; --on-secondary-container:#d8e3f5; --tertiary:#edb5e8; --on-tertiary:#392c38; --tertiary-container:#5e3a5c; --on-tertiary-container:#f3dbf1; --surface:#111418; --surface-container-lowest:#0c0e12; --surface-container-low:#191c1f; --surface-container:#1d2024; --surface-container-high:#272a30; --surface-container-highest:#31353a; --on-surface:#dfe3e8; --on-surface-variant:#c0c7d1; --outline:#89919e; --outline-variant:#414750; --inverse-surface:#dfe3e8; --inverse-on-surface:#2d3136; --inverse-primary:#00629d; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="indigo"][data-scheme="light"]{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"][data-scheme="dark"]{--primary:#ffb781; --on-primary:#3d2d21; --primary-container:#663d1a; --on-primary-container:#fedcc5; --secondary:#e1c0a9; --on-secondary:#3a2e26; --secondary-container:#594231; --on-secondary-container:#f3dfd2; --tertiary:#b9cf90; --on-tertiary:#2d3224; --tertiary-container:#3d4c23; --on-tertiary-container:#dde6cc; --surface:#17120f; --surface-container-lowest:#110d0a; --surface-container-low:#1f1b18; --surface-container:#231f1c; --surface-container-high:#2f2925; --surface-container-highest:#3a3430; --on-surface:#e7e1dd; --on-surface-variant:#d0c4bd; --outline:#9c8e84; --outline-variant:#4e453f; --inverse-surface:#e7e1dd; --inverse-on-surface:#352f2b; --inverse-primary:#885124; --error:#feb3b0; --on-error:#610f1a; --error-container:#910424; --on-error-container:#ffdad8;}
+html[data-seed="amber"][data-scheme="light"]{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+html[data-seed="sage"] .is-light{--primary:#066d37; --on-primary:#ffffff; --primary-container:#beeec9; --on-primary-container:#002109; --secondary:#45664d; --on-secondary:#ffffff; --secondary-container:#cfe9d5; --on-secondary-container:#05210d; --tertiary:#026972; --on-tertiary:#ffffff; --tertiary-container:#aaeef7; --on-tertiary-container:#002023; --surface:#f5fbf6; --surface-container-lowest:#ffffff; --surface-container-low:#eff5f0; --surface-container:#eaefeb; --surface-container-high:#e4e9e5; --surface-container-highest:#dee4df; --on-surface:#191c19; --on-surface-variant:#3f4941; --outline:#6d7a70; --outline-variant:#bfc9c1; --inverse-surface:#2c322d; --inverse-on-surface:#edf2ee; --inverse-primary:#8cd7a0; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="rose"] .is-light{--primary:#9b3b6c; --on-primary:#ffffff; --primary-container:#fed8e8; --on-primary-container:#3b0323; --secondary:#7b5364; --on-secondary:#ffffff; --secondary-container:#fbdae7; --on-secondary-container:#301120; --tertiary:#8c4e32; --on-tertiary:#ffffff; --tertiary-container:#ffdbcc; --on-tertiary-container:#311300; --surface:#fff7fa; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2f5; --surface-container:#f3ecef; --surface-container-high:#eee6e9; --surface-container-highest:#e8e1e3; --on-surface:#1f1a1c; --on-surface-variant:#514349; --outline:#847379; --outline-variant:#d1c3c8; --inverse-surface:#362e31; --inverse-on-surface:#f6eff2; --inverse-primary:#ffafd2; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="indigo"] .is-light{--primary:#05629d; --on-primary:#ffffff; --primary-container:#d2e4ff; --on-primary-container:#001d34; --secondary:#47607f; --on-secondary:#ffffff; --secondary-container:#d3e4fd; --on-secondary-container:#001d34; --tertiary:#804c7e; --on-tertiary:#ffffff; --tertiary-container:#fdd7f9; --on-tertiary-container:#2f0e2e; --surface:#f6faff; --surface-container-lowest:#ffffff; --surface-container-low:#f0f4f9; --surface-container:#ebeef3; --surface-container-high:#e5e8ee; --surface-container-highest:#dfe3e8; --on-surface:#191c1f; --on-surface-variant:#404751; --outline:#6f7884; --outline-variant:#c0c7d1; --inverse-surface:#2d3136; --inverse-on-surface:#eef1f6; --inverse-primary:#a0caff; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+html[data-seed="amber"] .is-light{--primary:#8c4f19; --on-primary:#ffffff; --primary-container:#fedcc4; --on-primary-container:#2c1600; --secondary:#765842; --on-secondary:#ffffff; --secondary-container:#f9ddcb; --on-secondary-container:#2c1700; --tertiary:#4f662a; --on-tertiary:#ffffff; --tertiary-container:#dae8be; --on-tertiary-container:#171e00; --surface:#fef8f4; --surface-container-lowest:#ffffff; --surface-container-low:#f9f2ee; --surface-container:#f3ede9; --surface-container-high:#ede7e3; --surface-container-highest:#e7e1dd; --on-surface:#1f1b18; --on-surface-variant:#50453d; --outline:#82746b; --outline-variant:#d0c4bd; --inverse-surface:#352f2b; --inverse-on-surface:#f6f0ec; --inverse-primary:#fcb885; --error:#be0131; --on-error:#ffffff; --error-container:#ffdad8; --on-error-container:#420003;}
+
+
+:root {
+  /* shape scale (M3, 10 steps) */
+  --r-xs: 4px; --r-s: 8px; --r-m: 12px; --r-l: 16px; --r-lp: 20px;
+  --r-xl: 28px; --r-xlp: 32px; --r-xxl: 48px; --r-full: 999px;
+
+  /* motion: M3 Expressive springs, web fallback curves (tokens.md) */
+  --ease-fast: cubic-bezier(.42, 1.67, .21, .9);      /* fast spatial, 350ms */
+  --ease-spatial: cubic-bezier(.38, 1.21, .22, 1);    /* default spatial, 500ms */
+  --ease-effects: cubic-bezier(.34, .8, .34, 1);      /* default effects, 200ms */
+  --dur-fast: 350ms; --dur-spatial: 500ms; --dur-fx: 200ms;
+
+  --sans: Roboto, "Roboto Flex", system-ui, -apple-system, "Segoe UI", "Noto Sans", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--sans);
+  background: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects);
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}
+
+/* ---------- M3 type scale ---------- */
+.display-l { font-size: 57px; line-height: 64px; letter-spacing: -.2px; font-weight: 500; }
+.display-m { font-size: 45px; line-height: 52px; letter-spacing: 0;    font-weight: 500; }
+.display-s { font-size: 36px; line-height: 44px; letter-spacing: 0;    font-weight: 500; }
+.headline-m{ font-size: 28px; line-height: 36px; letter-spacing: 0;    font-weight: 500; }
+.headline-s{ font-size: 24px; line-height: 32px; letter-spacing: 0;    font-weight: 500; }
+.title-l   { font-size: 22px; line-height: 28px; letter-spacing: 0;    font-weight: 500; }
+.title-m   { font-size: 16px; line-height: 24px; letter-spacing: .2px; font-weight: 700; }
+.title-s   { font-size: 14px; line-height: 20px; letter-spacing: .1px; font-weight: 700; }
+.body-l    { font-size: 16px; line-height: 24px; letter-spacing: .5px; font-weight: 400; }
+.body-m    { font-size: 14px; line-height: 20px; letter-spacing: .25px;font-weight: 500; }
+.body-s    { font-size: 12px; line-height: 16px; letter-spacing: .4px; font-weight: 500; }
+.label-l   { font-size: 14px; line-height: 20px; letter-spacing: .1px; font-weight: 700; }
+.label-m   { font-size: 12px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.label-s   { font-size: 11px; line-height: 16px; letter-spacing: .5px; font-weight: 700; }
+.num { font-variant-numeric: tabular-nums; }
+
+.muted { color: var(--on-surface-variant); }
+.on-pri { color: var(--primary); }
+.on-ter { color: var(--tertiary); }
+.on-err { color: var(--error); }
+.on-sec { color: var(--secondary); }
+
+/* ---------- page chrome ---------- */
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px 120px; }
+
+.toolbar {
+  position: sticky; top: 12px; z-index: 30;
+  margin: 12px auto 0; max-width: 1160px;
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+  border-radius: var(--r-full);
+  padding: 8px 8px 8px 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25), 0 12px 28px -18px rgba(0,0,0,.55);
+}
+.toolbar .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.toolbar .brand b { font-size: 15px; letter-spacing: -.01em; font-weight: 700; }
+.toolbar .spacer { flex: 1; }
+.seeds { display: flex; gap: 6px; align-items: center; }
+.seed {
+  width: 32px; height: 32px; border-radius: var(--r-full); border: 0;
+  cursor: pointer; position: relative; padding: 0;
+  outline: 2px solid transparent; outline-offset: 2px;
+  transition: outline-color var(--dur-fx) var(--ease-effects), transform var(--dur-fast) var(--ease-fast);
+}
+.seed:hover { transform: scale(1.08); }
+.seed[aria-pressed="true"] { outline-color: var(--on-surface); }
+.seed::after {
+  content: ""; position: absolute; inset: 8px; border-radius: 50%;
+  background: rgba(0,0,0,.28); mix-blend-mode: multiply; opacity: 0;
+}
+.scheme {
+  display: flex; background: var(--surface-container-highest);
+  border-radius: var(--r-full); padding: 3px; gap: 3px;
+}
+.scheme button {
+  height: 28px; padding: 0 12px; border: 0; border-radius: var(--r-full);
+  background: transparent; color: var(--on-surface-variant);
+  font: 700 11px/16px var(--sans); letter-spacing: .5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background-color var(--dur-fx) var(--ease-effects), color var(--dur-fx) var(--ease-effects);
+}
+.scheme button[aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); }
+
+.hero { padding: 64px 0 8px; max-width: 900px; }
+.kicker { font: 700 12px/16px var(--sans); letter-spacing: .5px; text-transform: uppercase; color: var(--primary); }
+h1 { margin: 14px 0 16px; font-weight: 500; }
+h1 .accent { color: var(--primary); }
+.lede { font-size: 17px; line-height: 28px; letter-spacing: .1px; color: var(--on-surface-variant); max-width: 68ch; margin: 0; }
+.lede b { color: var(--on-surface); font-weight: 700; }
+
+/* ---------- spec strip ---------- */
+.specs {
+  margin-top: 44px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+.spec.wide { grid-column: 1 / -1; display: grid; grid-template-columns: 1.1fr 1fr; gap: 24px; align-items: center; }
+@media (max-width: 780px) { .spec.wide { grid-template-columns: 1fr; gap: 14px; } }
+.ana { display: grid; gap: 10px; }
+.ana .bar { display: grid; gap: 6px; }
+.ana .labels { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.ana .labels span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .4px; color: var(--on-surface-variant); }
+.ana .labels b { color: var(--on-surface); }
+.ana .key { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.ana .bar { gap: 10px; }
+.spec {
+  background: var(--surface-container-highest);
+  border-radius: var(--r-l);
+  padding: 18px 18px 16px;
+}
+.spec h2 { margin: 0 0 4px; }
+.spec .sub { color: var(--on-surface-variant); margin: 0 0 12px; font-size: 12px; line-height: 16px; letter-spacing: .4px; }
+.spec ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.spec li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; line-height: 18px; color: var(--on-surface-variant); }
+.spec li b { color: var(--on-surface); font-weight: 700; }
+.sw { width: 20px; height: 20px; border-radius: var(--r-full); flex: 0 0 auto; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--on-surface) 22%, transparent); }
+.sw.role { border-radius: var(--r-s); }
+.type-demo { display: grid; gap: 6px; }
+.type-demo div { display: flex; align-items: baseline; gap: 10px; }
+.type-demo .meta { color: var(--on-surface-variant); font-size: 10.5px; letter-spacing: .4px; margin-left: auto; font-variant-numeric: tabular-nums; }
+.shape-demo { display: flex; align-items: flex-end; gap: 6px; }
+.shape-demo i { display: block; width: 26px; height: 26px; background: var(--primary-container); }
+.shape-demo i:nth-child(1) { border-radius: 4px; }
+.shape-demo i:nth-child(2) { border-radius: 8px; }
+.shape-demo i:nth-child(3) { border-radius: 12px; }
+.shape-demo i:nth-child(4) { border-radius: 16px; }
+.shape-demo i:nth-child(5) { border-radius: 20px; }
+.shape-demo i:nth-child(6) { border-radius: 28px; }
+.shape-demo i:nth-child(7) { border-radius: 50%; background: var(--primary); }
+.shape-scale { display: flex; justify-content: space-between; margin-top: 8px; font-size: 10px; letter-spacing: .4px; color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+.spring-curve { display: block; }
+.spec .fine { margin-top: 10px; font-size: 11px; line-height: 15px; color: var(--on-surface-variant); }
+
+/* ---------- diagnosis ---------- */
+.section-head { margin: 56px 0 16px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.section-head h2 { margin: 0; }
+.section-head span { color: var(--on-surface-variant); font-size: 12px; letter-spacing: .5px; }
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.diag article {
+  background: var(--surface-container-high); border-radius: var(--r-l); padding: 16px 18px;
+  font-size: 13px; line-height: 20px; color: var(--on-surface-variant);
+}
+.diag .n {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; margin-bottom: 10px;
+  border-radius: var(--r-s); background: var(--primary-container); color: var(--on-primary-container);
+  font: 700 11px/16px var(--sans);
+}
+.diag b { display: block; color: var(--on-surface); font-size: 14px; line-height: 20px; margin-bottom: 4px; }
+.diag code { font-family: ui-monospace, "Roboto Mono", monospace; font-size: 11.5px; color: var(--primary); }
+
+/* ---------- gallery ---------- */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(348px, 1fr)); gap: 24px 20px; margin-top: 8px; }
+.idea { display: flex; flex-direction: column; gap: 12px; }
+.stage {
+  position: relative; border-radius: var(--r-xl); padding: 20px; min-height: 188px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background:
+    radial-gradient(120% 100% at 10% 0%, color-mix(in oklab, var(--primary-container) 62%, var(--surface)) 0%, transparent 60%),
+    radial-gradient(100% 100% at 94% 8%, color-mix(in oklab, var(--tertiary-container) 55%, var(--surface)) 0%, transparent 58%),
+    var(--surface-container-lowest);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--outline-variant) 60%, transparent);
+}
+.stage.tall { min-height: 240px; }
+
+/* ---------- the widget ---------- */
+.w {
+  width: 100%; max-width: 312px;
+  background: var(--surface-container);
+  color: var(--on-surface);
+  border-radius: var(--r-xl);
+  padding: 12px;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0,0,0,.28), 0 14px 30px -20px rgba(0,0,0,.75);
+  transition:
+    background-color var(--dur-fx) var(--ease-effects),
+    border-radius var(--dur-fast) var(--ease-fast),
+    transform var(--dur-fast) var(--ease-fast);
+}
+.w:hover { background: var(--surface-container-high); }
+.w:active { border-radius: var(--r-lp); }         /* pressed = squarer: shape morph */
+.w.clear { background: transparent; box-shadow: none; }
+.w.tonal { background: var(--surface-container-highest); }
+
+.card { background: var(--surface-container-highest); border-radius: var(--r-l); padding: 12px; }
+.card.tonal { background: var(--primary-container); color: var(--on-primary-container); }
+.card.tertiary { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.card.error { background: var(--error-container); color: var(--on-error-container); }
+
+.prow { display: flex; align-items: center; gap: 10px; }
+.prow .name { flex: 1; min-width: 0; }
+.pmark {
+  width: 24px; height: 24px; border-radius: var(--r-full); flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--surface-container-highest);
+  color: var(--on-surface-variant);
+  font: 700 10px/1 var(--sans); letter-spacing: .3px;
+}
+.w.tonal .pmark { background: var(--surface-container); }
+.pmark.dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--error); position: absolute; }
+.pmark { position: relative; }
+.pmark .dot { position: absolute; top: -1px; right: -1px; width: 6px; height: 6px; border-radius: 3px; background: var(--error); }
+.rowline { display: flex; align-items: center; gap: 8px; }
+.rowline .val { margin-left: auto; }
+
+/* linear progress indicator: active / track / 4dp stop */
+.pi { position: relative; height: 4px; border-radius: var(--r-full); background: var(--secondary-container); }
+.pi > i { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-full); background: var(--primary); }
+.pi.t6 { height: 6px; }
+.pi.t8 { height: 8px; }
+.pi > .stop {
+  position: absolute; right: -1px; top: 50%; width: 4px; height: 4px; margin-top: -2px;
+  border-radius: 50%; background: var(--primary);
+}
+.pi > .pace {
+  position: absolute; top: -3px; bottom: -3px; width: 2px; border-radius: 2px;
+  background: var(--on-surface); box-shadow: 0 0 0 2px var(--surface-container);
+}
+.w.tonal .pi > .pace { box-shadow: 0 0 0 2px var(--surface-container-highest); }
+.pi > i.err { background: var(--error); }
+.pi > i.ter { background: var(--tertiary); }
+
+/* wavy linear indicator (M3 Expressive shape option) */
+.pi.wavy { height: 14px; background: none; border-radius: 0; }
+.pi.wavy .wave {
+  position: absolute; inset: 0;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='14' viewBox='0 0 16 14'><path d='M0 7 q4 -6 8 0 t8 0' fill='none' stroke='white' stroke-width='6' stroke-linecap='round'/></svg>");
+  -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x;
+  -webkit-mask-size: 16px 14px; mask-size: 16px 14px;
+}
+.pi.wavy .wave.track { background: var(--secondary-container); }
+.pi.wavy .fill { position: absolute; inset: 0 auto 0 0; overflow: hidden; }
+.pi.wavy .fill .wave { width: 288px; background: var(--primary); }
+
+/* badges + status pill (custom, not an M3 component) */
+.badge {
+  height: 16px; min-width: 16px; padding: 0 4px; border-radius: var(--r-s);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--error); color: var(--on-error);
+  font: 700 11px/16px var(--sans); letter-spacing: .5px;
+}
+.pill {
+  height: 20px; padding: 0 8px; border-radius: var(--r-s);
+  display: inline-flex; align-items: center;
+  font: 700 11px/16px var(--sans); letter-spacing: .5px; white-space: nowrap;
+}
+.pill.pri { background: var(--primary-container); color: var(--on-primary-container); }
+.pill.sec { background: var(--secondary-container); color: var(--on-secondary-container); }
+.pill.ter { background: var(--tertiary-container); color: var(--on-tertiary-container); }
+.pill.err { background: var(--error-container); color: var(--on-error-container); }
+
+/* circular progress */
+.gauge { position: relative; width: 64px; height: 64px; margin: 0 auto; }
+.gauge svg { display: block; }
+.gauge .gv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.ringwrap { flex: 1; text-align: center; }
+.ringwrap .cap { display: block; margin-top: 8px; color: var(--on-surface-variant); font-weight: 500; letter-spacing: .4px; }
+
+/* lists */
+.list { display: grid; }
+.li { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+.li + .li { border-top: 1px solid var(--outline-variant); }
+.divider { height: 1px; background: var(--outline-variant); }
+
+/* grid of cards */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile { background: var(--surface-container-highest); border-radius: var(--r-l); padding: 10px; }
+.tile .cap { color: var(--on-surface-variant); margin-bottom: 4px; }
+
+/* connected button group */
+.cbg { display: flex; height: 40px; border-radius: var(--r-full); background: var(--surface-container-highest); box-shadow: inset 0 0 0 1px var(--outline); padding: 3px; gap: 3px; }
+.cbg button {
+  flex: 1; border: 0; background: transparent; color: var(--on-surface-variant);
+  border-radius: var(--r-full); font: 700 12px/16px var(--sans); letter-spacing: .5px;
+  cursor: default;
+  transition: background-color var(--dur-fx) var(--ease-effects), border-radius var(--dur-fast) var(--ease-fast), transform var(--dur-fast) var(--ease-fast);
+}
+.cbg button.on { background: var(--secondary-container); color: var(--on-secondary-container); }
+.cbg button:active { border-radius: var(--r-xs); transform: scale(.97); }
+
+/* carousel dots */
+.dots { display: flex; gap: 6px; justify-content: center; align-items: center; margin-top: 10px; }
+.dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--outline-variant); }
+.dots i.on { width: 24px; border-radius: var(--r-full); background: var(--primary); }
+
+/* timeline (custom) */
+.tl { position: relative; height: 62px; margin-top: 6px; }
+.tl .axis { position: absolute; left: 0; right: 0; top: 29px; height: 2px; border-radius: var(--r-full); background: var(--outline-variant); }
+.tl .hatch { position: absolute; left: 34.5%; right: 0; top: 24px; height: 12px; border-radius: var(--r-xs); background: repeating-linear-gradient(45deg, color-mix(in oklab, var(--error) 38%, transparent) 0 3px, transparent 3px 7px); }
+.tl .mk { position: absolute; left: 34.5%; top: 22px; width: 2px; height: 16px; border-radius: 2px; background: var(--error); }
+.tl .lbl { position: absolute; color: var(--on-surface-variant); }
+
+/* note under each mock */
+.note { padding: 0 2px; }
+.note .t { display: flex; align-items: baseline; gap: 9px; }
+.note .idx { font: 700 11px/16px var(--sans); letter-spacing: .5px; color: var(--primary); padding-top: 1px; }
+.note h3 { font-size: 15px; line-height: 22px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+.note p { margin: 3px 0 0 26px; font-size: 12.5px; line-height: 18px; color: var(--on-surface-variant); }
+.note .m3 { margin: 7px 0 0 26px; display: flex; flex-wrap: wrap; gap: 5px; }
+.tag {
+  font: 700 10px/14px var(--sans); letter-spacing: .6px; text-transform: uppercase;
+  color: var(--on-surface-variant); border: 1px solid var(--outline-variant);
+  border-radius: var(--r-xs); padding: 2px 5px;
+}
+.tag.pick { background: var(--primary-container); color: var(--on-primary-container); border-color: transparent; }
+
+/* hero example in spec */
+.gap { height: 10px; }
+
+/* closing */
+.closing {
+  margin-top: 64px; padding-top: 28px; border-top: 1px solid var(--outline-variant);
+  display: grid; grid-template-columns: 1.15fr 1fr; gap: 40px;
+}
+.closing h2 { margin: 0 0 12px; }
+.closing p, .closing li { font-size: 13.5px; line-height: 21px; color: var(--on-surface-variant); }
+.closing ol { margin: 0; padding-left: 20px; }
+.closing li { margin-bottom: 10px; }
+.closing b { color: var(--on-surface); }
+.closing code { font-family: ui-monospace, "Roboto Mono", monospace; font-size: 12px; color: var(--primary); }
+.fine { font-size: 12px; line-height: 18px; color: var(--on-surface-variant); }
+
+@media (max-width: 760px) {
+  .closing { grid-template-columns: 1fr; gap: 28px; }
+  .hero { padding-top: 44px; }
+  .toolbar { padding-left: 14px; gap: 8px; }
+  .toolbar .brand b { display: none; }
+}
+@media (max-width: 400px) {
+  .wrap { padding: 0 12px 90px; }
+  .stage { padding: 14px; }
+  .spec { padding: 14px; }
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="13" width="3.4" height="8" rx="1.7" fill="var(--primary)"/>
+      <rect x="8.2" y="9" width="3.4" height="12" rx="1.7" fill="var(--primary)"/>
+      <rect x="13.4" y="5" width="3.4" height="16" rx="1.7" fill="var(--primary)"/>
+      <rect x="18.6" y="2" width="3.4" height="19" rx="1.7" fill="var(--primary)"/>
+    </svg>
+    <b>CodexBar · M3 Expressive</b>
+  </div>
+  <div class="spacer"></div>
+  <div class="seeds" role="group" aria-label="Wallpaper seed">
+    <button class="seed" data-set-seed="sage" aria-pressed="true" aria-label="Sage seed" style="background:#85d89c"></button>
+    <button class="seed" data-set-seed="rose" aria-pressed="false" aria-label="Rose seed" style="background:#ffafd3"></button>
+    <button class="seed" data-set-seed="indigo" aria-pressed="false" aria-label="Indigo seed" style="background:#a0caff"></button>
+    <button class="seed" data-set-seed="amber" aria-pressed="false" aria-label="Amber seed" style="background:#ffb781"></button>
+  </div>
+  <div class="scheme" role="group" aria-label="Theme">
+    <button data-set-scheme="dark" aria-pressed="true">Dark</button>
+    <button data-set-scheme="light" aria-pressed="false">Light</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Android widget · Material 3 Expressive</div>
+    <h1 class="display-l">20 ways to show <span class="accent">17%&nbsp;left</span> without lying</h1>
+    <p class="lede">
+      Same 20 arrangements, rebuilt on M3 Expressive: dynamic color roles instead of brand paint,
+      the published type scale with emphasized weights, the 10-step shape scale, real progress
+      indicators, and springs. <b>Tap a seed</b> — everything recolors like it would from your wallpaper.
+    </p>
+  </header>
+
+  <section class="specs" aria-label="Material 3 Expressive foundations used here">
+    <article class="spec">
+      <div class="kicker">01 · Color</div>
+      <h2 class="title-m">Roles, not colors</h2>
+      <p class="sub">5 palettes → 45 roles. Fills use containers; text uses the paired “on” role.</p>
+      <ul>
+        <li><i class="sw role" style="background:var(--primary)"></i><span><b>primary</b> — the number that matters</span></li>
+        <li><i class="sw role" style="background:var(--secondary-container)"></i><span><b>secondary container</b> — progress tracks</span></li>
+        <li><i class="sw role" style="background:var(--tertiary)"></i><span><b>tertiary</b> — watch-out state</span></li>
+        <li><i class="sw role" style="background:var(--error)"></i><span><b>error</b> — will not reach reset</span></li>
+        <li><i class="sw role" style="background:var(--surface-container-highest);box-shadow:inset 0 0 0 1px var(--outline-variant)"></i><span><b>surface container highest</b> — filled card</span></li>
+      </ul>
+    </article>
+
+    <article class="spec">
+      <div class="kicker">02 · Type</div>
+      <h2 class="title-m">Emphasized, not louder</h2>
+      <p class="sub">Same size, heavier weight. Numbers use tabular figures.</p>
+      <div class="type-demo">
+        <div><span class="display-s num">17%</span><span class="meta">display-s / 36</span></div>
+        <div><span class="title-l num">28%</span><span class="meta">title-l / 22</span></div>
+        <div><span class="title-s">OpenCode Go</span><span class="meta">title-s / 14</span></div>
+        <div><span class="label-m muted">resets in 11d 14h</span><span class="meta">label-m / 12</span></div>
+      </div>
+    </article>
+
+    <article class="spec">
+      <div class="kicker">03 · Shape</div>
+      <h2 class="title-m">Ten steps, nested correctly</h2>
+      <p class="sub">Widget shell 28 · inner card 16 · chip 8 · badge 8.</p>
+      <div class="shape-demo" aria-hidden="true">
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+      <div class="shape-scale"><span>4</span><span>8</span><span>12</span><span>16</span><span>20</span><span>28</span><span>full</span></div>
+      <p class="fine">inner radius = outer − padding → 28 − 12 = 16.</p>
+    </article>
+
+    <article class="spec">
+      <div class="kicker">04 · Motion</div>
+      <h2 class="title-m">Springs, not durations</h2>
+      <p class="sub">Expressive scheme: spatial bounces, effects never overshoot.</p>
+      <svg class="spring-curve" viewBox="0 0 230 56" width="100%" height="54" aria-hidden="true">
+        <line x1="0" y1="8" x2="230" y2="8" stroke="var(--outline-variant)" stroke-width="1" stroke-dasharray="2 4"/>
+        <line x1="0" y1="52" x2="230" y2="52" stroke="var(--outline-variant)" stroke-width="1"/>
+        <path d="M0 52 C 34 52, 40 0, 66 2 S 96 10, 116 8 C 156 5, 186 8, 230 8"
+              fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M0 52 C 56 52, 72 8, 112 8 L 230 8"
+              fill="none" stroke="var(--tertiary)" stroke-width="2" stroke-dasharray="4 4"/>
+      </svg>
+      <div class="label-s muted" style="display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:2px;font-size:10px">
+        <span style="color:var(--primary)">spatial · bounces</span>
+        <span style="color:var(--tertiary)">effects · no overshoot</span>
+      </div>
+      <p class="fine">spatial · damping 0.8 · stiffness 380 → 500 ms <code>cubic-bezier(.38,1.21,.22,1)</code><br>
+      effects · damping 1.0 · stiffness 1600 → 200 ms</p>
+    </article>
+
+    <article class="spec wide">
+      <div>
+        <div class="kicker">05 · Progress</div>
+        <h2 class="title-m">Three parts, or it isn't an indicator</h2>
+        <p class="sub" style="max-width:46ch">4dp default track, configurable thickness, optional wavy shape.
+        Every linear indicator here keeps the same anatomy.</p>
+        <div class="ana labels">
+          <span><i class="key" style="background:var(--primary)"></i><b>active</b> primary</span>
+          <span><i class="key" style="background:var(--secondary-container)"></i><b>track</b> secondary container</span>
+          <span><i class="key" style="background:var(--primary);border-radius:50%"></i><b>stop</b> 4dp, primary</span>
+          <span><i class="key" style="background:var(--tertiary)"></i><b>severity</b> my call: tertiary / error</span>
+        </div>
+      </div>
+      <div class="ana bar">
+        <div class="pi"><i style="width:38%"></i><span class="stop"></span></div>
+        <div class="pi t8"><i style="width:38%"></i><span class="stop"></span></div>
+        <div class="pi wavy">
+          <span class="wave track"></span>
+          <span class="fill" style="width:38%"><span class="wave"></span></span>
+        </div>
+        <p class="fine" style="margin:2px 0 0">The 4dp track is the default. 8dp and wavy are Expressive
+        configurations — the wavy shape needs canvas work in Glance, the flat ones don't.</p>
+      </div>
+    </article>
+  </section>
+
+  <div class="section-head">
+    <h2 class="headline-s">What is actually wrong</h2>
+    <span>no. 1–4</span>
+  </div>
+  <div class="diag">
+    <article><span class="n">1</span><b>17% of what?</b>
+      A bare number with no window name is a value without a unit. The card's only context is
+      “Monthly Usage …”, cut off mid-phrase.</article>
+    <article><span class="n">2</span><b>The bar isn't a progress indicator</b>
+      <code>BAR_CELLS = 24</code> draws a discrete fill with no track role, no stop indicator and
+      no 3:1 guarantee. At 17% the cells merge into a blob that reads as ~40%.</article>
+    <article><span class="n">3</span><b>Only one window survives</b>
+      <code>WidgetProvider.tightest</code> keeps the lowest window per provider. The M3 pattern for
+      several limits is a list: one indicator per row.</article>
+    <article><span class="n">4</span><b>Copy truncates at the payload</b>
+      “runs dry in 4 d…” — the pace verdict is the message, and it is the part the card drops.</article>
+  </div>
+
+  <div class="section-head">
+    <h2 class="headline-s">Twenty arrangements</h2>
+    <span>all built from M3 Expressive roles and components</span>
+  </div>
+
+  <div class="gallery">
+
+    <!-- 01 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="title-l num on-err">17<span class="label-m">% left</span></span>
+        </div>
+        <div class="body-s muted" style="margin:4px 0 10px">83% used · monthly · resets in 11d 14h</div>
+        <div class="pi"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+        <div style="height:14px"></div>
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="title-l num on-ter">28<span class="label-m">% left</span></span>
+        </div>
+        <div class="body-s muted" style="margin:4px 0 10px">72% used · weekly · resets in 1d</div>
+        <div class="pi"><i class="ter" style="width:28%"></i><span class="stop"></span></div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">01</span><h3>Say the word “left”</h3></div>
+        <p>Percentage in title-large emphasized, the unit attached as label-medium, the mirror value as body-small. One linear indicator per provider, track in secondary container, stop dot on the end.</p>
+        <div class="m3"><span class="tag pick">cheapest fix</span><span class="tag">filled card</span><span class="tag">linear progress</span></div>
+      </div>
+    </div>
+
+    <!-- 02 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="title-l num on-err">17<span class="label-m">% left</span></span>
+        </div>
+        <div class="body-s muted" style="margin:4px 0 12px">monthly · 11d 14h to reset</div>
+        <div class="pi wavy">
+          <span class="wave track"></span>
+          <span class="fill" style="width:17%"><span class="wave"></span></span>
+        </div>
+        <div class="rowline" style="margin-top:6px;position:relative;height:16px">
+          <span class="label-s muted">0%</span>
+          <span class="label-s muted" style="position:absolute;left:38%;transform:translateX(-50%)">clock 38%</span>
+          <span class="label-s muted" style="margin-left:auto">100%</span>
+        </div>
+        <div class="divider" style="margin:12px 0 10px"></div>
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="title-s num">28%</span>
+        </div>
+        <div class="pi" style="margin-top:8px"><i style="width:28%"></i><span class="pace" style="left:14%"></span></div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">02</span><h3>Wavy indicator + clock notch</h3></div>
+        <p>M3 Expressive added a wavy linear shape; it makes a slow-moving quota feel alive and impossible to read as a row of sausages. The 2dp notch is the custom part.</p>
+        <div class="m3"><span class="tag pick">kills sausages</span><span class="tag">wavy indicator</span><span class="tag">not in M3: pace mark</span></div>
+      </div>
+    </div>
+
+    <!-- 03 -->
+    <div class="idea">
+      <div class="stage"><div class="w clear">
+        <div style="display:flex;justify-content:space-between;gap:6px">
+          <div class="ringwrap">
+            <div class="gauge">
+              <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--secondary-container)" stroke-width="6"/>
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--error)" stroke-width="6" stroke-linecap="round"
+                        stroke-dasharray="27.8 163.4" transform="rotate(-90 32 32)"/>
+              </svg>
+              <div class="gv"><span class="title-l num on-err">17<span class="label-s">%</span></span></div>
+            </div>
+            <span class="cap body-s">OpenCode Go</span>
+          </div>
+          <div class="ringwrap">
+            <div class="gauge">
+              <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--secondary-container)" stroke-width="6"/>
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--tertiary)" stroke-width="6" stroke-linecap="round"
+                        stroke-dasharray="45.7 163.4" transform="rotate(-90 32 32)"/>
+              </svg>
+              <div class="gv"><span class="title-l num on-ter">28<span class="label-s">%</span></span></div>
+            </div>
+            <span class="cap body-s">Claude</span>
+          </div>
+          <div class="ringwrap">
+            <div class="gauge">
+              <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--secondary-container)" stroke-width="6"/>
+                <circle cx="32" cy="32" r="26" fill="none" stroke="var(--primary)" stroke-width="6" stroke-linecap="round"
+                        stroke-dasharray="65.4 163.4" transform="rotate(-90 32 32)"/>
+              </svg>
+              <div class="gv"><span class="title-l num on-pri">40<span class="label-s">%</span></span></div>
+            </div>
+            <span class="cap body-s">CodeBuddy</span>
+          </div>
+        </div>
+        <div class="label-s muted" style="text-align:center;margin-top:12px">% of budget left</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">03</span><h3>Three circular indicators</h3></div>
+        <p>64dp sits inside the published 24–240dp range. Circular determinate takes no stop indicator, so the ring stays clean; severity rides on the indicator color alone.</p>
+        <div class="m3"><span class="tag">circular progress</span><span class="tag">glance</span><span class="tag">no bars</span></div>
+      </div>
+    </div>
+
+    <!-- 04 -->
+    <div class="idea">
+      <div class="stage tall"><div class="w">
+        <div class="prow" style="margin-bottom:6px">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="pill ter">weekly 28%</span>
+        </div>
+        <div class="list">
+          <div class="li" style="padding-top:0">
+            <span class="body-s muted" style="width:72px">5h session</span>
+            <div class="pi" style="flex:1"><i style="width:62%"></i><span class="stop"></span></div>
+            <span class="label-m num on-pri" style="width:32px;text-align:right">62%</span>
+          </div>
+          <div class="li">
+            <span class="body-s muted" style="width:72px">Weekly</span>
+            <div class="pi" style="flex:1"><i class="ter" style="width:28%"></i><span class="stop"></span></div>
+            <span class="label-m num on-ter" style="width:32px;text-align:right">28%</span>
+          </div>
+          <div class="li">
+            <span class="body-s muted" style="width:72px">Extra</span>
+            <div class="pi" style="flex:1"><i style="width:80%"></i><span class="stop"></span></div>
+            <span class="label-m num" style="width:32px;text-align:right">$8.10</span>
+          </div>
+        </div>
+        <div class="divider" style="margin:4px 0 10px"></div>
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="title-s num on-err">17% <span class="label-s">left</span></span>
+        </div>
+        <div class="pi err" style="margin-top:8px"><i class="err" style="width:17%"></i><span class="stop" style="background:var(--error)"></span></div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">04</span><h3>Every window, tightest first</h3></div>
+        <p>A list inside the card: the provider's worst window is the headline, the rest are list items with one indicator each. This is the fix for “17% is wrong” — it is the monthly meter, and now you can see the 5h one.</p>
+        <div class="m3"><span class="tag pick">fixes wrong-looking %</span><span class="tag">list</span><span class="tag">one indicator per row</span></div>
+      </div>
+    </div>
+
+    <!-- 05 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">dry ≈ Oct 26</span>
+        </div>
+        <div class="card" style="margin:10px 0 10px;padding:10px 10px 6px">
+          <svg viewBox="0 0 268 74" width="100%" height="72" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 5 L34 11 L68 19 L102 28 L136 37 L170 45 L204 52 L238 58 L268 61 L268 74 L0 74 Z"
+                  fill="color-mix(in oklab, var(--primary) 24%, transparent)"/>
+            <path d="M0 5 L34 11 L68 19 L102 28 L136 37 L170 45 L204 52 L238 58 L268 61"
+                  fill="none" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M204 52 L268 73" fill="none" stroke="var(--tertiary)" stroke-width="2" stroke-dasharray="3 4"/>
+            <circle cx="204" cy="52" r="3.5" fill="var(--primary)"/>
+          </svg>
+        </div>
+        <div class="rowline">
+          <span class="title-l num on-err">17% <span class="body-s muted">left</span></span>
+          <span class="label-m muted" style="margin-left:auto">dry in 4d</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">05</span><h3>Burn-down in a filled card</h3></div>
+        <p>The chart is not an M3 component — it is a custom chart on surface-container-highest, with primary as history and tertiary dashed as projection. Hierarchy comes from the surface tone, not a border.</p>
+        <div class="m3"><span class="tag">filled card</span><span class="tag">needs history</span><span class="tag">not in M3: chart</span></div>
+      </div>
+    </div>
+
+    <!-- 06 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">tightest</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin:6px 0 0">
+          <span class="display-l num on-err">4</span>
+          <span class="title-l">days</span>
+        </div>
+        <div class="body-s muted">of budget left · at your current burn</div>
+        <div class="pi" style="margin-top:12px"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+        <div class="divider" style="margin:12px 0 10px"></div>
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="pill pri">on pace</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">06</span><h3>Days left is editorial</h3></div>
+        <p>Display-large is the sanctioned hero size (57sp). A hero moment is one or two per screen, so the other providers collapse to a single row each.</p>
+        <div class="m3"><span class="tag pick">hero moment</span><span class="tag">display-large</span><span class="tag">needs pace eta</span></div>
+      </div>
+    </div>
+
+    <!-- 07 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill sec">monthly</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin:8px 0 6px">
+          <span class="display-s num">$2.10</span>
+          <span class="body-m muted">left of $12.40</span>
+        </div>
+        <div class="pi"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+        <div class="rowline" style="margin-top:8px">
+          <span class="label-m muted">$10.30 spent</span>
+          <span class="label-m on-err" style="margin-left:auto">17% left</span>
+        </div>
+        <div class="divider" style="margin:12px 0 10px"></div>
+        <div class="prow">
+          <span class="pmark">CB</span>
+          <span class="name title-s">CodeBuddy</span>
+          <span class="title-s num on-pri">40%</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">07</span><h3>Show the money</h3></div>
+        <p>Where the plan is denominated in currency, dollars beat percent. Same components, only the type role of the value drops from display-small to body-m for its label.</p>
+        <div class="m3"><span class="tag">only where priced</span><span class="tag">no rounding lies</span></div>
+      </div>
+    </div>
+
+    <!-- 08 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">2.2× over</span>
+        </div>
+        <div style="display:grid;gap:12px;margin-top:12px">
+          <div>
+            <div class="rowline" style="margin-bottom:5px">
+              <span class="label-m muted">Budget left</span>
+              <span class="label-m num on-err" style="margin-left:auto">17%</span>
+            </div>
+            <div class="pi t6"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+          </div>
+          <div>
+            <div class="rowline" style="margin-bottom:5px">
+              <span class="label-m muted">Time left</span>
+              <span class="label-m num" style="margin-left:auto">38%</span>
+            </div>
+            <div class="pi t6"><i style="width:38%"></i><span class="stop"></span></div>
+          </div>
+        </div>
+        <div class="body-s muted" style="margin-top:12px">Dry 7 days before the reset (Oct 26).</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">08</span><h3>Budget vs clock</h3></div>
+        <p>Two 6dp indicators, one scale, one question. Thicker track is a configurable option in M3 Expressive, and both keep their 4dp stop dot.</p>
+        <div class="m3"><span class="tag">pace, plainly</span><span class="tag">configurable track</span></div>
+      </div>
+    </div>
+
+    <!-- 09 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="card tonal" style="background:var(--primary-container);color:var(--on-primary-container)">
+          <div class="prow">
+            <span class="pmark" style="background:color-mix(in oklab, var(--on-primary-container) 12%, transparent);color:var(--on-primary-container)">OC</span>
+            <span class="name title-s">OpenCode Go</span>
+            <span class="label-m">worst</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;margin-top:6px">
+            <span class="display-s num">17%</span>
+            <span class="body-s">left · monthly</span>
+          </div>
+          <div class="pi" style="margin-top:8px;background:color-mix(in oklab, var(--on-primary-container) 14%, transparent)">
+            <i style="width:17%"></i>
+            <span class="stop"></span>
+          </div>
+          <div class="body-s" style="margin-top:6px">resets in 11d 14h · dry in 4d</div>
+        </div>
+        <div style="height:10px"></div>
+        <div class="prow" style="padding:4px 2px">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="title-s num on-ter">28% <span class="label-s muted">left</span></span>
+        </div>
+        <div class="prow" style="padding:4px 2px">
+          <span class="pmark">CB</span>
+          <span class="name title-s">CodeBuddy</span>
+          <span class="title-s num on-pri">40% <span class="label-s muted">left</span></span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">09</span><h3>One hero, two whispers</h3></div>
+        <p>Containment plus surface tone: the worst provider sits in a primary container (the brightest surface), everything healthy is uncontained list text. Two type sizes, two levels.</p>
+        <div class="m3"><span class="tag">containment</span><span class="tag">primary container</span><span class="tag">hierarchy</span></div>
+      </div>
+    </div>
+
+    <!-- 10 -->
+    <div class="idea">
+      <div class="stage"><div class="w clear">
+        <div class="list">
+          <div class="li" style="padding-top:2px">
+            <span class="pmark">OC</span>
+            <span class="title-s">OpenCode Go</span>
+            <span class="title-l num on-err" style="margin-left:auto">17%</span>
+            <span class="label-m muted" style="width:26px">left</span>
+          </div>
+          <div class="li">
+            <span class="pmark">C</span>
+            <span class="title-s">Claude</span>
+            <span class="title-l num on-ter" style="margin-left:auto">28%</span>
+            <span class="label-m muted" style="width:26px">left</span>
+          </div>
+          <div class="li">
+            <span class="pmark">CB</span>
+            <span class="title-s">CodeBuddy</span>
+            <span class="title-l num on-pri" style="margin-left:auto">40%</span>
+            <span class="label-m muted" style="width:26px">left</span>
+          </div>
+        </div>
+        <div class="body-s muted" style="margin-top:10px">tap a row for windows, reset and pace</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">10</span><h3>List with dividers</h3></div>
+        <p>Dividers are the one place outline-variant belongs. Two-value columns align on the decimal because the numbers are tabular; the unit column keeps “left” from drifting.</p>
+        <div class="m3"><span class="tag pick">cleanest</span><span class="tag">list</span><span class="tag">divider = outline variant</span></div>
+      </div>
+    </div>
+
+    <!-- 11 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="list">
+          <div class="li" style="padding-top:2px">
+            <span class="pmark">OC</span>
+            <span class="name" style="flex:1">
+              <span class="title-s" style="display:block">OpenCode Go</span>
+              <span class="body-s muted">monthly · 11d left</span>
+            </span>
+            <span class="title-s num on-err">17%</span>
+            <span class="pill err">dry in 4d</span>
+          </div>
+          <div class="li">
+            <span class="pmark">C</span>
+            <span class="name" style="flex:1">
+              <span class="title-s" style="display:block">Claude</span>
+              <span class="body-s muted">weekly · 1d left</span>
+            </span>
+            <span class="title-s num on-ter">28%</span>
+            <span class="pill ter">tight</span>
+          </div>
+          <div class="li">
+            <span class="pmark">CB</span>
+            <span class="name" style="flex:1">
+              <span class="title-s" style="display:block">CodeBuddy</span>
+              <span class="body-s muted">monthly · 27d left</span>
+            </span>
+            <span class="title-s num on-pri">40%</span>
+            <span class="pill pri">on pace</span>
+          </div>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">11</span><h3>Lead with the verdict</h3></div>
+        <p>A percentage needs translation; the verdict does not. M3 has no non-interactive status chip, so these are 20dp pills on container roles — my call, flagged rather than passed off as a component.</p>
+        <div class="m3"><span class="tag">actionable</span><span class="tag">container roles</span><span class="tag">not in M3: status pill</span></div>
+      </div>
+    </div>
+
+    <!-- 12 -->
+    <div class="idea">
+      <div class="stage is-light"><div class="w">
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="pill sec">weekly</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin:8px 0 8px">
+          <span class="display-s num on-ter">28</span>
+          <span class="title-s on-ter">% left</span>
+        </div>
+        <div class="pi t8"><i class="ter" style="width:28%"></i><span class="stop"></span></div>
+        <div class="rowline" style="margin-top:8px">
+          <span class="label-m muted">resets in 1d 0h</span>
+          <span class="label-m muted" style="margin-left:auto">13% in reserve</span>
+        </div>
+        <div class="divider" style="margin:10px 0 8px"></div>
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="title-s num on-err">17%</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">12</span><h3>The light scheme</h3></div>
+        <p>Same component tree, light roles: surface 98, on-surface 10, the identical primary/tertiary/error accents at tone 40 instead of 80. Dynamic color does the work; no per-theme layout.</p>
+        <div class="m3"><span class="tag">light theme</span><span class="tag">role swap only</span></div>
+      </div>
+    </div>
+
+    <!-- 13 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="title-s num on-err">17% <span class="label-s muted">left</span></span>
+        </div>
+        <div class="pi t8" style="margin-top:12px"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+        <div class="rowline" style="margin-top:6px;justify-content:space-between">
+          <span class="label-s muted">0</span>
+          <span class="label-s muted">25</span>
+          <span class="label-s muted">50</span>
+          <span class="label-s muted">75</span>
+          <span class="label-s muted">100</span>
+        </div>
+        <div class="body-s muted" style="margin-top:10px">2.7 of 16 units left — rounded once, drawn once</div>
+        <div class="divider" style="margin:10px 0 8px"></div>
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="title-s num on-ter">28%</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">13</span><h3>If you keep stepping, calibrate it</h3></div>
+        <p>An 8dp track with a printed scale and a real stop dot. Segments are still not an M3 indicator, but at 8dp with quarter marks the fill reads as a measurement instead of a sausage.</p>
+        <div class="m3"><span class="tag">configurable track</span><span class="tag">stop indicator</span><span class="tag">keeps the look</span></div>
+      </div>
+    </div>
+
+    <!-- 14 -->
+    <div class="idea">
+      <div class="stage"><div class="w" style="max-width:252px">
+        <div class="tiles">
+          <div class="tile">
+            <div class="cap label-s">OpenCode Go</div>
+            <div class="title-l num on-err">17<span class="label-s">%</span></div>
+            <div class="pi" style="margin-top:8px"><i class="err" style="width:17%"></i></div>
+          </div>
+          <div class="tile">
+            <div class="cap label-s">Claude</div>
+            <div class="title-l num on-ter">28<span class="label-s">%</span></div>
+            <div class="pi" style="margin-top:8px"><i class="ter" style="width:28%"></i></div>
+          </div>
+          <div class="tile">
+            <div class="cap label-s">CodeBuddy</div>
+            <div class="title-l num on-pri">40<span class="label-s">%</span></div>
+            <div class="pi" style="margin-top:8px"><i style="width:40%"></i></div>
+          </div>
+          <div class="tile">
+            <div class="cap label-s">Spend today</div>
+            <div class="title-l num">$3.42</div>
+            <div class="pi" style="margin-top:8px"><i style="width:64%"></i></div>
+          </div>
+        </div>
+        <div class="label-s muted" style="text-align:center;margin-top:10px">2×2 · 250 × 180 dp</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">14</span><h3>Four cards, not four rows</h3></div>
+        <p>Filled cards at the published 12dp radius would clip inside a 28dp shell, so the tiles use 16 = 28 − 12. Card padding 16 on the outside, 10 here to fit the widget.</p>
+        <div class="m3"><span class="tag">filled cards</span><span class="tag">nested radii</span><span class="tag">dense</span></div>
+      </div>
+    </div>
+
+    <!-- 15 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="label-m muted">1 / 3</span>
+        </div>
+        <div style="text-align:center;padding:8px 0 6px">
+          <div class="display-m num on-err">17%</div>
+          <div class="body-s muted" style="margin-top:2px">left of your monthly budget</div>
+        </div>
+        <div class="pi t6"><i class="err" style="width:17%"></i><span class="stop"></span></div>
+        <div class="rowline" style="margin-top:8px">
+          <span class="label-m on-err">dry in 4d</span>
+          <span class="label-m muted" style="margin-left:auto">resets 11d 14h</span>
+        </div>
+        <div class="dots"><i class="on"></i><i></i><i></i></div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">15</span><h3>Carousel of cards</h3></div>
+        <p>One provider per page with carousel dots, so nothing has to truncate. Maximum card height truncates rather than scrolls — the widget never gets a second scrollbar.</p>
+        <div class="m3"><span class="tag">carousel</span><span class="tag">no truncation</span><span class="tag">needs swipe</span></div>
+      </div>
+    </div>
+
+    <!-- 16 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">OC</span>
+          <span class="name title-s">OpenCode Go</span>
+          <span class="pill err">dry early</span>
+        </div>
+        <div class="tl">
+          <div class="axis"></div>
+          <div class="hatch"></div>
+          <div class="mk"></div>
+          <div class="lbl label-s" style="left:calc(34.5% + 8px);top:2px;color:var(--error)">dry Oct 26</div>
+          <div class="lbl label-s" style="right:0;top:2px">reset Nov 2</div>
+          <div class="lbl label-s" style="left:0;top:40px">now</div>
+          <div class="lbl label-s" style="right:0;top:40px">7 days with no budget</div>
+        </div>
+        <div class="body-s muted">budget covers 4 of the 11d 14h left</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">16</span><h3>Put it on a calendar</h3></div>
+        <p>Not an M3 component: a custom axis with the error role hatching the days you cannot fund. Shape does the arguing; the percentage is no longer the subject.</p>
+        <div class="m3"><span class="tag">planning</span><span class="tag">error role</span><span class="tag">not in M3: timeline</span></div>
+      </div>
+    </div>
+
+    <!-- 17 -->
+    <div class="idea">
+      <div class="stage"><div class="w" style="padding:10px 12px">
+        <div class="list">
+          <div class="li" style="padding:6px 0">
+            <span class="dot" style="width:6px;height:6px;border-radius:3px;background:var(--error)"></span>
+            <span class="body-m">OpenCode Go</span>
+            <span class="title-s num" style="margin-left:6px">17% left</span>
+            <span class="body-s muted" style="margin-left:auto">dry in 4d</span>
+          </div>
+          <div class="li" style="padding:6px 0">
+            <span class="dot" style="width:6px;height:6px;border-radius:3px;background:var(--tertiary)"></span>
+            <span class="body-m">Claude</span>
+            <span class="title-s num" style="margin-left:6px">28% left</span>
+            <span class="body-s muted" style="margin-left:auto">weekly, 1d</span>
+          </div>
+          <div class="li" style="padding:6px 0">
+            <span class="dot" style="width:6px;height:6px;border-radius:3px;background:var(--primary)"></span>
+            <span class="body-m">CodeBuddy</span>
+            <span class="title-s num" style="margin-left:6px">40% left</span>
+            <span class="body-s muted" style="margin-left:auto">27d</span>
+          </div>
+        </div>
+        <div class="label-s muted" style="margin-top:6px">2×1 widget · updates hourly</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">17</span><h3>Three sentences, 2×1</h3></div>
+        <p>The smallest honest widget: a 6dp status dot (the small badge geometry), “17% left” spelled out, one time fact. No indicator at all, because there is no room for a track.</p>
+        <div class="m3"><span class="tag">2×1</span><span class="tag">list</span><span class="tag">no bars</span></div>
+      </div>
+    </div>
+
+    <!-- 18 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow" style="align-items:flex-start;gap:12px">
+          <span class="card" style="padding:8px;border-radius:var(--r-m);background:var(--error-container)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--on-error-container)" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 7v6"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="9" opacity=".35"/>
+            </svg>
+          </span>
+          <div>
+            <div class="title-m">OpenCode Go runs dry Sunday</div>
+            <div class="body-s muted" style="margin-top:2px">7 days before reset · 17% left at 2.2× burn</div>
+          </div>
+        </div>
+        <div class="divider" style="margin:12px 0 8px"></div>
+        <div class="list">
+          <div class="li" style="padding:4px 0"><span class="body-m muted">Claude</span><span class="label-m" style="margin-left:auto">lasts to reset</span></div>
+          <div class="li" style="padding:4px 0"><span class="body-m muted">CodeBuddy</span><span class="label-m" style="margin-left:auto">lasts to reset</span></div>
+        </div>
+        <div class="label-s muted" style="margin-top:8px">nothing else needs your attention</div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">18</span><h3>Answer, then evidence</h3></div>
+        <p>Headline-medium carries the sentence; healthy providers become list text. The error container is the only saturated surface in the widget, so attention lands where the action is.</p>
+        <div class="m3"><span class="tag">hero copy</span><span class="tag">error container</span><span class="tag">no math</span></div>
+      </div>
+    </div>
+
+    <!-- 19 -->
+    <div class="idea">
+      <div class="stage"><div class="w">
+        <div class="prow">
+          <span class="pmark">C</span>
+          <span class="name title-s">Claude</span>
+          <span class="label-m muted">weekly</span>
+        </div>
+        <div class="cbg" style="margin:10px 0 12px">
+          <button>5h</button><button class="on">Week</button><button>Extra</button>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:6px">
+          <span class="display-s num on-ter">28</span>
+          <span class="title-s on-ter">% left</span>
+        </div>
+        <div class="pi t6" style="margin-top:10px"><i class="ter" style="width:28%"></i><span class="stop"></span></div>
+        <div class="rowline" style="margin-top:8px">
+          <span class="label-m muted">resets in 1d 0h</span>
+          <span class="label-m muted" style="margin-left:auto">13% in reserve</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">19</span><h3>Connected button group</h3></div>
+        <p>Segmented buttons are no longer recommended; a connected group replaces them at 40dp with secondary-container selection and a shape morph on press. One number, one window.</p>
+        <div class="m3"><span class="tag pick">M3 2025 component</span><span class="tag">shape morph</span><span class="tag">one tap</span></div>
+      </div>
+    </div>
+
+    <!-- 20 -->
+    <div class="idea">
+      <div class="stage"><div class="w" style="max-width:210px">
+        <div class="prow" style="margin-bottom:8px">
+          <span class="pmark" style="width:20px;height:20px;font-size:8px">OC</span>
+          <span class="name label-m">OpenCode Go</span>
+        </div>
+        <div style="position:relative;display:grid;place-items:center">
+          <svg width="160" height="160" viewBox="0 0 160 160" aria-hidden="true">
+            <circle cx="80" cy="80" r="64" fill="none" stroke="var(--secondary-container)" stroke-width="12"/>
+            <circle cx="80" cy="80" r="64" fill="none" stroke="var(--error)" stroke-width="12" stroke-linecap="round"
+                    stroke-dasharray="68.4 402.1" transform="rotate(-90 80 80)"/>
+          </svg>
+          <div style="position:absolute;text-align:center">
+            <div class="display-m num on-err">17</div>
+            <div class="label-m muted">% LEFT</div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:8px">
+          <span class="pill err">dry in 4 days</span>
+        </div>
+      </div></div>
+      <div class="note">
+        <div class="t"><span class="idx">20</span><h3>Expressive numeral in an arc</h3></div>
+        <p>A 12dp circular indicator, well inside the 24–240dp range, with display-medium at its centre. Round caps make 17% look intentional instead of clipped.</p>
+        <div class="m3"><span class="tag">circular progress</span><span class="tag">display-medium</span><span class="tag">one provider</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="closing">
+    <div>
+      <h2 class="headline-s">If I had to pick three</h2>
+      <ol>
+        <li><b>04 — every window as a list.</b> It is the only arrangement that fixes the “17% is wrong” feeling without new data: the number is the monthly meter, and the 5h limit is now visible next to it.</li>
+        <li><b>11 — verdict pills.</b> “17%” plus “dry in 4d” is a decision. <code>Pace.willLastToReset</code> and <code>etaSeconds</code> are already cached.</li>
+        <li><b>02 — wavy indicator with a clock notch.</b> A sanctioned M3 Expressive shape that removes the sausage look while keeping the at-a-glance bar.</li>
+      </ol>
+      <p class="fine">Twelve of the twenty are pure role/typography changes to <code>widget/WidgetContent.kt</code>. The wavy indicator, the charts and the timeline need RemoteViews work (Glance has no canvas API), so treat those as the expensive ones.</p>
+    </div>
+    <div>
+      <h2 class="headline-s">Rules to apply regardless</h2>
+      <ol>
+        <li>Never print a bare percentage: pair it with its window and the word “left”.</li>
+        <li>Use the indicator’s three parts — active, secondary-container track, 4dp stop — or don’t draw one.</li>
+        <li>One hero per widget. Everything else is a list row at title-small.</li>
+        <li>Let dynamic color pick the accents; keep only primary / tertiary / error as semantic state.</li>
+      </ol>
+      <p class="fine">Specs quoted here come from the M3 token set: corner scale 4/8/12/16/20/28/32/48/full, type 36/45/57 display, springs 0.8/380 spatial and 1.0/1600 effects, progress track 4dp with a 4dp stop. Anything marked “not in M3” is my design decision.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  function setPressed(sel, attr, value) {
+    document.querySelectorAll(sel).forEach(function (btn) {
+      btn.setAttribute('aria-pressed', String(btn.dataset[attr] === value));
+    });
+  }
+  document.querySelectorAll('[data-set-seed]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      root.dataset.seed = btn.dataset.setSeed;
+      setPressed('[data-set-seed]', 'setSeed', btn.dataset.setSeed);
+    });
+  });
+  setPressed('[data-set-seed]', 'setSeed', root.dataset.seed);
+  setPressed('[data-set-scheme]', 'setScheme', root.dataset.scheme);
+  document.querySelectorAll('[data-set-scheme]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      root.dataset.scheme = btn.dataset.setScheme;
+      setPressed('[data-set-scheme]', 'setScheme', btn.dataset.setScheme);
+    });
+  });
+})();
+</script>
+</body>
+</html>
