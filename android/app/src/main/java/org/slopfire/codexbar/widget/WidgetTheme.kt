@@ -60,6 +60,19 @@ object WidgetType {
         fontWeight = FontWeight.Normal,
     )
 
+    /**
+     * display small — 36sp/44sp/0sp. The expanded provider's one big number.
+     *
+     * From M3: display styles are for the largest text in a surface, one per
+     * container. Weight is the emphasized Medium rather than the token's Regular
+     * because a home-screen number is read from arm's length, and the scale has no
+     * other type step between 22sp and 36sp to carry a headline.
+     */
+    val displaySmall = TextStyle(
+        fontSize = 36.sp,
+        fontWeight = FontWeight.Medium,
+    )
+
     /** The same style carrying an explicit color, which Glance requires per run. */
     fun colored(style: TextStyle, color: ColorProvider): TextStyle = style.copy(color = color)
 }
@@ -102,7 +115,24 @@ class WidgetPalette(
     val track: ColorProvider,
     private val day: ColorScheme,
     private val night: ColorScheme,
+    /**
+     * True/false when the user pinned the theme, null when it follows the system.
+     *
+     * A pinned palette has `day` and `night` pointing at the same scheme, but a
+     * plain day/night [ColorProvider] still resolves against the *system* — so the
+     * health colors would flip to the wrong tone. [resolve] collapses the pair when
+     * this is non-null, which is why pinned Light/Dark finally look coherent.
+     */
+    private val pinnedDark: Boolean? = null,
 ) {
+    /** The right half of a day/night pair, honouring a pinned theme. */
+    private fun resolve(dayColor: Color, nightColor: Color): ColorProvider =
+        when (pinnedDark) {
+            true -> dayNight(nightColor, nightColor)
+            false -> dayNight(dayColor, dayColor)
+            null -> dayNight(dayColor, nightColor)
+        }
+
     /**
      * The shell fill and the text colors that survive it.
      *
@@ -147,13 +177,46 @@ class WidgetPalette(
      * translucent dark widget, and it is the color of the caption under every bar.
      */
     fun healthFor(color: Color): ColorProvider = when (color) {
-        Health.Good -> dayNight(Color(0xFF1E6B4C), Color(0xFF86DDB4))
-        Health.Tight -> dayNight(Color(0xFF8A6100), Color(0xFFFFCF70))
-        Health.Low -> dayNight(Color(0xFFA8431F), Color(0xFFFFAD84))
-        Health.Critical -> dayNight(Color(0xFFB3261E), Color(0xFFFFB4AB))
-        Health.Neutral -> dayNight(Color(0xFF49555A), Color(0xFFC3CDCF))
-        else -> dayNight(color, color)
+        Health.Good -> resolve(Color(0xFF1E6B4C), Color(0xFF86DDB4))
+        Health.Tight -> resolve(Color(0xFF8A6100), Color(0xFFFFCF70))
+        Health.Low -> resolve(Color(0xFFA8431F), Color(0xFFFFAD84))
+        Health.Critical -> resolve(Color(0xFFB3261E), Color(0xFFFFB4AB))
+        Health.Neutral -> resolve(Color(0xFF49555A), Color(0xFFC3CDCF))
+        else -> resolve(color, color)
     }
+
+    /**
+     * The fill behind a health-colored statement, such as the verdict pill.
+     *
+     * From M3: a status chip is a container/on-container pair, not ink on ink.
+     * The day values are pale washes of the same hue, the night values are the
+     * deep tones the dark scheme's pastel ink sits on — which is also why the
+     * verdict pill in the dark widget reads dark red with light text.
+     */
+    fun healthContainerFor(color: Color): ColorProvider = when (color) {
+        Health.Good -> resolve(Color(0xFFD3EFE0), Color(0xFF0E3B2A))
+        Health.Tight -> resolve(Color(0xFFFFEEC2), Color(0xFF4A3800))
+        Health.Low -> resolve(Color(0xFFFFDCCB), Color(0xFF5A2410))
+        Health.Critical -> resolve(Color(0xFFFFDAD6), Color(0xFF690005))
+        Health.Neutral -> resolve(Color(0xFFE2E8E8), Color(0xFF2E3638))
+        else -> resolve(color, color)
+    }
+
+    /**
+     * The ink for [healthContainerFor]'s fill: the health step itself, which is
+     * deep in the light scheme and pastel in the dark one.
+     */
+    fun onHealthContainerFor(color: Color): ColorProvider = healthFor(color)
+
+    /**
+     * Hairline between the headline, the window list and the collapsed providers.
+     *
+     * From M3: `outline variant` is the low-emphasis divider role. This widget is
+     * the one place the redesign breaks the "gaps, not dividers" rule, because the
+     * sections are different kinds of evidence and a gap alone reads as one list.
+     */
+    val divider: ColorProvider
+        get() = resolve(day.outlineVariant, night.outlineVariant)
 }
 
 object WidgetTheme {
@@ -194,6 +257,11 @@ object WidgetTheme {
             track = dayNight(day.surfaceVariant, night.surfaceVariant),
             day = day,
             night = night,
+            pinnedDark = when (mode) {
+                WidgetColorMode.Light -> false
+                WidgetColorMode.Dark -> true
+                WidgetColorMode.Dynamic -> null
+            },
         )
     }
 
