@@ -192,11 +192,58 @@ class WidgetVerdictTest {
     }
 
     @Test
+    fun shortWindowLabelsNameRepeatedLengthsByWhatSetsThemApart() {
+        val weekly = row(45.0, title = "Weekly").copy(windowMinutes = 10080.0)
+        val opus = row(70.0, title = "Weekly Opus").copy(windowMinutes = 10080.0)
+        val session = row(82.0, title = "Session").copy(windowMinutes = 300.0)
+        assertEquals(listOf("week", "opus", "5h"), WidgetVerdict.shortWindowLabels(listOf(weekly, opus, session)))
+        // Nothing tells them apart: keep the shared name rather than invent one.
+        assertEquals(listOf("week", "week"), WidgetVerdict.shortWindowLabels(listOf(weekly, weekly)))
+    }
+
+    @Test
+    fun headlineMetaShortensTheNameBeforeTheCountdown() {
+        val plan = row(0.0, title = "Pro Plan Monthly Subscription", resetsAt = "1970-01-03T00:00:00Z")
+        // " · resets in 2 d 0 h" is 20 characters; the name gets the other 16.
+        assertEquals(
+            "pro Plan Monthl… · resets in 2 d 0 h",
+            WidgetVerdict.headlineMeta(plan, nowMillis = 0L, maxChars = 36),
+        )
+        assertEquals("resets in 2 d 0 h", WidgetVerdict.headlineMeta(plan, nowMillis = 0L, maxChars = 22))
+    }
+
+    @Test
     fun headlineMetaWithoutResetIsJustTheLabel() {
         assertEquals("monthly", WidgetVerdict.headlineMeta(row(50.0, title = "Monthly Usage")))
         assertEquals(
             "monthly",
             WidgetVerdict.headlineMeta(row(50.0, title = "Monthly Usage", resetsAt = "not-a-time")),
         )
+    }
+
+    @Test
+    fun shortWindowLabelsComeFromTheWindowLength() {
+        fun window(minutes: Double?, title: String = "Whatever") =
+            UsageRow(id = "w", title = title, percentLeft = 50.0, resetsAt = null, windowMinutes = minutes, pace = null)
+        assertEquals("5h", WidgetVerdict.shortWindowLabel(window(300.0)))
+        assertEquals("30m", WidgetVerdict.shortWindowLabel(window(30.0)))
+        assertEquals("day", WidgetVerdict.shortWindowLabel(window(1_440.0)))
+        assertEquals("week", WidgetVerdict.shortWindowLabel(window(10_080.0)))
+        assertEquals("month", WidgetVerdict.shortWindowLabel(window(43_200.0)))
+        assertEquals("3d", WidgetVerdict.shortWindowLabel(window(4_320.0)))
+    }
+
+    @Test
+    fun shortWindowLabelFallsBackToTheTitlesFirstWord() {
+        fun titled(title: String) =
+            UsageRow(id = "w", title = title, percentLeft = 50.0, resetsAt = null, windowMinutes = null, pace = null)
+        assertEquals("session", WidgetVerdict.shortWindowLabel(titled("Session")))
+        assertEquals("subscri…", WidgetVerdict.shortWindowLabel(titled("Subscription credits")))
+    }
+
+    @Test
+    fun anEmptyWindowIsUsedUpWhateverThePace() {
+        val verdict = WidgetVerdict.forRow(row(0.0, pace = Pace(willLastToReset = true)))
+        assertEquals(Verdict("used up", VerdictTone.ERROR), verdict)
     }
 }

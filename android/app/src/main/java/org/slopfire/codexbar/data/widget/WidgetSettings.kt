@@ -3,7 +3,6 @@ package org.slopfire.codexbar.data.widget
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 
@@ -16,64 +15,48 @@ enum class WidgetColorMode(val label: String) {
 }
 
 enum class WidgetSort(val label: String) {
-    Tightest("Tightest first"),
-    Name("Name"),
+    Tightest("Tightest"),
+    Name("A–Z"),
 }
 
 /**
  * Widget surface fill.
  *
  * From M3: widget bodies use a `surface container` role for containment.
- * My design decision (not in M3): the translucency level and the transparent
- * option, which let the wallpaper show through like a launcher widget.
+ * My design decision (not in M3): the translucency level and the clear
+ * option, which let the wallpaper show through between the tonal cards.
  */
 enum class WidgetBackground(val label: String) {
     Solid("Solid"),
     Translucent("Translucent"),
-    Transparent("Transparent"),
+    Transparent("Clear"),
 }
 
 /**
  * Outer corner radius for the widget shell.
  *
- * From M3: shape scale steps `CornerMedium` 12dp, `CornerLarge` 16dp and
- * `CornerExtraLarge` 28dp. System leaves the radius to the launcher
- * (`appWidgetBackground` owns it on Android 12+).
+ * System follows the launcher's own widget radius
+ * (`system_app_widget_background_radius` on Android 12+), which is what makes a
+ * widget sit flush with the rest of the home screen. The fixed steps are the
+ * M3 shape scale: Medium 12dp, Large 16dp, Extra large 28dp.
  */
 enum class WidgetCorners(val label: String) {
-    System("System"),
-    Medium("Medium 12"),
-    Large("Large 16"),
-    ExtraLarge("XL 28"),
+    System("Launcher"),
+    Medium("12 dp"),
+    Large("16 dp"),
+    ExtraLarge("28 dp"),
 }
 
 /**
- * Thickness of the remaining-budget bar.
+ * Thickness of the remaining-budget bars.
  *
- * From M3: linear progress default track thickness is 4dp and configurable in
- * Expressive. My design decision (not in M3): the 6/8/12dp steps, tuned so the
- * time marker stays legible on a home screen.
+ * From M3 Expressive: linear progress is 4dp by default with a thick 8dp
+ * variant. The 12dp step is a home-screen extra (not in M3).
  */
 enum class WidgetBarHeight(val label: String) {
-    Compact("Slim"),
-    Standard("Standard"),
+    Compact("Thin"),
+    Standard("Thick"),
     Comfortable("Bold"),
-}
-
-/**
- * How the pacing (time-remaining) marker on the bar is drawn.
- *
- * Mirrors the desktop plasmoid's `paceIndicatorStyle` (`position`, `bar`,
- * `provider`, `theme`, `gaps`) so the phone and the desktop agree at a
- * glance, plus `Off` to render a single unsplit bar.
- */
-enum class WidgetPaceStyle(val label: String) {
-    Position("Position color"),
-    Bar("Match bar"),
-    Provider("Provider color"),
-    Theme("Theme text"),
-    Gaps("Gaps only"),
-    Off("Off"),
 }
 
 /** Which of the three widgets is being configured; they expose different options. */
@@ -90,20 +73,18 @@ data class WidgetSettings(
     /** Provider ids to include; empty means every provider in the snapshot. */
     val providers: Set<String> = emptySet(),
     val sort: WidgetSort = WidgetSort.Tightest,
-    /** The reset countdown and pace verdict line under each bar. */
+    /** The reset countdown next to each window name. */
     val showCaptions: Boolean = true,
     val colorMode: WidgetColorMode = WidgetColorMode.Dynamic,
-    /** Compact widget: pin one provider instead of following the tightest. */
+    /** Usage widget: pin one provider instead of following the tightest. */
     val heroProvider: String = "",
-    /** Providers widget: 0 follows the granted height. */
-    val maxRows: Int = 0,
     val background: WidgetBackground = WidgetBackground.Solid,
-    val corners: WidgetCorners = WidgetCorners.Large,
+    val corners: WidgetCorners = WidgetCorners.System,
     val barHeight: WidgetBarHeight = WidgetBarHeight.Standard,
-    /** Provider brand badges next to row titles. */
+    /** Provider brand badges next to provider names. */
     val showBadges: Boolean = true,
-    /** Pacing marker style for the split progress bar. */
-    val paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
+    /** The tick on each bar marking how much of the window is still ahead. */
+    val showTimeMarker: Boolean = true,
 ) {
     companion object {
         val PROVIDER_KEY = stringSetPreferencesKey("providers")
@@ -111,14 +92,18 @@ data class WidgetSettings(
         val CAPTIONS_KEY = booleanPreferencesKey("captions")
         val COLOR_KEY = stringPreferencesKey("colorMode")
         val HERO_KEY = stringPreferencesKey("heroProvider")
-        val ROWS_KEY = intPreferencesKey("maxRows")
         val BACKGROUND_KEY = stringPreferencesKey("background")
         val CORNERS_KEY = stringPreferencesKey("corners")
         val BAR_HEIGHT_KEY = stringPreferencesKey("barHeight")
         val BADGES_KEY = booleanPreferencesKey("showBadges")
-        val PACE_KEY = stringPreferencesKey("paceStyle")
 
-        const val AUTO_ROWS = 0
+        /**
+         * Kept under its old name: it used to hold a six-way marker style, and
+         * every style except `Off` drew a marker, so old widgets keep theirs.
+         */
+        val PACE_KEY = stringPreferencesKey("paceStyle")
+        private const val MARKER_ON = "Position"
+        private const val MARKER_OFF = "Off"
 
         fun from(preferences: Preferences): WidgetSettings = WidgetSettings(
             providers = preferences[PROVIDER_KEY].orEmpty(),
@@ -130,20 +115,17 @@ data class WidgetSettings(
                 ?.let { name -> WidgetColorMode.entries.firstOrNull { it.name == name } }
                 ?: WidgetColorMode.Dynamic,
             heroProvider = preferences[HERO_KEY].orEmpty(),
-            maxRows = preferences[ROWS_KEY] ?: AUTO_ROWS,
             background = preferences[BACKGROUND_KEY]
                 ?.let { name -> WidgetBackground.entries.firstOrNull { it.name == name } }
                 ?: WidgetBackground.Solid,
             corners = preferences[CORNERS_KEY]
                 ?.let { name -> WidgetCorners.entries.firstOrNull { it.name == name } }
-                ?: WidgetCorners.Large,
+                ?: WidgetCorners.System,
             barHeight = preferences[BAR_HEIGHT_KEY]
                 ?.let { name -> WidgetBarHeight.entries.firstOrNull { it.name == name } }
                 ?: WidgetBarHeight.Standard,
             showBadges = preferences[BADGES_KEY] ?: true,
-            paceStyle = preferences[PACE_KEY]
-                ?.let { name -> WidgetPaceStyle.entries.firstOrNull { it.name == name } }
-                ?: WidgetPaceStyle.Position,
+            showTimeMarker = preferences[PACE_KEY] != MARKER_OFF,
         )
 
         /** Writes into a widget's preference set, replacing every managed key. */
@@ -153,12 +135,11 @@ data class WidgetSettings(
             preferences[CAPTIONS_KEY] = settings.showCaptions
             preferences[COLOR_KEY] = settings.colorMode.name
             preferences[HERO_KEY] = settings.heroProvider
-            preferences[ROWS_KEY] = settings.maxRows
             preferences[BACKGROUND_KEY] = settings.background.name
             preferences[CORNERS_KEY] = settings.corners.name
             preferences[BAR_HEIGHT_KEY] = settings.barHeight.name
             preferences[BADGES_KEY] = settings.showBadges
-            preferences[PACE_KEY] = settings.paceStyle.name
+            preferences[PACE_KEY] = if (settings.showTimeMarker) MARKER_ON else MARKER_OFF
         }
     }
 }

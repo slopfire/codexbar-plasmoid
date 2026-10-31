@@ -1880,6 +1880,39 @@ function windowUsageRow(id, title, window, paceReport) {
   };
 }
 
+/**
+ * The slot label, unless the window's reported length contradicts it.
+ *
+ * Slot labels describe the usual plan: Codex's primary window is a 5-hour
+ * session on paid plans but a 30-day allowance on the free plan, and calling
+ * that a "Session" misreads both the reset and the pace. A label that names a
+ * length is replaced by one derived from the length actually reported.
+ */
+function titleForWindowLength(title, windowMinutes) {
+  // Slot labels that promise a window length, with the lengths (in minutes)
+  // they cover.
+  const promised = {
+    "5-hour": [4.5 * 60, 5.5 * 60],
+    Session: [1, 24 * 60],
+    Daily: [0.9 * 1440, 1.1 * 1440],
+    Weekly: [6.5 * 1440, 7.5 * 1440],
+    Monthly: [27 * 1440, 32 * 1440],
+  };
+  const range = promised[title];
+  const minutes = numberOrNull(windowMinutes);
+  if (!range || !(minutes > 0) || (minutes >= range[0] && minutes <= range[1])) {
+    return title;
+  }
+  const hours = minutes / 60;
+  const days = hours / 24;
+  if (minutes < 60) return `${Math.round(minutes)}-minute`;
+  if (hours < 23) return `${Math.round(hours)}-hour`;
+  if (days >= 0.9 && days <= 1.1) return "Daily";
+  if (days >= 6.5 && days <= 7.5) return "Weekly";
+  if (days >= 27 && days <= 32) return "Monthly";
+  return `${Math.round(days)}-day`;
+}
+
 function usageRows(providerId, usage, source, pace = {}) {
   // Scoped windows are rate windows the CLI reported explicitly, so they are
   // never treated as an API balance placeholder.
@@ -1907,7 +1940,7 @@ function usageRows(providerId, usage, source, pace = {}) {
   ];
 
   const standard = windows.map(([id, title, window]) => {
-    const row = windowUsageRow(id, title, window, pace?.[id]);
+    const row = windowUsageRow(id, titleForWindowLength(title, window?.windowMinutes), window, pace?.[id]);
     // API balance placeholders have no reset time or window duration. A real
     // window can omit its reset time, such as ClinePass's monthly quota.
     if (source === "api" && !row.resetsAt && !(row.windowMinutes > 0) && row.percentLeft !== null) {

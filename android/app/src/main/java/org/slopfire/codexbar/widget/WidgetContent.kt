@@ -4,16 +4,17 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
-import androidx.glance.Image
-import androidx.glance.ImageProvider
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.appWidgetBackground
 import androidx.glance.appwidget.cornerRadius
@@ -21,6 +22,8 @@ import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.ColumnScope
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
@@ -29,123 +32,138 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
-import androidx.glance.layout.ContentScale
 import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.unit.ColorProvider
 import org.slopfire.codexbar.MainActivity
 import org.slopfire.codexbar.data.model.UsageRow
-import org.slopfire.codexbar.data.widget.WidgetBackground
-import org.slopfire.codexbar.data.widget.WidgetCorners
-import org.slopfire.codexbar.data.widget.WidgetPaceStyle
 import org.slopfire.codexbar.data.widget.WidgetProvider
+import org.slopfire.codexbar.data.widget.WidgetSettings
 import org.slopfire.codexbar.ui.common.Fmt
-import org.slopfire.codexbar.ui.common.Health
 import org.slopfire.codexbar.ui.theme.providerAccentPair
 import org.slopfire.codexbar.ui.theme.providerIconRes
 import org.slopfire.codexbar.ui.theme.providerLabel
 import org.slopfire.codexbar.ui.theme.providerMonogram
 
 /**
- * The palette for the widget currently being rendered. Provided by each widget so
- * the shell, bars and tiles all agree without every signature taking a palette.
+ * Shared widget building blocks.
+ *
+ * Design rules (M3 / Material You):
+ * - **Tonal containment**: the shell is a `surface container`; the statement that
+ *   matters sits in a tonal card (`primary` / `tertiary` / `error container`) whose
+ *   colour *is* the status, so no traffic-light ink is needed on top of it.
+ * - **Concentric shape**: cards use `outer radius − shell padding`, so they nest
+ *   inside the launcher's widget corner instead of fighting it.
+ * - **Expressive progress**: a thick rounded indicator, a gap, the track, and a stop
+ *   dot at the end — the M3 Expressive linear progress anatomy.
+ * - **One number**: the hero percentage is the only display-size text.
  */
-internal val LocalWidgetPalette = androidx.compose.runtime.staticCompositionLocalOf<WidgetPalette> {
+
+/** The palette for the widget currently being rendered. */
+internal val LocalWidgetPalette = staticCompositionLocalOf<WidgetPalette> {
     error("WidgetPalette was not provided")
 }
 
-/**
- * The shell's resolved fill and text colors, provided by [WidgetShell] so every
- * descendant paints readable text for the background the user actually chose.
- */
-internal val LocalWidgetSurface = androidx.compose.runtime.staticCompositionLocalOf<WidgetSurface> {
+/** The shell's resolved fill and text colors, provided by [WidgetShell]. */
+internal val LocalWidgetSurface = staticCompositionLocalOf<WidgetSurface> {
     error("WidgetSurface was not provided")
 }
 
-/**
- * Shared widget building blocks.
- *
- * Design rules applied from the M3 Expressive skill:
- * - **Containment**: one container per widget, with generous internal padding and
- *   the brightest surface reserved for the number that matters.
- * - **Gaps, not dividers**: rows in a contained list are separated by space.
- * - **Shape**: cards/containers use the published `CornerMedium` (12dp) step —
- *   large radii clip information-dense content. The widget's own outer radius
- *   defaults to `CornerLarge` (16dp) with `System/Medium/XL` options, so the
- *   nested 12dp satisfies `inner = outer − padding` at the default.
- * - **Typography**: emphasized styles only on the headline number and row titles,
- *   never as the whole scale.
- * - **Color**: remaining-limit health keeps its semantic scale so "about to run
- *   out" reads the same under any wallpaper palette.
- */
+/** Radius for cards and tiles inside the shell, provided by [WidgetShell]. */
+internal val LocalCardRadius = staticCompositionLocalOf { 16.dp }
 
-/** Container radius for a grouping inside the widget (`CornerMedium`, 12dp). */
-private val GROUP_RADIUS = 12.dp
+/** Horizontal padding inside a card or tile. */
+private val CARD_PADDING = 12.dp
 
-/** Pacing-marker width (`smallSpacing / 2`-scale tick, readable at a glance). */
-private val MARKER_WIDTH = 3.dp
+/** Space between the hero card and the first tile, and between tiles. */
+private val TILE_GAP = 6.dp
 
-/** Transparent split around the marker so the tick divides track and fill. */
-private val MARKER_GAP = 2.dp
+/** Narrowest a tile keeps its provider name (about "OpenC…") before the pairs give way. */
+private const val TILE_NAME_MIN = 44f
 
-/**
- * Strength of the tinted tile behind a provider badge. Raised from 0.18 because a
- * see-through shell gives the badge less to sit on than an opaque one.
- */
-private const val BADGE_CHIP_ALPHA = 0.22f
+/** Gap between the progress indicator and its track (M3 Expressive). */
+private val INDICATOR_GAP = 4.dp
 
-/**
- * The widget shell: the launcher's app-widget background (which owns the outer
- * radius on Android 12+), an optional Material You fill, and a tap target that
- * opens the app.
- *
- * From M3: containment is one container per widget with generous internal
- * padding. My design decision (not in M3): the background/corners options —
- * Transparent skips the fill so the wallpaper shows through, Translucent uses
- * the same role at a scrim alpha, and System leaves the radius to the launcher.
- *
- * The shell is also what makes text readable: it resolves the palette for the
- * chosen background and provides it, so a Translucent or Transparent widget
- * paints stronger text instead of the opaque-surface roles.
- */
+/** The stop indicator at the end of the track (M3 Expressive: 4dp). */
+private val STOP_DOT = 4.dp
+
+/** Time-marker tick width. */
+private val MARKER_WIDTH = 2.dp
+
+/** Window-name column inside the hero card. */
+private val WINDOW_LABEL_WIDTH = 72.dp
+
+/** Percent column inside the hero card: `100%` at label large. */
+private val WINDOW_VALUE_WIDTH = 44.dp
+
+/** Space around a window row's bar. */
+private val WINDOW_GAP = 8.dp
+
+/** Windows a provider tile lists. */
+private const val MAX_TILE_WINDOWS = 3
+
+/** Theme, palette and shell for one widget render — the frame every widget shares. */
 @Composable
-fun WidgetShell(
-    background: WidgetBackground = WidgetBackground.Solid,
-    corners: WidgetCorners = WidgetCorners.Large,
-    contentPadding: Dp = 12.dp,
-    content: @Composable () -> Unit,
+fun WidgetFrame(
+    settings: WidgetSettings,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val context = LocalContext.current
-    val surface = LocalWidgetPalette.current.surfaceFor(background)
-    val radius = WidgetTheme.shellRadius(corners)
-    var modifier = GlanceModifier
-        .fillMaxSize()
-        .appWidgetBackground()
-    if (radius != null) modifier = modifier.cornerRadius(radius)
-    surface.fill?.let { modifier = modifier.background(it) }
-    modifier = modifier
-        .padding(contentPadding)
-        .clickable(actionStartActivity(Intent(context, MainActivity::class.java)))
-    CompositionLocalProvider(LocalWidgetSurface provides surface) {
-        Box(
-            modifier = modifier,
-            contentAlignment = Alignment.TopStart,
-        ) {
-            Column(modifier = GlanceModifier.fillMaxSize()) { content() }
+    val palette = remember(settings.colorMode) { WidgetTheme.palette(context, settings.colorMode) }
+    CompositionLocalProvider(LocalWidgetPalette provides palette) {
+        GlanceTheme(colors = palette.colors) {
+            WidgetShell(settings = settings, content = content)
         }
     }
 }
 
 /**
- * A provider badge: the bundled brand glyph, tinted with the provider's accent
- * color, on a tinted fully rounded tile.
- *
- * The glyphs are white silhouettes rasterized from the plasmoid's own icon set,
- * so the same art renders here as in the app and on the desktop widget. Tinting
- * is required rather than optional: the source art is white, which would be
- * invisible on a light surface, and the provider accent *is* the identity color.
- *
- * Falls back to initials when this build bundles no icon for the provider id.
+ * The widget shell: the launcher's app-widget background, the configured fill and
+ * radius, and a tap target that opens the app.
+ */
+@Composable
+private fun WidgetShell(
+    settings: WidgetSettings,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val context = LocalContext.current
+    val surface = LocalWidgetPalette.current.surfaceFor(settings.background)
+    val outer = WidgetTheme.shellRadius(context, settings.corners)
+    var modifier = GlanceModifier
+        .fillMaxSize()
+        .appWidgetBackground()
+        .cornerRadius(outer)
+    surface.fill?.let { modifier = modifier.background(it) }
+    modifier = modifier
+        .padding(WidgetTheme.SHELL_PADDING)
+        .clickable(actionStartActivity(Intent(context, MainActivity::class.java)))
+    CompositionLocalProvider(
+        LocalWidgetSurface provides surface,
+        LocalCardRadius provides WidgetTheme.innerRadius(outer),
+    ) {
+        Column(modifier = modifier, content = content)
+    }
+}
+
+/** The shell's content height in dp, or NaN when the host did not report a size. */
+@Composable
+fun widgetInnerHeight(): Float {
+    val height = LocalSize.current.height
+    if (height.value.isNaN() || height <= 0.dp) return Float.NaN
+    return (height - WidgetTheme.SHELL_PADDING * 2).value.coerceAtLeast(0f)
+}
+
+/** The shell's content width, or null when the host did not report a size. */
+@Composable
+fun widgetInnerWidth(): Dp? {
+    val width = LocalSize.current.width
+    if (width.value.isNaN() || width <= 0.dp) return null
+    return (width - WidgetTheme.SHELL_PADDING * 2).coerceAtLeast(0.dp)
+}
+
+/**
+ * A provider badge: the bundled brand glyph tinted with the provider's accent, on
+ * a round plate. Falls back to initials when no icon is bundled for the id.
  */
 @Composable
 fun ProviderBadge(provider: String, size: Dp = 24.dp) {
@@ -158,24 +176,19 @@ fun ProviderBadge(provider: String, size: Dp = 24.dp) {
         modifier = GlanceModifier
             .size(size)
             .cornerRadius(size / 2)
-            .background(
-                androidx.glance.color.ColorProvider(
-                    day = day.copy(alpha = BADGE_CHIP_ALPHA),
-                    night = night.copy(alpha = BADGE_CHIP_ALPHA),
-                ),
-            ),
+            .background(LocalWidgetPalette.current.plate),
         contentAlignment = Alignment.Center,
     ) {
         if (iconRes == 0) {
             Text(
                 text = providerMonogram(provider),
-                style = WidgetType.colored(WidgetType.labelSmall, accent),
+                style = WidgetType.colored(WidgetType.labelMedium, accent),
             )
         } else {
             Image(
                 provider = ImageProvider(iconRes),
                 contentDescription = providerLabel(provider),
-                modifier = GlanceModifier.size(size * 0.62f),
+                modifier = GlanceModifier.size(size * 0.6f),
                 contentScale = ContentScale.Fit,
                 colorFilter = ColorFilter.tint(accent),
             )
@@ -183,414 +196,209 @@ fun ProviderBadge(provider: String, size: Dp = 24.dp) {
     }
 }
 
-/**
- * One provider's tightest window: title, remaining percent, and a full-round
- * bar. The percent is the emphasized headline for the row.
- */
-@Composable
-fun LimitLine(
-    provider: WidgetProvider,
-    showProviderName: Boolean = true,
-    compact: Boolean = false,
-    showCaption: Boolean = true,
-    showBadge: Boolean = true,
-    barHeight: Dp = 8.dp,
-    paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
+/** Display options shared by the usage widgets, read once from the settings. */
+data class UsageStyle(
+    val showBadge: Boolean,
+    val showReset: Boolean,
+    val showMarker: Boolean,
+    val barHeight: Dp,
 ) {
-    val row = provider.tightest
-    Column(modifier = GlanceModifier.fillMaxWidth()) {
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (showProviderName) {
-                if (showBadge) {
-                    ProviderBadge(provider.id)
-                    Spacer(modifier = GlanceModifier.width(8.dp))
-                }
-                Text(
-                    text = providerLabel(provider.id),
-                    style = WidgetType.colored(WidgetType.titleSmall, LocalWidgetSurface.current.onShell),
-                    maxLines = 1,
-                    modifier = GlanceModifier.defaultWeight(),
-                )
-            } else {
-                Text(
-                    text = row?.title ?: "No limits reported",
-                    style = WidgetType.colored(WidgetType.titleSmall, LocalWidgetSurface.current.onShellVariant),
-                    maxLines = 1,
-                    modifier = GlanceModifier.defaultWeight(),
-                )
-            }
-            Spacer(modifier = GlanceModifier.width(8.dp))
-            Text(
-                text = Fmt.percent(row?.percentLeft),
-                style = WidgetType.colored(
-                    if (compact) WidgetType.titleMedium else WidgetType.titleLarge,
-                    LocalWidgetPalette.current.healthFor(Health.remainingColor(row?.percentLeft)),
-                ),
-            )
-        }
-        Spacer(modifier = GlanceModifier.height(if (compact) 4.dp else 6.dp))
-        LimitBar(
-            percentLeft = row?.percentLeft,
-            resetsAt = row?.resetsAt,
-            windowMinutes = row?.windowMinutes,
-            providerId = provider.id,
-            barHeight = barHeight,
-            paceStyle = paceStyle,
-        )
-        val caption = captionFor(row, provider, compact, showCaption)
-        if (caption != null) {
-            Spacer(modifier = GlanceModifier.height(4.dp))
-            Text(
-                text = caption.text,
-                style = WidgetType.colored(
-                    WidgetType.labelSmall,
-                    LocalWidgetPalette.current.healthFor(caption.color),
-                ),
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-private class Caption(val text: String, val color: androidx.compose.ui.graphics.Color)
-
-private fun captionFor(
-    row: UsageRow?,
-    provider: WidgetProvider,
-    compact: Boolean,
-    showCaption: Boolean,
-): Caption? {
-    if (row == null) {
-        return when {
-            provider.hasError -> Caption("last refresh failed", Health.Critical)
-            provider.stale -> Caption("showing last good data", Health.Tight)
-            else -> null
-        }
-    }
-    // The reset/pace line is optional; a degraded-state note never is.
-    if (!showCaption) return null
-    val parts = buildList {
-        add(row.title)
-        Fmt.resetCountdown(row.resetsAt)?.let { add(it) }
-        Fmt.paceText(row.pace)?.let { add(it) }
-    }
-    if (parts.isEmpty()) return null
-    val paceColor = Health.paceColor(row.pace?.willLastToReset)
-    val text = if (compact) parts.take(3).joinToString(" · ") else parts.joinToString(" · ")
-    val color = if (row.pace?.willLastToReset == false) paceColor else Health.Neutral
-    return Caption(text, color)
-}
-
-/**
- * The remaining-budget bar: a full-round track with the remaining fraction
- * filled, split at the pacing marker like the desktop plasmoid's
- * `UsageBarRow`. The fill reaching past the marker means the budget outlasts
- * the clock. Full-round is the published `CornerFull` step for progress
- * indicators; the marker colors mirror the desktop `paceIndicatorStyle`.
- *
- * From M3: active indicator → Primary, track → Secondary container. My design
- * decision (not in M3): the fill keeps the semantic remaining-limit scale so
- * "about to run out" reads the same under any wallpaper palette, while only
- * the marker follows the pacing style.
- *
- * Glance's RemoteViews layout has no fractional widths — every weighted child
- * shares the row equally — so the bar is quantized into [BAR_CELLS] equal
- * cells. Adjacent same-color cells merge into a smooth pill; the marker (or a
- * bare gap) takes the slot where the clock sits.
- */
-@Composable
-fun LimitBar(
-    percentLeft: Double?,
-    resetsAt: String?,
-    windowMinutes: Double?,
-    providerId: String,
-    barHeight: Dp = 8.dp,
-    paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
-) {
-    val fillFraction = ((percentLeft ?: 0.0) / 100.0).coerceIn(0.0, 1.0)
-    val fill = LocalWidgetPalette.current.healthFor(Health.remainingColor(percentLeft))
-    val track = LocalWidgetPalette.current.track
-    val markerFraction = if (paceStyle == WidgetPaceStyle.Off) {
-        null
-    } else {
-        WidgetPace.timeLeftFraction(resetsAt, windowMinutes)
-    }
-    // Marker slot index: cells before it go left, the rest go right.
-    val slot = WidgetPace.markerSlot(markerFraction, BAR_CELLS)
-    val fillSlotCount = WidgetPace.fillSlots(fillFraction, BAR_CELLS)
-    val marker = if (markerFraction == null) {
-        null
-    } else {
-        paceMarkerColor(
-            style = paceStyle,
-            markerFraction = markerFraction,
-            fill = fill,
-            providerId = providerId,
+    companion object {
+        fun from(settings: WidgetSettings) = UsageStyle(
+            showBadge = settings.showBadges,
+            showReset = settings.showCaptions,
+            showMarker = settings.showTimeMarker,
+            barHeight = WidgetTheme.barHeight(settings.barHeight),
         )
     }
-    val rowHeight = if (slot == null) barHeight else barHeight + 4.dp
-    Row(
-        modifier = GlanceModifier.fillMaxWidth().height(rowHeight),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val leftCount = slot ?: BAR_CELLS
-        repeat(leftCount) { index ->
-            BarCell(filled = index < fillSlotCount, fill = fill, track = track, barHeight = barHeight)
-        }
-        if (slot != null) {
-            if (marker == null) {
-                // Gaps only: a bare transparent split, like the desktop style.
-                Spacer(modifier = GlanceModifier.width(MARKER_WIDTH))
-            } else {
-                Spacer(modifier = GlanceModifier.width(MARKER_GAP))
-                Box(
-                    modifier = GlanceModifier
-                        .width(MARKER_WIDTH)
-                        .height(rowHeight)
-                        .cornerRadius(MARKER_WIDTH / 2)
-                        .background(marker),
-                ) {}
-                Spacer(modifier = GlanceModifier.width(MARKER_GAP))
-            }
-            for (index in slot until BAR_CELLS) {
-                BarCell(filled = index < fillSlotCount, fill = fill, track = track, barHeight = barHeight)
-            }
-        }
-    }
 }
 
-/** Equal-share cells per bar (RemoteViews weighting is equal-share only). */
-private const val BAR_CELLS = 24
-
-/** Marker color for a pacing style, or null for the bare-gap style. */
-@Composable
-private fun paceMarkerColor(
-    style: WidgetPaceStyle,
-    markerFraction: Double,
-    fill: ColorProvider,
-    providerId: String,
-): ColorProvider? = when (style) {
-    WidgetPaceStyle.Off -> null
-    WidgetPaceStyle.Gaps -> null
-    // The gradient evaluated where the clock is: ahead reads green, behind red.
-    WidgetPaceStyle.Position ->
-        LocalWidgetPalette.current.healthFor(Health.remainingColor(markerFraction * 100.0))
-    WidgetPaceStyle.Bar -> fill
-    WidgetPaceStyle.Provider -> {
-        val (day, night) = providerAccentPair(providerId)
-        androidx.glance.color.ColorProvider(day = day, night = night)
-    }
-    WidgetPaceStyle.Theme -> LocalWidgetSurface.current.onShell
-}
+/** The card tone for a provider: its budget or its verdict, whichever is worse. */
+fun heroTone(provider: WidgetProvider): WidgetTone = worseTone(
+    toneForRemaining(provider.tightest?.percentLeft),
+    toneForVerdict(WidgetVerdict.forProvider(provider).tone),
+)
 
 /**
- * One bar cell: full-round track or fill. Neighbouring same-color cells merge
- * into a smooth pill, so a split bar reads as expressive segments.
- */
-@Composable
-private fun androidx.glance.layout.RowScope.BarCell(
-    filled: Boolean,
-    fill: ColorProvider,
-    track: ColorProvider,
-    barHeight: Dp,
-) {
-    Box(
-        modifier = GlanceModifier
-            .defaultWeight()
-            .height(barHeight)
-            .cornerRadius(barHeight / 2)
-            .background(if (filled) fill else track),
-    ) {}
-}
-
-/**
- * Geometry shared by the redesigned providers widget.
+ * The hero card: one provider's tightest window as a tonal card — badge, name and
+ * verdict; the remaining percentage as the one big number; what it measures and
+ * when it resets; the bar; and the provider's other windows underneath.
  *
- * The bar math is dp-based rather than weighted, so every width here is a hard
- * number derived from the widget's own size. [SHELL_PADDING] must stay equal to
- * [WidgetShell]'s default `contentPadding`: the fraction is applied to the space
- * the shell actually leaves, not to the host's reported size.
- */
-private val SHELL_PADDING = 12.dp
-
-/** Window label column: wide enough for `5h session`, narrow enough to leave a bar. */
-private val WINDOW_LABEL_WIDTH = 76.dp
-
-/** Percent column: `100%` at label medium, right aligned. */
-private val WINDOW_VALUE_WIDTH = 40.dp
-
-/** Gap on each side of a window row's bar. */
-private val WINDOW_GAP = 8.dp
-
-/** The stop cap at the end of a track (`CornerFull` at this size). */
-private val STOP_DOT = 4.dp
-
-/** Clock notch thickness — half the 4dp bar, so it reads as a tick, not a block. */
-private val NOTCH_WIDTH = 2.dp
-
-/** Verdict pill radius (`CornerSmall`-ish; the pill is 11sp tall text plus padding). */
-private val PILL_RADIUS = 8.dp
-
-/**
- * Estimated widths of the 11sp scale labels.
- *
- * RemoteViews cannot measure text before layout, so the `clock` label is nudged
- * with a spacer derived from the same fraction as the notch and an estimate of
- * its own width. Overestimating only moves the label slightly off-centre; it can
- * never push the `100%` label out of the widget.
- */
-private val SCALE_LABEL_WIDTH = 30.dp
-private val CLOCK_LABEL_WIDTH = 56.dp
-
-/**
- * The width the shell leaves for content, or null when the host did not report a
- * usable size (preview, or a launcher that ignores `SizeMode.Exact`).
+ * When [fill] is set the caller has given the card the spare height (via
+ * `defaultWeight`), and the number drops to the bottom of it so the card reads
+ * top-to-bottom as name → number → evidence.
  */
 @Composable
-private fun widgetInnerWidth(): Dp? {
-    val width = LocalSize.current.width
-    if (width.value.isNaN() || width <= 0.dp) return null
-    return (width - SHELL_PADDING * 2).coerceAtLeast(0.dp)
-}
-
-/**
- * One provider's headline for the providers widget: identity and verdict, the one
- * big remaining number, the reset line, and the continuous bar under it.
- *
- * From M3: one hero number per container and one type step between it and the
- * supporting copy. My design decision (not in M3): only the headline gets a solid
- * verdict pill — repeating it down a list would turn the widget into a wall of
- * color, so the collapsed rows keep the pill but drop every other accent.
- */
-@Composable
-fun ProviderHeadline(
+fun HeroCard(
     provider: WidgetProvider,
-    barHeight: Dp = 4.dp,
-    paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
-    showBadge: Boolean = true,
-    showMeta: Boolean = true,
-    showScale: Boolean = true,
+    style: UsageStyle,
+    plan: HeroPlan,
+    modifier: GlanceModifier = GlanceModifier,
+    fill: Boolean = false,
 ) {
-    val surface = LocalWidgetSurface.current
     val palette = LocalWidgetPalette.current
     val row = provider.tightest
-    val severity = palette.healthFor(Health.remainingColor(row?.percentLeft))
-    Column(modifier = GlanceModifier.fillMaxWidth()) {
+    val tone = heroTone(provider)
+    val ink = palette.onContainer(tone)
+    val inkVariant = palette.onContainerVariant(tone)
+    val contentWidth = widgetInnerWidth()?.minus(CARD_PADDING * 2)?.coerceAtLeast(0.dp)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .cornerRadius(LocalCardRadius.current)
+            .background(palette.container(tone))
+            .padding(horizontal = CARD_PADDING, vertical = 10.dp),
+    ) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (showBadge) {
-                ProviderBadge(provider.id, size = 20.dp)
+            if (style.showBadge) {
+                ProviderBadge(provider.id)
                 Spacer(modifier = GlanceModifier.width(8.dp))
             }
             Text(
                 text = providerLabel(provider.id),
-                style = WidgetType.colored(WidgetType.titleSmall, surface.onShell),
+                style = WidgetType.colored(WidgetType.titleSmall, ink),
                 maxLines = 1,
                 modifier = GlanceModifier.defaultWeight(),
             )
             Spacer(modifier = GlanceModifier.width(8.dp))
-            VerdictPill(verdict = WidgetVerdict.forProvider(provider))
+            VerdictChip(WidgetVerdict.forProvider(provider))
         }
-        Spacer(modifier = GlanceModifier.height(4.dp))
+        if (fill) {
+            Spacer(modifier = GlanceModifier.defaultWeight())
+        } else {
+            Spacer(modifier = GlanceModifier.height(2.dp))
+        }
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 text = Fmt.percent(row?.percentLeft),
-                style = WidgetType.colored(WidgetType.displaySmall, severity),
+                style = WidgetType.colored(
+                    if (plan.bigNumber) WidgetType.displayMedium else WidgetType.displaySmall,
+                    ink,
+                ),
                 maxLines = 1,
             )
-            Spacer(modifier = GlanceModifier.width(4.dp))
+            Spacer(modifier = GlanceModifier.width(6.dp))
             Text(
                 text = "left",
-                style = WidgetType.colored(WidgetType.titleSmall, severity),
+                style = WidgetType.colored(WidgetType.titleMedium, inkVariant),
                 maxLines = 1,
-                // Glance has no baseline alignment; lifting the unit off the bottom
-                // edge approximates the big number's baseline instead.
-                modifier = GlanceModifier.padding(bottom = 6.dp),
+                // Glance has no baseline alignment; lifting the unit approximates it.
+                modifier = GlanceModifier.padding(bottom = if (plan.bigNumber) 9.dp else 7.dp),
             )
         }
-        if (showMeta) {
+        if (plan.showMeta) {
             Spacer(modifier = GlanceModifier.height(2.dp))
             Text(
-                text = headlineMeta(row, provider),
-                style = WidgetType.colored(WidgetType.bodySmall, surface.onShellVariant),
+                text = heroMeta(row, provider, style.showReset, contentWidth),
+                style = WidgetType.colored(WidgetType.bodySmall, inkVariant),
                 maxLines = 1,
             )
         }
-        Spacer(modifier = GlanceModifier.height(6.dp))
-        ContinuousBar(
+        Spacer(modifier = GlanceModifier.height(WidgetLayout.BAR_GAP.dp))
+        ExpressiveBar(
             percentLeft = row?.percentLeft,
-            resetsAt = row?.resetsAt,
-            windowMinutes = row?.windowMinutes,
-            providerId = provider.id,
-            barHeight = barHeight,
-            paceStyle = paceStyle,
-            showScale = showScale,
+            markerFraction = markerFor(row, style.showMarker),
+            width = contentWidth,
+            height = style.barHeight,
+            active = palette.accent(tone),
+            track = palette.containerTrack(tone),
+            marker = ink,
         )
+        // One child for the whole list: Glance drops a Row/Column's children
+        // past the tenth, and the card already has seven.
+        val siblings = siblingsOf(provider).take(plan.siblings)
+        if (siblings.isNotEmpty()) {
+            Column(modifier = GlanceModifier.fillMaxWidth()) {
+                siblings.forEach { sibling ->
+                    WindowRow(
+                        row = sibling,
+                        style = style,
+                        contentWidth = contentWidth,
+                        labelInk = inkVariant,
+                        valueInk = ink,
+                        track = palette.containerTrack(tone),
+                        marker = ink,
+                        modifier = GlanceModifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
-/** `monthly · resets in 11d 14h`, or the provider's degraded state when it has no rows. */
-private fun headlineMeta(row: UsageRow?, provider: WidgetProvider): String = when {
-    row != null -> WidgetVerdict.headlineMeta(row)
-    provider.hasError -> "last refresh failed"
-    provider.stale -> "showing last good data"
-    else -> "no limits reported"
+/** The hero provider's other windows, tightest first, without the headline's own. */
+fun siblingsOf(provider: WidgetProvider): List<UsageRow> =
+    provider.rows.sortedBy { it.percentLeft }.drop(1)
+
+/** `Session · resets in 2 h 16 m`, or the provider's degraded state. */
+@Composable
+private fun heroMeta(
+    row: UsageRow?,
+    provider: WidgetProvider,
+    showReset: Boolean,
+    width: Dp?,
+): String {
+    val fontScale = LocalContext.current.resources.configuration.fontScale
+    val maxChars = width?.let { (it.value / (WidgetLayout.SMALL_CHAR * fontScale)).toInt() }
+        ?: Int.MAX_VALUE
+    val text = when {
+        row == null && provider.hasError -> "last refresh failed"
+        row == null && provider.stale -> "showing last good data"
+        row == null -> "no limits reported"
+        showReset -> WidgetVerdict.headlineMeta(row, maxChars = maxChars)
+        else -> WidgetVerdict.windowLabel(row)
+    }
+    return text.replaceFirstChar { it.uppercase() }
 }
 
-/**
- * One window of the expanded provider: label, continuous bar, remaining percent.
- *
- * The list is the evidence behind the headline, so it keeps every window — the
- * headline's own window included — at the same visual weight, with no divider
- * between rows: they are one list, not three sections.
- */
+private fun markerFor(row: UsageRow?, show: Boolean): Double? =
+    if (!show || row == null) null else WidgetPace.timeLeftFraction(row.resetsAt, row.windowMinutes)
+
+/** One window of a provider: its name, its bar, and what is left of it. */
 @Composable
-fun WindowRow(
+private fun WindowRow(
     row: UsageRow,
-    providerId: String,
-    barHeight: Dp = 4.dp,
-    paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
+    style: UsageStyle,
+    contentWidth: Dp?,
+    labelInk: ColorProvider,
+    valueInk: ColorProvider,
+    track: ColorProvider,
+    marker: ColorProvider,
+    modifier: GlanceModifier = GlanceModifier,
 ) {
-    val surface = LocalWidgetSurface.current
-    val severity = LocalWidgetPalette.current.healthFor(Health.remainingColor(row.percentLeft))
-    val innerWidth = widgetInnerWidth()
-    val barWidth = innerWidth?.minus(WINDOW_LABEL_WIDTH + WINDOW_VALUE_WIDTH + WINDOW_GAP * 2)
+    val palette = LocalWidgetPalette.current
+    val barWidth = contentWidth
+        ?.minus(WINDOW_LABEL_WIDTH + WINDOW_VALUE_WIDTH + WINDOW_GAP * 2)
         ?.coerceAtLeast(0.dp)
     Row(
-        modifier = GlanceModifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = WidgetVerdict.windowLabel(row),
-            style = WidgetType.colored(WidgetType.bodySmall, surface.onShellVariant),
+            text = WidgetVerdict.windowLabel(row).replaceFirstChar { it.uppercase() },
+            style = WidgetType.colored(WidgetType.bodySmall, labelInk),
             maxLines = 1,
             modifier = GlanceModifier.width(WINDOW_LABEL_WIDTH),
         )
         Spacer(modifier = GlanceModifier.width(WINDOW_GAP))
-        ContinuousBar(
+        ExpressiveBar(
             percentLeft = row.percentLeft,
-            resetsAt = row.resetsAt,
-            windowMinutes = row.windowMinutes,
-            providerId = providerId,
-            barHeight = barHeight,
-            paceStyle = paceStyle,
-            availableWidth = barWidth,
-            modifier = if (barWidth != null) {
-                GlanceModifier.width(barWidth)
-            } else {
-                GlanceModifier.defaultWeight()
-            },
+            markerFraction = markerFor(row, style.showMarker),
+            width = barWidth,
+            height = style.barHeight.coerceAtMost(6.dp),
+            active = palette.accent(toneForRemaining(row.percentLeft)),
+            track = track,
+            marker = marker,
+            modifier = if (barWidth != null) GlanceModifier else GlanceModifier.defaultWeight(),
         )
         Spacer(modifier = GlanceModifier.width(WINDOW_GAP))
         Text(
             text = Fmt.percent(row.percentLeft),
-            style = WidgetType.colored(WidgetType.labelMedium, severity)
-                // The RemoteViews TextView right-aligns inside its fixed column.
+            style = WidgetType.colored(WidgetType.labelLarge, valueInk)
                 .copy(textAlign = TextAlign.End),
             maxLines = 1,
             modifier = GlanceModifier.width(WINDOW_VALUE_WIDTH),
@@ -598,331 +406,340 @@ fun WindowRow(
     }
 }
 
+/** A provider's windows as a tile lists them: tightest first, at most three. */
+fun tileWindowsOf(provider: WidgetProvider): List<UsageRow> =
+    provider.rows.sortedBy { it.percentLeft }.take(MAX_TILE_WINDOWS)
+
 /**
- * A provider the widget is not expanding: badge, name, tightest window, percent
- * and verdict, all on one line. At most two of these are rendered, so the row can
- * afford the verdict that the window list drops.
+ * A provider the widget is not leading with, as one tile that names every limit.
  *
- * [WidgetVerdict.forRow] answers the window ("tight", "on pace"); [forProvider]
- * is the fallback when the window itself has nothing to say.
+ * Compact, it is one line: badge, name, then each window as `5h 80%  wk 55%` —
+ * short enough to show all of them, and each number says which limit it is.
+ * Expanded (the widget has height to spare), each window gets its own labelled row
+ * with a bar, the same anatomy as the hero card's list.
+ *
+ * A warning verdict ("dry in 1h") is shown when there is room for it, and always
+ * colours the tightest number.
  */
 @Composable
-fun CollapsedProviderRow(
-    provider: WidgetProvider,
-    showBadge: Boolean = true,
-) {
+fun ProviderTile(provider: WidgetProvider, style: UsageStyle, expanded: Boolean = false) {
+    val palette = LocalWidgetPalette.current
     val surface = LocalWidgetSurface.current
-    val row = provider.tightest
-    val severity = LocalWidgetPalette.current.healthFor(Health.remainingColor(row?.percentLeft))
-    val verdict = WidgetVerdict.forRow(row, provider) ?: WidgetVerdict.forProvider(provider)
-    Row(
-        modifier = GlanceModifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showBadge) {
-            ProviderBadge(provider.id, size = 20.dp)
-            Spacer(modifier = GlanceModifier.width(8.dp))
-        }
-        Text(
-            text = providerLabel(provider.id),
-            style = WidgetType.colored(WidgetType.titleSmall, surface.onShell),
-            maxLines = 1,
-            modifier = GlanceModifier.defaultWeight(),
-        )
-        Spacer(modifier = GlanceModifier.width(8.dp))
-        if (row != null) {
-            Text(
-                text = WidgetVerdict.windowLabel(row),
-                style = WidgetType.colored(WidgetType.bodySmall, surface.onShellVariant),
-                maxLines = 1,
-            )
-            Spacer(modifier = GlanceModifier.width(8.dp))
-        }
-        Text(
-            text = Fmt.percent(row?.percentLeft),
-            style = WidgetType.colored(WidgetType.titleSmall, severity),
-            maxLines = 1,
-        )
-        Spacer(modifier = GlanceModifier.width(6.dp))
-        VerdictPill(verdict = verdict)
-    }
-}
-
-/**
- * The verdict, as one container/on-container pill.
- *
- * From M3: a status statement is a `* container` fill with its `on * container`
- * ink, not ink on ink. The tone picks the health step, the step picks the pair.
- * This is deliberately independent of the percentage's severity: a provider at
- * 60% that is pacing to run dry must still read as an error, because the pill
- * states the outcome, not the budget.
- */
-@Composable
-fun VerdictPill(verdict: Verdict) {
-    val palette = LocalWidgetPalette.current
-    val health = verdictToneHealth(verdict.tone)
-    Box(
-        modifier = GlanceModifier
-            .cornerRadius(PILL_RADIUS)
-            .background(palette.healthContainerFor(health))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = verdict.text,
-            style = WidgetType.colored(WidgetType.labelSmall, palette.onHealthContainerFor(health)),
-            maxLines = 1,
-        )
-    }
-}
-
-/** Maps the verdict's semantic tone onto the remaining-limit health steps. */
-private fun verdictToneHealth(tone: VerdictTone): Color = when (tone) {
-    VerdictTone.SUPPORTED -> Health.Good
-    VerdictTone.TERTIARY -> Health.Tight
-    VerdictTone.ERROR -> Health.Critical
-    VerdictTone.MUTED -> Health.Neutral
-}
-
-/**
- * The continuous remaining-budget bar: one track, one fill, a clock notch and a
- * stop dot at the far end.
- *
- * This replaces the 24-cell bar for the providers widget. RemoteViews has no
- * fractional widths, so the old bar was quantized into equal weighted cells and
- * read as a row of sausage links. `SizeMode.Exact` gives [LocalSize] a real width,
- * so the fill can instead be one `Box` whose width is `fraction * innerWidth` —
- * the same shape the desktop plasmoid draws, without the cells.
- *
- * The notch is dp-positioned for the same reason: it is a spacer plus a 2dp box in
- * a row that spans the track, not a weighted share of it. [availableWidth] lets a
- * caller that already carved columns out of the row (the window list) pass the
- * width it actually has.
- */
-@Composable
-fun ContinuousBar(
-    percentLeft: Double?,
-    resetsAt: String?,
-    windowMinutes: Double?,
-    providerId: String = "",
-    barHeight: Dp = 4.dp,
-    paceStyle: WidgetPaceStyle = WidgetPaceStyle.Position,
-    showScale: Boolean = false,
-    availableWidth: Dp? = null,
-    modifier: GlanceModifier = GlanceModifier,
-) {
-    val palette = LocalWidgetPalette.current
-    val fill = palette.healthFor(Health.remainingColor(percentLeft))
-    val track = palette.track
-    // A NaN percentage would turn every dp computation below into NaN; JSON can
-    // not produce one today, but a malformed snapshot must still paint a track.
-    val rawFraction = (percentLeft ?: 0.0) / 100.0
-    val fraction = (if (rawFraction.isNaN()) 0.0 else rawFraction).coerceIn(0.0, 1.0)
-    val markerFraction = if (paceStyle == WidgetPaceStyle.Off) {
-        null
-    } else {
-        WidgetPace.timeLeftFraction(resetsAt, windowMinutes)?.coerceIn(0.0, 1.0)
-    }
-    // Gaps has no ink of its own; a continuous bar cannot split for a gap, so a
-    // single text-role tick is the closest the shape allows.
-    val notchColor = if (markerFraction == null) {
-        null
-    } else {
-        paceMarkerColor(paceStyle, markerFraction, fill, providerId)
-            ?: LocalWidgetSurface.current.onShell
-    }
-    val rowHeight = if (notchColor == null) barHeight else barHeight + 4.dp
-    val trackWidth = availableWidth ?: widgetInnerWidth()
-
-    Column(modifier = modifier) {
-        if (trackWidth == null) {
-            // No measured width: the fill is dp-positioned, so there is nothing
-            // meaningful to divide up. Draw the track rather than a broken fill.
-            Box(
-                modifier = GlanceModifier
-                    .fillMaxWidth()
-                    .height(barHeight)
-                    .cornerRadius(barHeight / 2)
-                    .background(track),
-            ) {}
-        } else if (trackWidth <= 0.dp) {
-            // A narrow slot can spend its whole width on the label and value
-            // columns. Keep the row's height so the list does not collapse.
-            Spacer(modifier = GlanceModifier.height(rowHeight))
-        } else {
-            Box(
-                modifier = GlanceModifier.width(trackWidth).height(rowHeight),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Box(
-                    modifier = GlanceModifier
-                        .width(trackWidth)
-                        .height(barHeight)
-                        .cornerRadius(barHeight / 2)
-                        .background(track),
-                ) {}
-                if (fraction > 0.0) {
-                    Box(
-                        modifier = GlanceModifier
-                            .width(trackWidth * fraction.toFloat())
-                            .height(barHeight)
-                            .cornerRadius(barHeight / 2)
-                            .background(fill),
-                    ) {}
-                }
-                // The stop sits at the end of the *track*, not of the fill: it
-                // marks where the window ends even when the budget runs out early.
-                // At zero remaining it would read as "there is still something at
-                // the end", so it is omitted in that one case.
-                if (fraction > 0.0) {
-                    Box(
-                        modifier = GlanceModifier.width(trackWidth).height(rowHeight),
-                        contentAlignment = Alignment.CenterEnd,
-                    ) {
-                        Box(
-                            modifier = GlanceModifier
-                                .size(STOP_DOT)
-                                .cornerRadius(STOP_DOT / 2)
-                                .background(fill),
-                        ) {}
-                    }
-                }
-                if (notchColor != null && markerFraction != null) {
-                    val notchX = trackWidth * markerFraction.toFloat()
-                    Row(
-                        modifier = GlanceModifier.width(trackWidth).height(rowHeight),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Spacer(
-                            modifier = GlanceModifier.width(
-                                (notchX - NOTCH_WIDTH / 2).coerceAtLeast(0.dp),
-                            ),
-                        )
-                        Box(
-                            modifier = GlanceModifier
-                                .width(NOTCH_WIDTH)
-                                .height(rowHeight)
-                                .cornerRadius(NOTCH_WIDTH / 2)
-                                .background(notchColor),
-                        ) {}
-                    }
-                }
-            }
-        }
-        if (showScale && trackWidth != null && trackWidth > 0.dp) {
-            Spacer(modifier = GlanceModifier.height(2.dp))
+    val windows = tileWindowsOf(provider)
+    val verdict = WidgetVerdict.forProvider(provider)
+    val verdictTone = toneForVerdict(verdict.tone)
+    val warn = verdictTone == WidgetTone.Error || verdictTone == WidgetTone.Tertiary
+    // Expanded tiles have a whole header for the verdict. A compact line keeps
+    // its room for what is left; the verdict only tints the first number there.
+    val showVerdict = windows.isEmpty() || (warn && expanded)
+    // The gap is padding on a wrapper rather than a sibling Spacer, so each tile
+    // is one child of the widget's column (Glance keeps at most ten).
+    Column(modifier = GlanceModifier.fillMaxWidth().padding(top = TILE_GAP)) {
+        Column(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .cornerRadius(LocalCardRadius.current.coerceAtMost(16.dp))
+                .background(palette.tile)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+        ) {
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (style.showBadge) {
+                    ProviderBadge(provider.id)
+                    Spacer(modifier = GlanceModifier.width(10.dp))
+                } else {
+                    Spacer(modifier = GlanceModifier.width(4.dp))
+                }
                 Text(
-                    text = "0%",
-                    style = WidgetType.colored(
-                        WidgetType.labelSmall,
-                        LocalWidgetSurface.current.onShellVariant,
-                    ),
+                    text = providerLabel(provider.id),
+                    style = WidgetType.colored(WidgetType.titleSmall, surface.onShell),
                     maxLines = 1,
+                    modifier = GlanceModifier.defaultWeight(),
                 )
-                if (markerFraction != null) {
-                    // Same fraction as the notch, nudged left by half the label's
-                    // estimated width so the text sits under the tick it explains.
-                    val notchX = trackWidth * markerFraction.toFloat()
-                    val maxPad = (trackWidth - CLOCK_LABEL_WIDTH - SCALE_LABEL_WIDTH * 2)
-                        .coerceAtLeast(0.dp)
-                    val pad = (notchX - CLOCK_LABEL_WIDTH / 2).coerceIn(0.dp, maxPad)
-                    Spacer(modifier = GlanceModifier.width(pad))
+                if (showVerdict) {
+                    Spacer(modifier = GlanceModifier.width(8.dp))
                     Text(
-                        text = "clock ${Fmt.percent(markerFraction * 100.0)}",
+                        text = verdict.text,
                         style = WidgetType.colored(
-                            WidgetType.labelSmall,
-                            LocalWidgetSurface.current.onShellVariant,
+                            WidgetType.bodySmall,
+                            if (warn) palette.accent(verdictTone) else surface.onShellVariant,
                         ),
                         maxLines = 1,
                     )
                 }
-                // The weight spacer only pushes `100%` to the right edge; it never
-                // sizes the fill.
-                Spacer(modifier = GlanceModifier.defaultWeight())
-                Text(
-                    text = "100%",
-                    style = WidgetType.colored(
-                        WidgetType.labelSmall,
-                        LocalWidgetSurface.current.onShellVariant,
-                    ),
-                    maxLines = 1,
-                )
+                if (!expanded) {
+                    // Badge, the shortest useful name and the tile's own padding come
+                    // out of the row first; the pairs get the rest, and the name
+                    // ellipsizes into whatever they leave.
+                    val context = LocalContext.current
+                    val fixed = (if (style.showBadge) 34f else 4f) + TILE_NAME_MIN + 20f
+                    val available = widgetInnerWidth()?.value?.minus(fixed) ?: 0f
+                    val values = windows.map { Fmt.percent(it.percentLeft) }
+                    val (labels, shown) = WidgetLayout.fitPairs(
+                        available = available,
+                        labels = WidgetVerdict.shortWindowLabels(windows),
+                        values = values,
+                        fontScale = context.resources.configuration.fontScale,
+                    )
+                    // Each pair is its own Row so the header stays under Glance's
+                    // ten-children limit however many windows there are.
+                    windows.take(shown).forEachIndexed { index, row ->
+                        Row(
+                            modifier = GlanceModifier.padding(start = if (index == 0) 10.dp else 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = labels[index],
+                                style = WidgetType.colored(WidgetType.bodySmall, surface.onShellVariant),
+                                maxLines = 1,
+                            )
+                            Spacer(modifier = GlanceModifier.width(4.dp))
+                            Text(
+                                text = values[index],
+                                style = WidgetType.colored(
+                                    WidgetType.labelLarge,
+                                    palette.accent(
+                                        if (index == 0 && warn) {
+                                            worseTone(toneForRemaining(row.percentLeft), verdictTone)
+                                        } else {
+                                            toneForRemaining(row.percentLeft)
+                                        },
+                                    ),
+                                ),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    if (shown < windows.size) {
+                        // The rest exist; say so rather than pretend there are none.
+                        Text(
+                            text = "+${windows.size - shown}",
+                            style = WidgetType.colored(WidgetType.labelLarge, surface.onShellVariant),
+                            maxLines = 1,
+                            modifier = GlanceModifier.padding(start = 10.dp),
+                        )
+                    }
+                }
+                Spacer(modifier = GlanceModifier.width(4.dp))
+            }
+            if (expanded) {
+                // Tile padding (8 each side) plus the 4dp inset on each side of the rows.
+                val contentWidth = widgetInnerWidth()?.minus(24.dp)?.coerceAtLeast(0.dp)
+                Column(modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                    windows.forEach { row ->
+                        WindowRow(
+                            row = row,
+                            style = style,
+                            contentWidth = contentWidth,
+                            labelInk = surface.onShellVariant,
+                            valueInk = surface.onShell,
+                            track = palette.track,
+                            marker = surface.onShell,
+                            modifier = GlanceModifier.padding(top = 6.dp),
+                        )
+                    }
+                }
             }
         }
     }
 }
 
-/** The 1dp hairline between the widget's sections. */
+/**
+ * The verdict, as a small chip on a light plate. The plate stays neutral so the
+ * chip reads on every card tone; the ink carries the verdict's own tone.
+ */
 @Composable
-fun SectionDivider() {
+fun VerdictChip(verdict: Verdict) {
+    val palette = LocalWidgetPalette.current
     Box(
         modifier = GlanceModifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(LocalWidgetPalette.current.divider),
-    ) {}
-}
-
-/** A small metric block: label above, emphasized value, optional caption. */
-@Composable
-fun MetricBlock(
-    label: String,
-    value: String,
-    caption: String? = null,
-    modifier: GlanceModifier = GlanceModifier,
-) {
-    Column(modifier = modifier) {
+            .cornerRadius(10.dp)
+            .background(palette.plate)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center,
+    ) {
         Text(
-            text = label,
-            style = WidgetType.colored(WidgetType.labelSmall, LocalWidgetSurface.current.onShellVariant),
+            text = verdict.text,
+            style = WidgetType.colored(WidgetType.labelMedium, palette.accent(toneForVerdict(verdict.tone))),
             maxLines = 1,
         )
+    }
+}
+
+/**
+ * The M3 Expressive linear progress indicator: rounded active indicator, a gap,
+ * the rounded track, a stop dot at the track's end, and an optional time-marker
+ * tick where the clock sits within the window.
+ *
+ * RemoteViews has no fractional widths, so every segment is a hard dp width taken
+ * from the measured [width] (`SizeMode.Exact`). Without a width there is nothing
+ * to divide, so only the track is drawn.
+ */
+@Composable
+fun ExpressiveBar(
+    percentLeft: Double?,
+    markerFraction: Double?,
+    width: Dp?,
+    height: Dp,
+    active: ColorProvider,
+    track: ColorProvider,
+    marker: ColorProvider,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    val rowHeight = if (markerFraction != null) height + WidgetLayout.MARKER.dp else height
+    if (width == null) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(height)
+                .cornerRadius(height / 2)
+                .background(track),
+        ) {}
+        return
+    }
+    if (width <= 0.dp) {
+        Spacer(modifier = modifier.height(rowHeight))
+        return
+    }
+    val raw = (percentLeft ?: 0.0) / 100.0
+    val fraction = (if (raw.isNaN()) 0.0 else raw).coerceIn(0.0, 1.0)
+    // A sliver below the bar's own height would draw as a squashed oval; a dot is
+    // the honest minimum for "something is left".
+    val activeWidth = if (fraction > 0.0) (width * fraction.toFloat()).coerceAtLeast(height) else 0.dp
+    val gap = if (fraction > 0.0) INDICATOR_GAP else 0.dp
+    val trackWidth = width - activeWidth - gap
+    val showTrack = trackWidth >= height
+
+    Box(
+        modifier = modifier.width(width).height(rowHeight),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Row(
+            modifier = GlanceModifier.width(width).height(rowHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (fraction > 0.0) {
+                Box(
+                    modifier = GlanceModifier
+                        .width(if (showTrack) activeWidth else width)
+                        .height(height)
+                        .cornerRadius(height / 2)
+                        .background(active),
+                ) {}
+            }
+            if (showTrack) {
+                Spacer(modifier = GlanceModifier.width(gap))
+                Box(
+                    modifier = GlanceModifier
+                        .width(trackWidth)
+                        .height(height)
+                        .cornerRadius(height / 2)
+                        .background(track),
+                ) {}
+            }
+        }
+        if (showTrack) {
+            // The stop sits centred in the track's end cap: it marks where the
+            // window's budget ends even when little of it is left.
+            val dot = STOP_DOT.coerceAtMost(height)
+            Row(
+                modifier = GlanceModifier.width(width).height(rowHeight),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(modifier = GlanceModifier.width(width - (height + dot) / 2))
+                Box(
+                    modifier = GlanceModifier
+                        .size(dot)
+                        .cornerRadius(dot / 2)
+                        .background(active),
+                ) {}
+            }
+        }
+        if (markerFraction != null) {
+            val x = width * markerFraction.coerceIn(0.0, 1.0).toFloat()
+            Row(
+                modifier = GlanceModifier.width(width).height(rowHeight),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(
+                    modifier = GlanceModifier.width(
+                        (x - MARKER_WIDTH / 2).coerceIn(0.dp, width - MARKER_WIDTH),
+                    ),
+                )
+                Box(
+                    modifier = GlanceModifier
+                        .width(MARKER_WIDTH)
+                        .height(rowHeight)
+                        .cornerRadius(MARKER_WIDTH / 2)
+                        .background(marker),
+                ) {}
+            }
+        }
+    }
+}
+
+/**
+ * A spend figure as a tonal tile: label, value, optional token count.
+ */
+@Composable
+fun MetricTile(
+    label: String,
+    value: String,
+    caption: String?,
+    tone: WidgetTone,
+    modifier: GlanceModifier = GlanceModifier,
+) {
+    val palette = LocalWidgetPalette.current
+    Column(
+        modifier = modifier
+            .cornerRadius(LocalCardRadius.current)
+            .background(palette.container(tone))
+            .padding(CARD_PADDING),
+    ) {
+        Text(
+            text = label,
+            style = WidgetType.colored(WidgetType.labelMedium, palette.onContainerVariant(tone)),
+            maxLines = 1,
+        )
+        Spacer(modifier = GlanceModifier.height(2.dp))
         Text(
             text = value,
-            style = WidgetType.colored(WidgetType.titleLarge, LocalWidgetSurface.current.onShell),
+            style = WidgetType.colored(WidgetType.titleLarge, palette.onContainer(tone)),
             maxLines = 1,
         )
         if (caption != null) {
             Text(
                 text = caption,
-                style = WidgetType.colored(WidgetType.labelSmall, LocalWidgetSurface.current.onShellVariant),
+                style = WidgetType.colored(WidgetType.bodySmall, palette.onContainerVariant(tone)),
                 maxLines = 1,
             )
         }
     }
 }
 
-/** Centered message used for the not-configured and error states. */
+/** Centered message used for the loading, empty and error states. */
 @Composable
 fun WidgetMessage(title: String, detail: String) {
+    val surface = LocalWidgetSurface.current
     Column(
         modifier = GlanceModifier.fillMaxSize(),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = title,
-            style = WidgetType.colored(WidgetType.titleMedium, LocalWidgetSurface.current.onShell),
+            style = WidgetType.colored(WidgetType.titleMedium, surface.onShell)
+                .copy(textAlign = TextAlign.Center),
             maxLines = 1,
         )
         Spacer(modifier = GlanceModifier.height(4.dp))
         Text(
             text = detail,
-            style = WidgetType.colored(WidgetType.bodySmall, LocalWidgetSurface.current.onShellVariant),
+            style = WidgetType.colored(WidgetType.bodySmall, surface.onShellVariant)
+                .copy(textAlign = TextAlign.Center),
             maxLines = 2,
         )
     }
-}
-
-/** A single muted or semantic caption line under a block. */
-@Composable
-fun WidgetCaption(text: String, color: androidx.glance.unit.ColorProvider) {
-    Text(
-        text = text,
-        style = WidgetType.colored(WidgetType.labelSmall, color),
-        maxLines = 1,
-    )
 }

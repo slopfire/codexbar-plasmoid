@@ -6,7 +6,6 @@ import org.junit.Test
 import org.slopfire.codexbar.data.widget.WidgetBackground
 import org.slopfire.codexbar.data.widget.WidgetBarHeight
 import org.slopfire.codexbar.data.widget.WidgetCorners
-import org.slopfire.codexbar.data.widget.WidgetPaceStyle
 import org.slopfire.codexbar.data.widget.WidgetSettings
 
 /**
@@ -70,12 +69,12 @@ class WidgetPaceTest {
     }
 
     @Test
-    fun appearanceDefaultsPreserveCurrentLook() {
+    fun appearanceDefaultsFollowTheLauncher() {
         val settings = WidgetSettings()
         assertEquals(WidgetBackground.Solid, settings.background)
-        assertEquals(WidgetCorners.Large, settings.corners)
+        assertEquals(WidgetCorners.System, settings.corners)
         assertEquals(WidgetBarHeight.Standard, settings.barHeight)
-        assertEquals(WidgetPaceStyle.Position, settings.paceStyle)
+        assertEquals(true, settings.showTimeMarker)
         assertEquals(true, settings.showBadges)
     }
 
@@ -86,6 +85,24 @@ class WidgetPaceTest {
     @Test
     fun settingsRoundTripThroughPreferences() {
         val original = WidgetSettings()
+        val preferences = androidx.datastore.preferences.core.emptyPreferences().toMutablePreferences()
+        WidgetSettings.applyTo(preferences, original)
+        assertEquals(original, WidgetSettings.from(preferences))
+    }
+
+    /** Widgets saved with the old six-way marker style keep a marker unless it was Off. */
+    @Test
+    fun legacyMarkerStylesMapToTheToggle() {
+        val preferences = androidx.datastore.preferences.core.emptyPreferences().toMutablePreferences()
+        preferences[WidgetSettings.PACE_KEY] = "Gaps"
+        assertEquals(true, WidgetSettings.from(preferences).showTimeMarker)
+        preferences[WidgetSettings.PACE_KEY] = "Off"
+        assertEquals(false, WidgetSettings.from(preferences).showTimeMarker)
+    }
+
+    @Test
+    fun markerOffRoundTrips() {
+        val original = WidgetSettings(showTimeMarker = false, showCaptions = false)
         val preferences = androidx.datastore.preferences.core.emptyPreferences().toMutablePreferences()
         WidgetSettings.applyTo(preferences, original)
         assertEquals(original, WidgetSettings.from(preferences))

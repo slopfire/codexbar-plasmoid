@@ -27,6 +27,12 @@ object WidgetVerdict {
     /** A trailing " usage" word, the suffix most provider row titles carry. */
     private val TRAILING_USAGE = Regex("""\s+usage$""", RegexOption.IGNORE_CASE)
 
+    /** Title words that name a window's length or kind rather than what sets it apart. */
+    private val GENERIC_WINDOW_WORDS = setOf(
+        "session", "hourly", "daily", "day", "weekly", "week", "monthly", "month",
+        "usage", "limit", "limits", "window", "rolling", "all", "models", "plan",
+    )
+
     /** Provider-level verdict: failures and staleness outrank the numbers. */
     fun forProvider(provider: WidgetProvider): Verdict {
         if (provider.hasError) return Verdict("refresh failed", VerdictTone.ERROR)
@@ -47,6 +53,8 @@ object WidgetVerdict {
             if (provider.hasError) return Verdict("refresh failed", VerdictTone.ERROR)
             if (provider.stale) return Verdict("last good data", VerdictTone.MUTED)
         }
+        // Nothing left is a fact, not a forecast: it outranks any pace report.
+        if (row.percentLeft <= 0.0) return Verdict("used up", VerdictTone.ERROR)
         val pace = row.pace
         when (pace?.willLastToReset) {
             false -> {
@@ -90,11 +98,71 @@ object WidgetVerdict {
         return base.replaceFirstChar { it.lowercase() }
     }
 
-    /** `monthly · resets in 11 d 14 h`, or just the label when unknown. */
-    fun headlineMeta(row: UsageRow, nowMillis: Long = System.currentTimeMillis()): String {
+    /**
+     * A window's name short enough to sit beside its percentage: `5h`, `day`,
+     * `week`, `month`, `3d` from the window length, or the first word of the
+     * title (cut to 8 characters) when the length is unknown.
+     */
+    fun shortWindowLabel(row: UsageRow): String {
+        val minutes = row.windowMinutes
+        if (minutes != null && !minutes.isNaN() && minutes > 0.0) {
+            val hours = minutes / 60.0
+            val days = hours / 24.0
+            return when {
+                minutes < 60.0 -> "${minutes.roundToLong()}m"
+                hours < 24.0 -> "${hours.roundToLong()}h"
+                days in 0.95..1.05 -> "day"
+                days in 6.5..7.5 -> "week"
+                days in 27.0..32.0 -> "month"
+                else -> "${days.roundToLong()}d"
+            }
+        }
+        val word = windowLabel(row).split(' ').firstOrNull { it.isNotBlank() } ?: "usage"
+        return if (word.length > 8) word.take(7) + "…" else word
+    }
+
+    /**
+     * [shortWindowLabel] for each of a provider's windows, made distinct: when two
+     * windows share a length (Claude's weekly and weekly Opus), the later ones are
+     * named by the title word that sets them apart, e.g. `week` and `opus`.
+     */
+    fun shortWindowLabels(rows: List<UsageRow>): List<String> {
+        val labels = rows.map(::shortWindowLabel)
+        return labels.mapIndexed { index, label ->
+            if (labels.indexOf(label) == index) return@mapIndexed label
+            val word = windowLabel(rows[index])
+                .split(' ', '(', ')', '-', '/', ',')
+                .map { it.trim().lowercase() }
+                .firstOrNull { it.isNotEmpty() && it !in GENERIC_WINDOW_WORDS && it != label }
+                ?: return@mapIndexed label
+            if (word.length > 8) word.take(7) + "…" else word
+        }
+    }
+
+    /**
+     * `monthly · resets in 11 d 14 h`, or just the label when unknown.
+     *
+     * When the line has to fit in [maxChars], the window name is shortened and
+     * the countdown kept whole: the name is context, the countdown is the fact.
+     */
+    fun headlineMeta(
+        row: UsageRow,
+        nowMillis: Long = System.currentTimeMillis(),
+        maxChars: Int = Int.MAX_VALUE,
+    ): String {
         val label = windowLabel(row)
         val countdown = Fmt.resetCountdown(row.resetsAt, nowMillis) ?: return label
-        if (countdown == "resets now") return "$label · resets now"
-        return "$label · resets in ${countdown.removePrefix("resets in ")}"
+        val reset = if (countdown == "resets now") {
+            " · resets now"
+        } else {
+            " · resets in ${countdown.removePrefix("resets in ")}"
+        }
+        val room = maxChars - reset.length
+        val shown = when {
+            label.length <= room -> label
+            room >= 4 -> label.take(room - 1).trimEnd() + "…"
+            else -> return reset.removePrefix(" · ")
+        }
+        return shown + reset
     }
 }
